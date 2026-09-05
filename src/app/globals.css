@@ -3,6 +3,12 @@
 :root {
   --background: #ffffff;
   --foreground: #171717;
+
+  /* データ可視化トークン (単一色ヒュー: 大小比較=sequential) */
+  --viz-surface: #fcfcfb;
+  --viz-track: #ececeb;
+  --viz-series-1: #2a78d6;
+  --viz-series-muted: #a8a8a3;
 }
 
 @theme inline {
@@ -13,14 +19,35 @@
 }
 
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     --background: #0a0a0a;
     --foreground: #ededed;
+
+    --viz-surface: #1a1a19;
+    --viz-track: #2f2f2d;
+    --viz-series-1: #3987e5;
+    --viz-series-muted: #6b6b66;
   }
+}
+
+:root[data-theme="dark"] {
+  --background: #0a0a0a;
+  --foreground: #ededed;
+
+  --viz-surface: #1a1a19;
+  --viz-track: #2f2f2d;
+  --viz-series-1: #3987e5;
+  --viz-series-muted: #6b6b66;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family:
+    var(--font-geist-sans),
+    "Hiragino Kaku Gothic ProN",
+    "Yu Gothic",
+    "Meiryo",
+    system-ui,
+    sans-serif;
 }
