@@ -82,51 +82,61 @@ export default async function AgentCustomerDetailPage({
         </div>
       </Surface>
 
-      <div className="space-y-2 px-1">
-        <p className="text-[13px] font-semibold tracking-wide text-text-secondary">基本情報</p>
-      </div>
-      <Surface>
-        <dl className="divide-y divide-border-soft">
-          <Row label="メール" value={customer.email ?? "—"} />
-          <Row label="電話番号" value={customer.phone ?? "—"} />
-          <Row
-            label="年代"
-            value={customer.age_group ? (AGE_GROUP_LABELS[customer.age_group] ?? "—") : "未回答"}
-          />
-          <Row
-            label="性別"
-            value={customer.gender ? (GENDER_LABELS[customer.gender] ?? "—") : "未回答"}
-          />
-          <Row label="都道府県" value={customer.prefecture ?? "—"} />
-          <Row label="担当開始日" value={formatDate(assignment.assigned_at)} />
-        </dl>
-      </Surface>
-
-      <div className="space-y-2 px-1">
-        <p className="text-[13px] font-semibold tracking-wide text-text-secondary">担当情報</p>
-      </div>
-      <Surface>
-        <div className="mb-3 flex items-center gap-2">
-          <Lock size={16} className="text-text-secondary" />
-          <p className="text-[13px] text-text-secondary">担当代理店は初回登録時に確定し、以後変更されません。</p>
+      <div className="space-y-5 md:grid md:grid-cols-2 md:items-start md:gap-4 md:space-y-0">
+        <div className="space-y-2">
+          <div className="space-y-2 px-1">
+            <p className="text-[13px] font-semibold tracking-wide text-text-secondary">基本情報</p>
+          </div>
+          <Surface>
+            <dl className="divide-y divide-border-soft">
+              <Row label="メール" value={customer.email ?? "—"} />
+              <Row label="電話番号" value={customer.phone ?? "—"} />
+              <Row
+                label="年代"
+                value={customer.age_group ? (AGE_GROUP_LABELS[customer.age_group] ?? "—") : "未回答"}
+              />
+              <Row
+                label="性別"
+                value={customer.gender ? (GENDER_LABELS[customer.gender] ?? "—") : "未回答"}
+              />
+              <Row label="都道府県" value={customer.prefecture ?? "—"} />
+              <Row label="担当開始日" value={formatDate(assignment.assigned_at)} />
+            </dl>
+          </Surface>
         </div>
-        <dl className="divide-y divide-border-soft">
-          <Row
-            label="担当代理店"
-            value={
-              <span className="inline-flex items-center gap-1.5">
-                {agent.display_name}
-                <StatusPill tone="brand">自分</StatusPill>
-              </span>
-            }
-          />
-          <Row label="代理店ID" value={agent.public_id} mono />
-          <Row
-            label="確定経路"
-            value={ASSIGNMENT_SOURCE_LABELS[assignment.assignment_source] ?? assignment.assignment_source}
-          />
-        </dl>
-      </Surface>
+
+        <div className="space-y-2">
+          <div className="space-y-2 px-1">
+            <p className="text-[13px] font-semibold tracking-wide text-text-secondary">担当情報</p>
+          </div>
+          <Surface>
+            <div className="mb-3 flex items-center gap-2">
+              <Lock size={16} className="text-text-secondary" />
+              <p className="text-[13px] text-text-secondary">
+                担当代理店は初回登録時に確定し、以後変更されません。
+              </p>
+            </div>
+            <dl className="divide-y divide-border-soft">
+              <Row
+                label="担当代理店"
+                value={
+                  <span className="inline-flex items-center gap-1.5">
+                    {agent.display_name}
+                    <StatusPill tone="brand">自分</StatusPill>
+                  </span>
+                }
+              />
+              <Row label="代理店ID" value={agent.public_id} mono />
+              <Row
+                label="確定経路"
+                value={
+                  ASSIGNMENT_SOURCE_LABELS[assignment.assignment_source] ?? assignment.assignment_source
+                }
+              />
+            </dl>
+          </Surface>
+        </div>
+      </div>
 
       <div className="space-y-2 px-1">
         <p className="text-[13px] font-semibold tracking-wide text-text-secondary">購入情報</p>

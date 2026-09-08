@@ -1,3 +1,9 @@
+"use client";
+
+import { useState } from "react";
+
+import { BottomSheet } from "@/components/mobile/BottomSheet";
+import { StatusPill } from "@/components/mobile/primitives";
 import { Badge, formatYen } from "@/components/ui";
 import { PRODUCT_CATEGORY_LABELS } from "@/lib/domain/enums";
 import type { CommerceMap, CommerceMapAgent, CommerceMapCustomer } from "@/lib/domain/types";
@@ -78,16 +84,22 @@ function CustomerNode({ customer }: { customer: CommerceMapCustomer }) {
 function AgentNode({
   node,
   customersByAgent,
+  onSelect,
 }: {
   node: TreeNode;
   customersByAgent: Map<string, CommerceMapCustomer[]>;
+  onSelect: (node: TreeNode, customers: CommerceMapCustomer[]) => void;
 }) {
   const customers = customersByAgent.get(node.agent_id) ?? [];
   const anonymousCount = customers.filter((c) => c.anonymous).length;
 
   return (
     <li className="space-y-2">
-      <div className="flex flex-wrap items-center gap-2">
+      <button
+        type="button"
+        onClick={() => onSelect(node, customers)}
+        className="flex w-full flex-wrap items-center gap-2 rounded-lg px-1 py-1 text-left transition-colors hover:bg-surface-muted"
+      >
         <span className="font-mono text-xs text-zinc-500 dark:text-zinc-400">{node.public_id}</span>
         <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
           {node.display_name}
@@ -99,7 +111,7 @@ function AgentNode({
             (うち匿名表示 {anonymousCount}件)
           </span>
         ) : null}
-      </div>
+      </button>
 
       {customers.length > 0 ? (
         <ul className="ml-4 space-y-1.5 border-l border-zinc-200 pl-4 dark:border-zinc-800">
@@ -112,7 +124,12 @@ function AgentNode({
       {node.children.length > 0 ? (
         <ul className="ml-4 space-y-4 border-l border-zinc-200 pl-4 dark:border-zinc-800">
           {node.children.map((child) => (
-            <AgentNode key={child.agent_id} node={child} customersByAgent={customersByAgent} />
+            <AgentNode
+              key={child.agent_id}
+              node={child}
+              customersByAgent={customersByAgent}
+              onSelect={onSelect}
+            />
           ))}
         </ul>
       ) : null}
@@ -121,6 +138,9 @@ function AgentNode({
 }
 
 export function CommerceMapTree({ map }: { map: CommerceMap }) {
+  const [selected, setSelected] = useState<{ node: TreeNode; customers: CommerceMapCustomer[] } | null>(
+    null,
+  );
   const roots = buildTree(map.agents);
 
   const customersByAgent = new Map<string, CommerceMapCustomer[]>();
@@ -130,11 +150,72 @@ export function CommerceMapTree({ map }: { map: CommerceMap }) {
     customersByAgent.set(customer.agent_id, list);
   }
 
+  const namedTotal = selected
+    ? selected.customers
+        .filter((c): c is Extract<CommerceMapCustomer, { anonymous: false }> => !c.anonymous)
+        .reduce((sum, c) => sum + c.purchases.reduce((s, p) => s + Number(p.amount ?? 0), 0), 0)
+    : 0;
+
   return (
-    <ul className="space-y-4">
-      {roots.map((root) => (
-        <AgentNode key={root.agent_id} node={root} customersByAgent={customersByAgent} />
-      ))}
-    </ul>
+    <>
+      <ul className="space-y-4">
+        {roots.map((root) => (
+          <AgentNode
+            key={root.agent_id}
+            node={root}
+            customersByAgent={customersByAgent}
+            onSelect={(node, customers) => setSelected({ node, customers })}
+          />
+        ))}
+      </ul>
+
+      <BottomSheet
+        open={!!selected}
+        onClose={() => setSelected(null)}
+        title={selected?.node.display_name}
+      >
+        {selected ? (
+          <div className="space-y-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="font-mono text-[12px] text-text-secondary">
+                {selected.node.public_id}
+              </span>
+              {selected.node.is_self ? <StatusPill tone="brand">自分</StatusPill> : null}
+            </div>
+            <dl className="divide-y divide-border-soft">
+              <div className="flex items-center justify-between py-2">
+                <dt className="text-[13px] text-text-secondary">担当顧客数</dt>
+                <dd className="text-[14px] font-semibold text-text-primary">
+                  {selected.node.customer_count} 件
+                </dd>
+              </div>
+              <div className="flex items-center justify-between py-2">
+                <dt className="text-[13px] text-text-secondary">実名で見える担当</dt>
+                <dd className="text-[14px] font-semibold text-text-primary">
+                  {selected.customers.filter((c) => !c.anonymous).length} 件
+                </dd>
+              </div>
+              <div className="flex items-center justify-between py-2">
+                <dt className="text-[13px] text-text-secondary">匿名ノード</dt>
+                <dd className="text-[14px] font-semibold text-text-primary">
+                  {selected.customers.filter((c) => c.anonymous).length} 件
+                </dd>
+              </div>
+              {namedTotal > 0 ? (
+                <div className="flex items-center justify-between py-2">
+                  <dt className="text-[13px] text-text-secondary">実名分の購入合計</dt>
+                  <dd className="text-[14px] font-semibold tabular-nums text-text-primary">
+                    {formatYen(namedTotal)}
+                  </dd>
+                </div>
+              ) : null}
+            </dl>
+            <p className="text-[12px] leading-5 text-text-secondary">
+              傘下の他代理店が担当する顧客は、氏名・連絡先・購入明細を含まない匿名件数のみです。
+            </p>
+          </div>
+        ) : null}
+      </BottomSheet>
+    </>
   );
 }
