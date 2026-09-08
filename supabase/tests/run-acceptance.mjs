@@ -102,10 +102,10 @@ async function main() {
   for (const line of notices) console.log("  " + line);
 
   const passed = notices.filter((n) => /CASE\d+ OK/.test(n)).length;
-  console.log(`\n✓ 受け入れテスト完了 (${passed} / 19 CASE)`);
+  console.log(`\n✓ 受け入れテスト完了 (${passed} / 20 CASE)`);
 
   await db.close();
-  if (passed !== 19) process.exit(1);
+  if (passed !== 20) process.exit(1);
 }
 
 main().catch((error) => {

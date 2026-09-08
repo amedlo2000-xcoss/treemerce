@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 
+import { Chip, PrimaryButton, ProgressBar } from "@/components/mobile/primitives";
 import {
   AGE_GROUPS,
   AGE_GROUP_LABELS,
@@ -13,15 +14,73 @@ import {
 } from "@/lib/domain/enums";
 
 const INPUT =
-  "w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 outline-none focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100";
+  "w-full rounded-2xl border border-border-soft bg-surface px-3.5 py-3 text-[16px] text-text-primary outline-none focus:border-brand";
 
 type Result =
   | { status: "registered"; message: null }
   | { status: "duplicate"; message: string }
   | null;
 
+type FormState = {
+  full_name: string;
+  full_name_kana: string;
+  email: string;
+  phone: string;
+  age_group: string;
+  gender: string;
+  prefecture: string;
+  customer_type: string;
+};
+
+const STEPS = ["name", "contact", "age", "gender", "prefecture", "type"] as const;
+type Step = (typeof STEPS)[number];
+
+function StepShell({
+  step,
+  title,
+  description,
+  children,
+  canNext,
+  onBack,
+  onNext,
+  nextLabel = "次へ",
+}: {
+  step: number;
+  title: string;
+  description?: string;
+  children: React.ReactNode;
+  canNext: boolean;
+  onBack?: () => void;
+  onNext: () => void;
+  nextLabel?: string;
+}) {
+  return (
+    <div className="space-y-6">
+      <ProgressBar step={step + 1} total={STEPS.length} />
+      <div>
+        <h2 className="text-[22px] font-bold text-text-primary">{title}</h2>
+        {description ? (
+          <p className="mt-1.5 text-[14px] leading-6 text-text-secondary">{description}</p>
+        ) : null}
+      </div>
+      <div>{children}</div>
+      <div className="flex gap-2">
+        {onBack ? (
+          <PrimaryButton type="button" variant="secondary" onClick={onBack}>
+            戻る
+          </PrimaryButton>
+        ) : null}
+        <PrimaryButton type="button" onClick={onNext} disabled={!canNext}>
+          {nextLabel}
+        </PrimaryButton>
+      </div>
+    </div>
+  );
+}
+
 export function CustomerRegisterForm({ agentPublicId }: { agentPublicId: string }) {
-  const [form, setForm] = useState({
+  const [stepIndex, setStepIndex] = useState(0);
+  const [form, setForm] = useState<FormState>({
     full_name: "",
     full_name_kana: "",
     email: "",
@@ -35,11 +94,12 @@ export function CustomerRegisterForm({ agentPublicId }: { agentPublicId: string 
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
 
-  const set = (key: keyof typeof form) => (event: { target: { value: string } }) =>
-    setForm((prev) => ({ ...prev, [key]: event.target.value }));
+  const set = <K extends keyof FormState>(key: K, value: FormState[K]) =>
+    setForm((prev) => ({ ...prev, [key]: value }));
 
-  async function handleSubmit(event: React.FormEvent) {
-    event.preventDefault();
+  const step: Step = STEPS[stepIndex];
+
+  async function handleSubmit() {
     setPending(true);
     setError(null);
     setResult(null);
@@ -74,119 +134,155 @@ export function CustomerRegisterForm({ agentPublicId }: { agentPublicId: string 
 
   if (result?.status === "registered") {
     return (
-      <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-4 text-sm leading-6 text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200">
-        ご登録ありがとうございました。担当代理店より追ってご連絡いたします。
+      <div className="rounded-2xl border border-success-soft bg-success-soft px-4 py-5 text-[15px] leading-6 text-text-primary">
+        ご登録ありがとうございました。担当窓口より追ってご連絡いたします。
       </div>
     );
   }
 
-  return (
-    <form onSubmit={handleSubmit} className="space-y-4">
-      {/* 絶対原則6: 重複時は中立メッセージのみ。担当代理店が誰かは表示しない。 */}
-      {result?.status === "duplicate" ? (
-        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-xs leading-6 text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
-          {result.message}
-        </div>
-      ) : null}
+  const goNext = () => setStepIndex((i) => Math.min(STEPS.length - 1, i + 1));
+  const goBack = () => setStepIndex((i) => Math.max(0, i - 1));
 
-      <label className="block">
-        <span className="text-xs font-medium text-zinc-700 dark:text-zinc-300">お名前</span>
-        <input required value={form.full_name} onChange={set("full_name")} className={`mt-1 ${INPUT}`} />
-      </label>
-
-      <label className="block">
-        <span className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
-          フリガナ (任意)
-        </span>
-        <input
-          value={form.full_name_kana}
-          onChange={set("full_name_kana")}
-          className={`mt-1 ${INPUT}`}
-        />
-      </label>
-
-      <p className="text-xs leading-5 text-zinc-500 dark:text-zinc-400">
-        メールアドレスまたは電話番号のいずれかは必ずご入力ください。
-      </p>
-
-      <label className="block">
-        <span className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
-          メールアドレス
-        </span>
-        <input type="email" value={form.email} onChange={set("email")} className={`mt-1 ${INPUT}`} />
-      </label>
-
-      <label className="block">
-        <span className="text-xs font-medium text-zinc-700 dark:text-zinc-300">電話番号</span>
-        <input value={form.phone} onChange={set("phone")} className={`mt-1 ${INPUT}`} />
-      </label>
-
-      <div className="grid gap-4 sm:grid-cols-2">
-        <label className="block">
-          <span className="text-xs font-medium text-zinc-700 dark:text-zinc-300">年代</span>
-          <select value={form.age_group} onChange={set("age_group")} className={`mt-1 ${INPUT}`}>
-            <option value="">未回答</option>
-            {AGE_GROUPS.filter((g) => g !== "unknown").map((g) => (
-              <option key={g} value={g}>
-                {AGE_GROUP_LABELS[g]}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        <label className="block">
-          <span className="text-xs font-medium text-zinc-700 dark:text-zinc-300">性別</span>
-          <select value={form.gender} onChange={set("gender")} className={`mt-1 ${INPUT}`}>
-            <option value="">未回答</option>
-            {GENDERS.filter((g) => g !== "prefer_not_to_say").map((g) => (
-              <option key={g} value={g}>
-                {GENDER_LABELS[g]}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        <label className="block">
-          <span className="text-xs font-medium text-zinc-700 dark:text-zinc-300">都道府県</span>
-          <select value={form.prefecture} onChange={set("prefecture")} className={`mt-1 ${INPUT}`}>
-            <option value="">未回答</option>
-            {PREFECTURES.map((p) => (
-              <option key={p} value={p}>
-                {p}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        <label className="block">
-          <span className="text-xs font-medium text-zinc-700 dark:text-zinc-300">区分</span>
-          <select
-            value={form.customer_type}
-            onChange={set("customer_type")}
-            className={`mt-1 ${INPUT}`}
-          >
-            {CUSTOMER_TYPES.map((t) => (
-              <option key={t} value={t}>
-                {CUSTOMER_TYPE_LABELS[t]}
-              </option>
-            ))}
-          </select>
-        </label>
-      </div>
-
-      {error ? (
-        <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200">
-          {error}
-        </p>
-      ) : null}
-
-      <button
-        type="submit"
-        disabled={pending}
-        className="w-full rounded-lg bg-zinc-900 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-zinc-700 disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
+  if (step === "name") {
+    return (
+      <StepShell
+        step={stepIndex}
+        title="お名前を教えてください"
+        canNext={form.full_name.trim().length > 0}
+        onNext={goNext}
       >
-        {pending ? "送信中…" : "登録する"}
-      </button>
-    </form>
+        <div className="space-y-3">
+          <label className="block space-y-1">
+            <span className="text-[13px] font-medium text-text-secondary">お名前</span>
+            <input
+              autoFocus
+              required
+              value={form.full_name}
+              onChange={(e) => set("full_name", e.target.value)}
+              className={INPUT}
+            />
+          </label>
+          <label className="block space-y-1">
+            <span className="text-[13px] font-medium text-text-secondary">フリガナ (任意)</span>
+            <input
+              value={form.full_name_kana}
+              onChange={(e) => set("full_name_kana", e.target.value)}
+              className={INPUT}
+            />
+          </label>
+        </div>
+      </StepShell>
+    );
+  }
+
+  if (step === "contact") {
+    return (
+      <StepShell
+        step={stepIndex}
+        title="連絡先を教えてください"
+        description="メールアドレスまたは電話番号のいずれかは必ずご入力ください。"
+        canNext={form.email.trim().length > 0 || form.phone.trim().length > 0}
+        onBack={goBack}
+        onNext={goNext}
+      >
+        <div className="space-y-3">
+          <label className="block space-y-1">
+            <span className="text-[13px] font-medium text-text-secondary">メールアドレス</span>
+            <input
+              type="email"
+              value={form.email}
+              onChange={(e) => set("email", e.target.value)}
+              className={INPUT}
+            />
+          </label>
+          <label className="block space-y-1">
+            <span className="text-[13px] font-medium text-text-secondary">電話番号</span>
+            <input value={form.phone} onChange={(e) => set("phone", e.target.value)} className={INPUT} />
+          </label>
+        </div>
+      </StepShell>
+    );
+  }
+
+  if (step === "age") {
+    return (
+      <StepShell step={stepIndex} title="年代を選んでください" canNext onBack={goBack} onNext={goNext}>
+        <div className="flex flex-wrap gap-2">
+          {AGE_GROUPS.filter((g) => g !== "unknown").map((g) => (
+            <Chip key={g} selected={form.age_group === g} onClick={() => set("age_group", g)}>
+              {AGE_GROUP_LABELS[g]}
+            </Chip>
+          ))}
+        </div>
+      </StepShell>
+    );
+  }
+
+  if (step === "gender") {
+    return (
+      <StepShell step={stepIndex} title="性別を選んでください" canNext onBack={goBack} onNext={goNext}>
+        <div className="flex flex-wrap gap-2">
+          {GENDERS.filter((g) => g !== "prefer_not_to_say").map((g) => (
+            <Chip key={g} selected={form.gender === g} onClick={() => set("gender", g)}>
+              {GENDER_LABELS[g]}
+            </Chip>
+          ))}
+        </div>
+      </StepShell>
+    );
+  }
+
+  if (step === "prefecture") {
+    return (
+      <StepShell
+        step={stepIndex}
+        title="お住まいの都道府県は？"
+        canNext
+        onBack={goBack}
+        onNext={goNext}
+      >
+        <select
+          value={form.prefecture}
+          onChange={(e) => set("prefecture", e.target.value)}
+          className={INPUT}
+        >
+          <option value="">未回答</option>
+          {PREFECTURES.map((p) => (
+            <option key={p} value={p}>
+              {p}
+            </option>
+          ))}
+        </select>
+      </StepShell>
+    );
+  }
+
+  // step === "type"
+  return (
+    <StepShell
+      step={stepIndex}
+      title="区分を選んでください"
+      canNext={!pending}
+      onBack={goBack}
+      onNext={handleSubmit}
+      nextLabel={pending ? "送信中…" : "登録する"}
+    >
+      <div className="space-y-4">
+        <div className="flex flex-wrap gap-2">
+          {CUSTOMER_TYPES.map((t) => (
+            <Chip key={t} selected={form.customer_type === t} onClick={() => set("customer_type", t)}>
+              {CUSTOMER_TYPE_LABELS[t]}
+            </Chip>
+          ))}
+        </div>
+
+        {result?.status === "duplicate" ? (
+          <div className="rounded-2xl border border-warning-soft bg-warning-soft px-4 py-3 text-[13px] leading-6 text-text-primary">
+            {result.message}
+          </div>
+        ) : null}
+        {error ? <p className="text-[13px] text-danger">{error}</p> : null}
+      </div>
+    </StepShell>
   );
 }

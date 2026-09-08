@@ -1,24 +1,34 @@
-import Link from "next/link";
+import {
+  BarChart3,
+  ClipboardList,
+  Home,
+  Network,
+  Package,
+  ArrowRightLeft,
+  User,
+  UserCircle,
+  Users,
+} from "lucide-react";
 
 import { signOutAction } from "@/app/actions";
+import { BottomNav, SideNav, type NavItem } from "@/components/mobile/BottomNav";
 
-export const AGENT_NAV = [
-  { href: "/agent", label: "ダッシュボード" },
-  { href: "/agent/customers", label: "担当顧客" },
-  { href: "/agent/commerce-map", label: "商流マップ" },
-  { href: "/agent/analytics", label: "客層分析" },
-  { href: "/agent/community", label: "コミュニティマップ" },
-  { href: "/agent/invitations", label: "招待URL" },
+/** 代理店マイページ: スマホ下部ナビ/PCサイドバー共通の5項目。 */
+export const AGENT_NAV: NavItem[] = [
+  { href: "/agent", label: "ホーム", icon: Home, exact: true },
+  { href: "/agent/customers", label: "顧客", icon: User },
+  { href: "/agent/organization", label: "組織", icon: Network },
+  { href: "/agent/content", label: "コンテンツ", icon: Package },
+  { href: "/agent/my", label: "MY", icon: UserCircle },
 ];
 
-/** STEP8: 「代理店管理」「商品購入者管理」「顧客担当管理」を別メニューにする。 */
-export const ADMIN_NAV = [
-  { href: "/admin", label: "ダッシュボード" },
-  { href: "/admin/agents", label: "代理店管理" },
-  { href: "/admin/customers", label: "商品購入者管理" },
-  { href: "/admin/assignments", label: "顧客担当管理" },
-  { href: "/admin/analytics", label: "客層分析" },
-  { href: "/admin/audit-logs", label: "監査ログ" },
+export const ADMIN_NAV: NavItem[] = [
+  { href: "/admin", label: "ダッシュボード", icon: Home, exact: true },
+  { href: "/admin/agents", label: "代理店管理", icon: Users },
+  { href: "/admin/customers", label: "購入者管理", icon: User },
+  { href: "/admin/assignments", label: "担当管理", icon: ArrowRightLeft },
+  { href: "/admin/analytics", label: "客層分析", icon: BarChart3 },
+  { href: "/admin/audit-logs", label: "監査ログ", icon: ClipboardList },
 ];
 
 export function AppShell({
@@ -30,48 +40,43 @@ export function AppShell({
 }: {
   brand: string;
   subtitle: string;
-  nav: { href: string; label: string }[];
+  nav: NavItem[];
   identity: string;
   children: React.ReactNode;
 }) {
   return (
-    <div className="flex min-h-full flex-1 flex-col bg-zinc-50 dark:bg-zinc-950">
-      <header className="border-b border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
-        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-6 py-3">
-          <div className="flex items-baseline gap-3">
-            <Link href="/" className="text-base font-semibold tracking-tight">
-              {brand}
-            </Link>
-            <span className="text-xs text-zinc-500 dark:text-zinc-400">{subtitle}</span>
-          </div>
-          <div className="flex items-center gap-3">
-            <span className="text-xs text-zinc-500 dark:text-zinc-400">{identity}</span>
-            <form action={signOutAction}>
-              <button
-                type="submit"
-                className="rounded-lg border border-zinc-300 px-3 py-1.5 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
-              >
-                ログアウト
-              </button>
-            </form>
-          </div>
-        </div>
-        <nav className="mx-auto max-w-6xl overflow-x-auto px-6">
-          <ul className="flex gap-1 whitespace-nowrap pb-2">
-            {nav.map((item) => (
-              <li key={item.href}>
-                <Link
-                  href={item.href}
-                  className="inline-block rounded-lg px-3 py-1.5 text-sm text-zinc-600 transition-colors hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
+    <div className="flex min-h-full flex-1 bg-app-bg">
+      <SideNav items={nav} brand={brand} subtitle={subtitle} />
+
+      <div className="flex min-h-full flex-1 flex-col">
+        <header className="border-b border-border-soft bg-surface md:border-b-0 md:bg-transparent">
+          <div className="mx-auto flex max-w-3xl items-center justify-between gap-3 px-4 py-3 md:max-w-none md:px-8 md:py-6">
+            <div className="md:hidden">
+              <span className="text-[15px] font-bold tracking-tight text-text-primary">{brand}</span>
+            </div>
+            <div className="hidden md:block">
+              <p className="text-[13px] text-text-secondary">{identity}</p>
+            </div>
+            <div className="flex items-center gap-3">
+              <span className="text-[12px] text-text-secondary md:hidden">{identity}</span>
+              <form action={signOutAction}>
+                <button
+                  type="submit"
+                  className="rounded-full border border-border-soft px-3 py-1.5 text-[12px] font-medium text-text-secondary transition-colors hover:bg-surface-muted"
                 >
-                  {item.label}
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </nav>
-      </header>
-      <main className="mx-auto w-full max-w-6xl flex-1 space-y-6 px-6 py-8">{children}</main>
+                  ログアウト
+                </button>
+              </form>
+            </div>
+          </div>
+        </header>
+
+        <main className="mx-auto w-full max-w-3xl flex-1 space-y-5 px-4 pb-28 pt-4 md:max-w-5xl md:space-y-6 md:px-8 md:pb-10 md:pt-0">
+          {children}
+        </main>
+      </div>
+
+      <BottomNav items={nav} />
     </div>
   );
 }

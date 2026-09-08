@@ -22,22 +22,17 @@ export default async function CustomerRegisterPage({
   if (!agent?.found) notFound();
 
   return (
-    <div className="flex flex-1 justify-center bg-zinc-50 px-6 py-16 dark:bg-zinc-950">
+    <div className="flex flex-1 justify-center bg-app-bg px-5 py-10 sm:py-16">
       <div className="w-full max-w-md space-y-5">
-        <Link href="/" className="font-mono text-xs tracking-widest text-zinc-500">
+        <Link href="/" className="font-mono text-[11px] tracking-widest text-text-secondary">
           TREEMERCE
         </Link>
-        <div>
-          <h1 className="text-xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
-            商品購入者登録
-          </h1>
-          <p className="mt-1.5 text-sm text-zinc-600 dark:text-zinc-400">
-            担当代理店: {agent.display_name}
-            <span className="ml-2 font-mono text-xs text-zinc-400">{agent.public_id}</span>
-          </p>
-        </div>
+        <p className="text-[13px] text-text-secondary">
+          担当窓口: {agent.display_name}
+          <span className="ml-2 font-mono text-[11px]">{agent.public_id}</span>
+        </p>
 
-        <div className="rounded-xl border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-900">
+        <div className="rounded-[24px] border border-border-soft bg-surface p-5 shadow-[var(--shadow-card)] sm:p-6">
           <CustomerRegisterForm agentPublicId={agentPublicId} />
         </div>
       </div>

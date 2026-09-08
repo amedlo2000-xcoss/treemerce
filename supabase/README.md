@@ -11,6 +11,7 @@ Supabase の SQL Editor で、**番号順に**次のファイルを実行して�
 | 3 | `migrations/0003_treemerce_rpc.sql` | 公開 RPC / 商流マップ / 客層分析 (STEP2, 5, 6, 7) |
 | 4 | `migrations/0004_treemerce_rls.sql` | GRANT の付け直しと RLS ポリシー (STEP3) |
 | 5 | `migrations/0005_treemerce_admin_bootstrap.sql` | 管理者ロールの付与/剥奪 RPC |
+| 6 | `migrations/0006_treemerce_inviter_profile.sql` | 自分の招待元の表示名のみを返す読み取り専用 RPC (MYページ表示用) |
 
 各ファイルは `begin; … commit;` で囲まれているため、途中で失敗しても中途半端な状態にはなりません。
 

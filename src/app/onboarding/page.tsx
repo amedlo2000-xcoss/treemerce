@@ -37,14 +37,12 @@ export default async function OnboardingPage({
   const lockedInviter = Boolean(viewer.agent?.invited_by);
 
   return (
-    <div className="flex flex-1 items-center justify-center bg-zinc-50 px-6 py-16 dark:bg-zinc-950">
+    <div className="flex flex-1 items-center justify-center bg-app-bg px-5 py-16">
       <div className="w-full max-w-md space-y-4">
-        <Link href="/" className="font-mono text-xs tracking-widest text-zinc-500">
+        <Link href="/" className="font-mono text-[11px] tracking-widest text-text-secondary">
           TREEMERCE
         </Link>
-        <h1 className="text-xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
-          代理店登録
-        </h1>
+        <h1 className="text-[26px] font-bold tracking-tight text-text-primary">代理店登録</h1>
 
         {viewer.agent && viewer.agent.status !== "active" ? (
           <Notice tone="warning">
@@ -59,7 +57,7 @@ export default async function OnboardingPage({
           </Notice>
         ) : null}
 
-        <div className="rounded-xl border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-900">
+        <div className="rounded-[24px] border border-border-soft bg-surface p-6 shadow-[var(--shadow-card)]">
           <OnboardingForm
             defaultEmail={viewer.email ?? ""}
             invitationCode={inviterName ? (invite ?? null) : null}

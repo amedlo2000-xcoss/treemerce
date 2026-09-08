@@ -3,10 +3,11 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
+import { PrimaryButton } from "@/components/mobile/primitives";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 
 const INPUT =
-  "w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 outline-none focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100";
+  "w-full rounded-2xl border border-border-soft bg-surface px-3.5 py-3 text-[16px] text-text-primary outline-none focus:border-brand";
 
 export function LoginForm({ next }: { next: string }) {
   const router = useRouter();
@@ -48,7 +49,7 @@ export function LoginForm({ next }: { next: string }) {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
-      <div className="flex rounded-lg border border-zinc-200 p-1 dark:border-zinc-800">
+      <div className="flex rounded-2xl border border-border-soft bg-surface-muted p-1">
         {(["signin", "signup"] as const).map((m) => (
           <button
             key={m}
@@ -58,10 +59,8 @@ export function LoginForm({ next }: { next: string }) {
               setError(null);
               setMessage(null);
             }}
-            className={`flex-1 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
-              mode === m
-                ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
-                : "text-zinc-600 dark:text-zinc-400"
+            className={`flex-1 rounded-xl px-3 py-2 text-[14px] font-medium transition-colors ${
+              mode === m ? "bg-brand text-brand-foreground" : "text-text-secondary"
             }`}
           >
             {m === "signin" ? "ログイン" : "新規アカウント"}
@@ -69,22 +68,20 @@ export function LoginForm({ next }: { next: string }) {
         ))}
       </div>
 
-      <label className="block">
-        <span className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
-          メールアドレス
-        </span>
+      <label className="block space-y-1">
+        <span className="text-[13px] font-medium text-text-secondary">メールアドレス</span>
         <input
           type="email"
           required
           autoComplete="email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          className={`mt-1 ${INPUT}`}
+          className={INPUT}
         />
       </label>
 
-      <label className="block">
-        <span className="text-xs font-medium text-zinc-700 dark:text-zinc-300">パスワード</span>
+      <label className="block space-y-1">
+        <span className="text-[13px] font-medium text-text-secondary">パスワード</span>
         <input
           type="password"
           required
@@ -92,28 +89,16 @@ export function LoginForm({ next }: { next: string }) {
           autoComplete={mode === "signin" ? "current-password" : "new-password"}
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          className={`mt-1 ${INPUT}`}
+          className={INPUT}
         />
       </label>
 
-      {error ? (
-        <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200">
-          {error}
-        </p>
-      ) : null}
-      {message ? (
-        <p className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-800 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-200">
-          {message}
-        </p>
-      ) : null}
+      {error ? <p className="text-[13px] text-danger">{error}</p> : null}
+      {message ? <p className="text-[13px] text-brand">{message}</p> : null}
 
-      <button
-        type="submit"
-        disabled={pending}
-        className="w-full rounded-lg bg-zinc-900 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-zinc-700 disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
-      >
+      <PrimaryButton type="submit" disabled={pending}>
         {pending ? "処理中…" : mode === "signin" ? "ログイン" : "アカウントを作成"}
-      </button>
+      </PrimaryButton>
     </form>
   );
 }

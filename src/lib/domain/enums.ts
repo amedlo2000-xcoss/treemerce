@@ -74,6 +74,40 @@ export const PRODUCT_CATEGORY_LABELS: Record<string, string> = {
   other: "その他",
 };
 
+export const BENEFIT_TYPES = [
+  "referral_bonus",
+  "sales_commission",
+  "tier_bonus",
+  "adjustment",
+] as const;
+export type BenefitType = (typeof BENEFIT_TYPES)[number];
+
+export const BENEFIT_TYPE_LABELS: Record<string, string> = {
+  referral_bonus: "紹介ボーナス",
+  sales_commission: "販売手数料",
+  tier_bonus: "ランクボーナス",
+  adjustment: "調整",
+};
+
+export const BENEFIT_STATUSES = ["pending", "confirmed", "paid", "cancelled"] as const;
+export type BenefitStatus = (typeof BENEFIT_STATUSES)[number];
+
+export const BENEFIT_STATUS_LABELS: Record<string, string> = {
+  pending: "処理中",
+  confirmed: "確定",
+  paid: "支払済み",
+  cancelled: "取消",
+};
+
+export const BANK_ACCOUNT_TYPES = ["ordinary", "checking", "savings"] as const;
+export type BankAccountType = (typeof BANK_ACCOUNT_TYPES)[number];
+
+export const BANK_ACCOUNT_TYPE_LABELS: Record<string, string> = {
+  ordinary: "普通",
+  checking: "当座",
+  savings: "貯蓄",
+};
+
 export const ASSIGNMENT_SOURCE_LABELS: Record<string, string> = {
   initial_registration: "初回登録",
   admin_transfer: "管理者による変更",

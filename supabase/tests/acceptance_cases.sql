@@ -1,10 +1,10 @@
 -- ============================================================================
--- TREEMERCE 受け入れテスト  CASE1 - CASE19
+-- TREEMERCE 受け入れテスト  CASE1 - CASE20
 -- ----------------------------------------------------------------------------
 -- Supabase SQL Editor にそのまま貼り付けて実行する。
 -- 全体が 1 トランザクションで、最後に ROLLBACK するため本番データは残らない。
 -- 途中で失敗した CASE があれば例外で停止する。全て通れば最後に
--- 「ALL 19 CASES PASSED」が NOTICE として出力される。
+-- 「ALL 20 CASES PASSED」が NOTICE として出力される。
 --
 -- 木構造:
 --            R  (root)
@@ -858,7 +858,45 @@ begin
 end $$;
 
 -- ============================================================================
--- 補強検証 (EXTRA) : CASE1-19 が素通りしていないことを確認する追加の攻撃経路
+-- CASE20 : treemerce_my_inviter_profile() は「自分の招待元」だけを返す
+--          (agents_select の RLS では upline は見えないが、この RPC は例外的に
+--           呼び出し本人の招待元1件だけを解決する。引数は取らない)
+-- ============================================================================
+
+do $$
+declare v_profile jsonb;
+begin
+  -- A (R の招待で登録) として呼ぶ → R の public_id/display_name が返る
+  perform set_config('request.jwt.claims',
+    '{"sub":"00000000-0000-4000-8000-000000000002","role":"authenticated"}', true);
+  set local role authenticated;
+
+  select public.treemerce_my_inviter_profile() into v_profile;
+  if (v_profile ->> 'found') is distinct from 'true' then
+    raise exception 'CASE20 FAILED: A から見た招待元が found=false だった (%)', v_profile;
+  end if;
+  if (v_profile ->> 'public_id') is distinct from 'TM-TEST-R' then
+    raise exception 'CASE20 FAILED: A の招待元が R ではなかった (%)', v_profile;
+  end if;
+
+  reset role;
+
+  -- R (招待元なし) として呼ぶ → found=false
+  perform set_config('request.jwt.claims',
+    '{"sub":"00000000-0000-4000-8000-000000000001","role":"authenticated"}', true);
+  set local role authenticated;
+
+  select public.treemerce_my_inviter_profile() into v_profile;
+  if (v_profile ->> 'found') is distinct from 'false' then
+    raise exception 'CASE20 FAILED: 招待元なしの R で found=true になった (%)', v_profile;
+  end if;
+
+  reset role;
+  raise notice 'CASE20 OK: 招待元の表示名は本人分のみ解決され、招待元なしなら found=false';
+end $$;
+
+-- ============================================================================
+-- 補強検証 (EXTRA) : CASE1-20 が素通りしていないことを確認する追加の攻撃経路
 -- ============================================================================
 
 select set_config('request.jwt.claims',
@@ -956,7 +994,7 @@ reset role;
 do $$
 begin
   raise notice '==========================================';
-  raise notice '  TREEMERCE: ALL 19 CASES PASSED (+EXTRA)';
+  raise notice '  TREEMERCE: ALL 20 CASES PASSED (+EXTRA)';
   raise notice '==========================================';
 end $$;
 

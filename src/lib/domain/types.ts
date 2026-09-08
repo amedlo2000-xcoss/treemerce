@@ -1,6 +1,9 @@
 import type {
   AgeGroup,
   AgentStatus,
+  BankAccountType,
+  BenefitStatus,
+  BenefitType,
   CustomerType,
   Gender,
   ProductCategory,
@@ -52,6 +55,34 @@ export type PurchaseRow = {
   currency: string;
   status: string;
   purchased_at: string;
+};
+
+export type BenefitRow = {
+  id: string;
+  agent_id: string;
+  purchase_id: string | null;
+  benefit_type: BenefitType;
+  amount: number;
+  currency: string;
+  period_month: string | null;
+  status: BenefitStatus;
+  paid_at: string | null;
+  note: string | null;
+  created_at: string;
+};
+
+export type BankAccountRow = {
+  id: string;
+  agent_id: string;
+  bank_name: string;
+  bank_code: string | null;
+  branch_name: string;
+  branch_code: string | null;
+  account_type: BankAccountType;
+  account_number: string;
+  account_holder_kana: string;
+  created_at: string;
+  updated_at: string;
 };
 
 export type AssignmentRow = {

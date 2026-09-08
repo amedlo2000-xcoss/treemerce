@@ -11,13 +11,11 @@ export function PageHeader({
   action?: ReactNode;
 }) {
   return (
-    <header className="flex flex-wrap items-start justify-between gap-4 border-b border-zinc-200 pb-5 dark:border-zinc-800">
+    <header className="flex flex-wrap items-start justify-between gap-4 border-b border-border-soft pb-5">
       <div>
-        <h1 className="text-xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
-          {title}
-        </h1>
+        <h1 className="text-[22px] font-bold tracking-tight text-text-primary">{title}</h1>
         {description ? (
-          <p className="mt-1.5 max-w-2xl text-sm leading-6 text-zinc-600 dark:text-zinc-400">
+          <p className="mt-1.5 max-w-2xl text-[14px] leading-6 text-text-secondary">
             {description}
           </p>
         ) : null}
@@ -40,13 +38,13 @@ export function Card({
 }) {
   return (
     <section
-      className={`rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-950 ${className}`}
+      className={`rounded-[20px] border border-border-soft bg-surface p-5 shadow-[var(--shadow-card)] ${className}`}
     >
       {title ? (
         <div className="mb-4">
-          <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{title}</h2>
+          <h2 className="text-[15px] font-semibold text-text-primary">{title}</h2>
           {description ? (
-            <p className="mt-1 text-xs leading-5 text-zinc-500 dark:text-zinc-400">{description}</p>
+            <p className="mt-1 text-[13px] leading-5 text-text-secondary">{description}</p>
           ) : null}
         </div>
       ) : null}
@@ -57,22 +55,20 @@ export function Card({
 
 export function Stat({ label, value, hint }: { label: string; value: ReactNode; hint?: string }) {
   return (
-    <div className="rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-950">
-      <p className="text-xs text-zinc-500 dark:text-zinc-400">{label}</p>
-      <p className="mt-1 text-2xl font-semibold tabular-nums text-zinc-900 dark:text-zinc-50">
-        {value}
-      </p>
-      {hint ? <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">{hint}</p> : null}
+    <div className="rounded-[20px] border border-border-soft bg-surface p-4 shadow-[var(--shadow-card)]">
+      <p className="text-[13px] text-text-secondary">{label}</p>
+      <p className="mt-1 text-[26px] font-bold tabular-nums text-text-primary">{value}</p>
+      {hint ? <p className="mt-1 text-[13px] text-text-secondary">{hint}</p> : null}
     </div>
   );
 }
 
 const TONE_CLASSES = {
-  neutral: "bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300",
-  green: "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300",
-  amber: "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300",
-  red: "bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300",
-  blue: "bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300",
+  neutral: "bg-surface-muted text-text-secondary",
+  green: "bg-success-soft text-success",
+  amber: "bg-warning-soft text-warning",
+  red: "bg-danger-soft text-danger",
+  blue: "bg-brand-soft text-brand",
 } as const;
 
 export function Badge({
@@ -93,11 +89,9 @@ export function Badge({
 
 export function EmptyState({ title, description }: { title: string; description?: string }) {
   return (
-    <div className="rounded-xl border border-dashed border-zinc-300 px-6 py-12 text-center dark:border-zinc-700">
-      <p className="text-sm font-medium text-zinc-700 dark:text-zinc-300">{title}</p>
-      {description ? (
-        <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">{description}</p>
-      ) : null}
+    <div className="rounded-[20px] border border-dashed border-border-soft px-6 py-12 text-center">
+      <p className="text-[14px] font-medium text-text-primary">{title}</p>
+      {description ? <p className="mt-1 text-[13px] text-text-secondary">{description}</p> : null}
     </div>
   );
 }
@@ -110,16 +104,12 @@ export function Notice({
   children: ReactNode;
 }) {
   const cls = {
-    info: "border-blue-200 bg-blue-50 text-blue-900 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-200",
-    warning:
-      "border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200",
-    danger:
-      "border-red-200 bg-red-50 text-red-900 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200",
+    info: "border-brand/25 bg-brand-soft text-text-primary",
+    warning: "border-warning-soft bg-warning-soft text-text-primary",
+    danger: "border-danger-soft bg-danger-soft text-text-primary",
   }[tone];
 
-  return (
-    <div className={`rounded-lg border px-4 py-3 text-sm leading-6 ${cls}`}>{children}</div>
-  );
+  return <div className={`rounded-2xl border px-4 py-3 text-[14px] leading-6 ${cls}`}>{children}</div>;
 }
 
 export function DataTable({
@@ -130,21 +120,21 @@ export function DataTable({
   children: ReactNode;
 }) {
   return (
-    <div className="overflow-x-auto rounded-xl border border-zinc-200 dark:border-zinc-800">
+    <div className="overflow-x-auto rounded-[20px] border border-border-soft">
       <table className="w-full min-w-[42rem] border-collapse text-sm">
-        <thead className="bg-zinc-50 dark:bg-zinc-900">
+        <thead className="bg-surface-muted">
           <tr>
             {headers.map((h) => (
               <th
                 key={h}
-                className="whitespace-nowrap px-4 py-2.5 text-left text-xs font-semibold text-zinc-600 dark:text-zinc-400"
+                className="whitespace-nowrap px-4 py-2.5 text-left text-[12px] font-semibold text-text-secondary"
               >
                 {h}
               </th>
             ))}
           </tr>
         </thead>
-        <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800">{children}</tbody>
+        <tbody className="divide-y divide-border-soft">{children}</tbody>
       </table>
     </div>
   );
@@ -161,13 +151,13 @@ export function LinkButton({
 }) {
   const cls =
     variant === "primary"
-      ? "bg-zinc-900 text-white hover:bg-zinc-700 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
-      : "border border-zinc-300 text-zinc-800 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800";
+      ? "bg-brand text-brand-foreground hover:opacity-90"
+      : "border border-border-soft text-text-primary hover:bg-surface-muted";
 
   return (
     <Link
       href={href}
-      className={`inline-flex items-center rounded-lg px-3.5 py-2 text-sm font-medium transition-colors ${cls}`}
+      className={`inline-flex items-center rounded-2xl px-4 py-2.5 text-[14px] font-medium transition-colors ${cls}`}
     >
       {children}
     </Link>
