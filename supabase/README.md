@@ -12,6 +12,9 @@ Supabase の SQL Editor で、**番号順に**次のファイルを実行して�
 | 4 | `migrations/0004_treemerce_rls.sql` | GRANT の付け直しと RLS ポリシー (STEP3) |
 | 5 | `migrations/0005_treemerce_admin_bootstrap.sql` | 管理者ロールの付与/剥奪 RPC |
 | 6 | `migrations/0006_treemerce_inviter_profile.sql` | 自分の招待元の表示名のみを返す読み取り専用 RPC (MYページ表示用) |
+| 7 | `migrations/0007_treemerce_inviter_profile_grant_hardening.sql` | 0006 の GRANT 是正 (anon からの実行権を剥奪) |
+| 8 | `migrations/0008_treemerce_admin_console.sql` | 統括管理ページ向け: `app.is_super_admin()` 新設、担当変更/顧客更新/ステータス変更RPCを super_admin 限定に格上げ、顧客更新の理由を必須化 |
+| 9 | `migrations/0009_treemerce_inviter_profile_name_only.sql` | 0006 の RPC の返却項目を「招待元の代理店名のみ」に縮小 (public_id を返さない) |
 
 各ファイルは `begin; … commit;` で囲まれているため、途中で失敗しても中途半端な状態にはなりません。
 
@@ -43,7 +46,7 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=<anon key>
 ### ローカル (推奨 / 本番DBに触れない)
 
 PGlite (WebAssembly 版 PostgreSQL) 上に Supabase 相当の前提を作り、
-マイグレーションを適用してから CASE1〜19 を実行します。
+マイグレーションを適用してから CASE1〜20 (+EXTRA) を実行します。
 
 ```
 npm run test:db

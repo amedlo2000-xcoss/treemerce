@@ -1,8 +1,17 @@
-import { BarChart3, ChevronRight, Settings, UserCircle, UserPlus } from "lucide-react";
+import { BarChart3, ChevronRight, GitBranch, Lock, Settings, UserPlus } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import Link from "next/link";
 
-import { PrimaryButton, SectionLabel, StatusPill, Surface, MobilePageHeader } from "@/components/mobile/primitives";
+import {
+  InfoRow,
+  MobilePageHeader,
+  PrimaryButton,
+  ProfileHero,
+  SectionLabel,
+  StatTile,
+  StatusPill,
+  Surface,
+} from "@/components/mobile/primitives";
 import { formatDate } from "@/components/ui";
 import { signOutAction } from "@/app/actions";
 import { requireAgentPage } from "@/lib/auth/viewer";
@@ -68,40 +77,55 @@ export default async function AgentMyPage() {
 
       <div className="space-y-5 md:grid md:grid-cols-2 md:items-start md:gap-6 md:space-y-0">
         <div className="space-y-5">
-          <Surface className="flex items-center gap-4">
-            <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-brand-soft text-brand">
-              <UserCircle size={34} strokeWidth={1.6} />
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-[19px] font-bold text-text-primary">{agent.display_name}</p>
-              <p className="font-mono text-[12px] text-text-secondary">{agent.public_id}</p>
-              <div className="mt-1.5">
-                <StatusPill tone={STATUS_TONE[agent.status]}>
-                  {AGENT_STATUS_LABELS[agent.status]}
-                </StatusPill>
+          <ProfileHero
+            name={agent.display_name}
+            subtitle={agent.public_id}
+            mono
+            pills={
+              <StatusPill tone={STATUS_TONE[agent.status]}>
+                {AGENT_STATUS_LABELS[agent.status]}
+              </StatusPill>
+            }
+            meta={
+              <div className="grid grid-cols-2 gap-2">
+                <StatTile label="登録日" value={formatDate(agent.registered_at)} />
+                <StatTile label="都道府県" value={agent.prefecture ?? "—"} />
               </div>
-            </div>
-          </Surface>
+            }
+          />
 
-          <Surface>
-            <dl className="divide-y divide-border-soft">
-              <div className="flex items-center justify-between py-2.5">
-                <dt className="text-[13px] text-text-secondary">登録日</dt>
-                <dd className="text-[14px] font-medium text-text-primary">
-                  {formatDate(agent.registered_at)}
-                </dd>
+          <div className="space-y-2">
+            <SectionLabel>登録経路</SectionLabel>
+            <Surface>
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-brand-soft text-brand">
+                  <GitBranch size={18} />
+                </div>
+                <dl className="min-w-0 flex-1">
+                  <dt className="text-[12px] text-text-secondary">招待元の代理店</dt>
+                  <dd className="truncate text-[15px] font-semibold text-text-primary">
+                    {agent.invited_by ? (inviterName ?? "代理店招待URL経由") : "招待元なし"}
+                  </dd>
+                </dl>
               </div>
-              <div className="flex items-center justify-between py-2.5">
-                <dt className="text-[13px] text-text-secondary">招待元</dt>
-                <dd className="text-[14px] font-medium text-text-primary">
-                  {agent.invited_by ? (inviterName ?? "代理店招待URL経由") : "招待元なし"}
-                </dd>
+              <div className="mt-3 flex items-start gap-2.5 rounded-2xl bg-surface-muted px-3 py-2.5">
+                <Lock size={14} className="mt-0.5 shrink-0 text-text-secondary" />
+                <p className="text-[12px] leading-5 text-text-secondary">
+                  登録経路は登録時に確定し、以後変更されません。商品購入者の担当とは別の情報です。
+                </p>
               </div>
-            </dl>
-            <p className="mt-2 text-[12px] leading-5 text-text-secondary">
-              登録経路は登録時に確定し、以後変更されません。商品購入者の担当とは別の情報です。
-            </p>
-          </Surface>
+            </Surface>
+          </div>
+
+          <div className="space-y-2">
+            <SectionLabel>アカウント</SectionLabel>
+            <Surface className="!py-1">
+              <dl className="divide-y divide-border-soft">
+                <InfoRow label="メール" value={agent.email} />
+                <InfoRow label="電話番号" value={agent.phone ?? "—"} />
+              </dl>
+            </Surface>
+          </div>
 
           <Surface padded={false} className="divide-y divide-border-soft px-3">
             <LinkRow icon={UserPlus} label="招待URLの発行・履歴" href="/agent/invitations" />

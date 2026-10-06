@@ -1,14 +1,14 @@
-import { fail, failFromPostgrest, ok, readJson, requireAdminApi } from "@/lib/api/http";
+import { fail, failFromPostgrest, ok, readJson, requireSuperAdminApi } from "@/lib/api/http";
 import { AGENT_STATUSES, type AgentStatus } from "@/lib/domain/enums";
 
 type Body = { agent_id?: string; status?: string; reason?: string };
 
 /**
- * 代理店の利用開始状態 (status) の変更。
+ * 代理店の利用開始状態 (status) の変更。super_admin 専用。
  * 絶対原則2: 登録経路 (invited_by) はここでも変更できない。
  */
 export async function POST(request: Request) {
-  const guard = await requireAdminApi();
+  const guard = await requireSuperAdminApi();
   if ("error" in guard) return guard.error;
 
   const body = await readJson<Body>(request);

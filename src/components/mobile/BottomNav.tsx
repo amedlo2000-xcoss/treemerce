@@ -2,12 +2,41 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import type { LucideIcon } from "lucide-react";
+import {
+  ArrowRightLeft,
+  BarChart3,
+  ClipboardList,
+  Home,
+  Network,
+  Package,
+  User,
+  UserCircle,
+  Users,
+} from "lucide-react";
+
+/**
+ * ナビ項目はサーバーコンポーネント (layout.tsx) からこのクライアントコンポーネントへ
+ * props で渡るため、アイコンは関数コンポーネントではなくキー文字列として保持する
+ * (関数を Server → Client Component の props に渡すことはできない)。
+ */
+const ICONS = {
+  home: Home,
+  user: User,
+  users: Users,
+  network: Network,
+  package: Package,
+  "user-circle": UserCircle,
+  "arrow-right-left": ArrowRightLeft,
+  "bar-chart": BarChart3,
+  "clipboard-list": ClipboardList,
+} as const;
+
+export type IconKey = keyof typeof ICONS;
 
 export type NavItem = {
   href: string;
   label: string;
-  icon: LucideIcon;
+  icon: IconKey;
   /** true: 完全一致のみアクティブ扱い (例: ホーム) */
   exact?: boolean;
 };
@@ -26,7 +55,7 @@ export function BottomNav({ items }: { items: NavItem[] }) {
       <ul className="mx-auto flex max-w-md items-stretch justify-between">
         {items.map((item) => {
           const active = isActive(pathname, item);
-          const Icon = item.icon;
+          const Icon = ICONS[item.icon];
           return (
             <li key={item.href} className="flex-1">
               <Link
@@ -62,7 +91,7 @@ export function SideNav({
   const pathname = usePathname();
 
   return (
-    <aside className="hidden md:flex md:w-60 md:shrink-0 md:flex-col md:border-r md:border-border-soft md:bg-surface md:px-4 md:py-6">
+    <aside className="hidden md:sticky md:top-0 md:flex md:h-dvh md:w-60 md:shrink-0 md:flex-col md:overflow-y-auto md:border-r md:border-border-soft md:bg-surface md:px-4 md:py-6">
       <div className="px-2 pb-8">
         <p className="text-[17px] font-bold tracking-tight text-text-primary">{brand}</p>
         <p className="text-[13px] text-text-secondary">{subtitle}</p>
@@ -70,7 +99,7 @@ export function SideNav({
       <ul className="space-y-1">
         {items.map((item) => {
           const active = isActive(pathname, item);
-          const Icon = item.icon;
+          const Icon = ICONS[item.icon];
           return (
             <li key={item.href}>
               <Link

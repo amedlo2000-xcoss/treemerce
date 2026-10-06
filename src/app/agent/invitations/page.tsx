@@ -1,6 +1,7 @@
 import { headers } from "next/headers";
 
-import { Badge, Card, DataTable, EmptyState, Notice, PageHeader, formatDate } from "@/components/ui";
+import { Notice, formatDate } from "@/components/ui";
+import { EmptyState, MobilePageHeader, SectionLabel, StatusPill, Surface } from "@/components/mobile/primitives";
 import { requireAgentPage } from "@/lib/auth/viewer";
 
 import { CopyField, InvitationPanel } from "./InvitationPanel";
@@ -20,7 +21,7 @@ export default async function InvitationsPage() {
 
   return (
     <>
-      <PageHeader
+      <MobilePageHeader
         title="招待URL"
         description="代理店の招待URLと、商品購入者の登録URLをここから取得できます。"
       />
@@ -30,45 +31,50 @@ export default async function InvitationsPage() {
         どちらか一方を使っても、もう一方が自動的に変わることはありません。
       </Notice>
 
-      <Card
-        title="商品購入者の登録URL"
-        description="このURLから登録された購入者は、あなたが担当代理店として確定します。"
-      >
-        <CopyField label="登録URL" value={`${origin}/register/${agent.public_id}`} />
-      </Card>
+      <div className="space-y-2">
+        <SectionLabel>商品購入者の登録URL</SectionLabel>
+        <Surface>
+          <p className="mb-3 text-[13px] leading-5 text-text-secondary">
+            このURLから登録された購入者は、あなたが担当代理店として確定します。
+          </p>
+          <CopyField label="登録URL" value={`${origin}/register/${agent.public_id}`} />
+        </Surface>
+      </div>
 
-      <Card title="代理店の招待URLを発行">
-        <InvitationPanel origin={origin} />
-      </Card>
+      <div className="space-y-2">
+        <SectionLabel>代理店の招待URLを発行</SectionLabel>
+        <Surface>
+          <InvitationPanel origin={origin} />
+        </Surface>
+      </div>
 
-      {!invitations || invitations.length === 0 ? (
-        <EmptyState title="発行済みの招待URLはありません" />
-      ) : (
-        <DataTable headers={["招待URL", "状態", "利用数", "メモ", "発行日"]}>
-          {invitations.map((inv) => (
-            <tr key={inv.id} className="bg-white dark:bg-zinc-950">
-              <td className="px-4 py-3">
-                <CopyField label="" value={`${origin}/invite/${inv.code}`} />
-              </td>
-              <td className="px-4 py-3">
-                <Badge tone={inv.status === "active" ? "green" : "neutral"}>
-                  {inv.status === "active" ? "有効" : "無効"}
-                </Badge>
-              </td>
-              <td className="px-4 py-3 text-sm tabular-nums text-zinc-700 dark:text-zinc-300">
-                {inv.used_count}
-                {inv.max_uses ? ` / ${inv.max_uses}` : ""}
-              </td>
-              <td className="px-4 py-3 text-xs text-zinc-600 dark:text-zinc-400">
-                {inv.note ?? "—"}
-              </td>
-              <td className="px-4 py-3 text-xs text-zinc-600 dark:text-zinc-400">
-                {formatDate(inv.created_at)}
-              </td>
-            </tr>
-          ))}
-        </DataTable>
-      )}
+      <div className="space-y-2">
+        <SectionLabel>発行済みの招待URL</SectionLabel>
+        {!invitations || invitations.length === 0 ? (
+          <Surface>
+            <EmptyState title="発行済みの招待URLはありません" />
+          </Surface>
+        ) : (
+          <Surface padded={false} className="divide-y divide-border-soft px-4">
+            {invitations.map((inv) => (
+              <div key={inv.id} className="space-y-2 py-4">
+                <div className="flex flex-wrap items-center gap-2">
+                  <StatusPill tone={inv.status === "active" ? "success" : "neutral"}>
+                    {inv.status === "active" ? "有効" : "無効"}
+                  </StatusPill>
+                  <span className="text-[13px] tabular-nums text-text-secondary">
+                    利用数 {inv.used_count}
+                    {inv.max_uses ? ` / ${inv.max_uses}` : ""}
+                  </span>
+                  <span className="text-[12px] text-text-secondary">{formatDate(inv.created_at)}</span>
+                </div>
+                <CopyField label="URL" value={`${origin}/invite/${inv.code}`} />
+                {inv.note ? <p className="text-[13px] text-text-secondary">{inv.note}</p> : null}
+              </div>
+            ))}
+          </Surface>
+        )}
+      </div>
     </>
   );
 }

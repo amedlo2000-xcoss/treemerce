@@ -84,3 +84,15 @@ export async function requireAdminPage(returnTo: string) {
 
   return { supabase, viewer };
 }
+
+/**
+ * ページ用: 統括管理ページ(全代理店・全顧客の横断詳細/編集/担当変更/ステータス変更)専用。
+ * admin/support ロールはここで弾かれる。super_admin のみ通過する。
+ */
+export async function requireSuperAdminPage(returnTo: string) {
+  const { supabase, viewer } = await requireAdminPage(returnTo);
+  if (viewer.adminRole !== "super_admin") {
+    redirect("/admin?error=super_admin_only");
+  }
+  return { supabase, viewer };
+}

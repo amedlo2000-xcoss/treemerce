@@ -34,10 +34,10 @@ function buildTree(agents: CommerceMapAgent[]): TreeNode[] {
 function CustomerNode({ customer }: { customer: CommerceMapCustomer }) {
   if (customer.anonymous) {
     return (
-      <li className="flex items-center gap-2 rounded-lg border border-dashed border-zinc-300 px-3 py-2 dark:border-zinc-700">
-        <span className="font-mono text-xs text-zinc-500 dark:text-zinc-400">{customer.label}</span>
+      <li className="flex items-center gap-2 rounded-lg border border-dashed border-border-soft px-3 py-2">
+        <span className="font-mono text-[12px] text-text-secondary">{customer.label}</span>
         <Badge tone="neutral">匿名</Badge>
-        <span className="text-[11px] text-zinc-400 dark:text-zinc-500">
+        <span className="text-[11px] text-text-secondary">
           他代理店の担当のため詳細は表示されません
         </span>
       </li>
@@ -47,14 +47,14 @@ function CustomerNode({ customer }: { customer: CommerceMapCustomer }) {
   const total = customer.purchases.reduce((sum, p) => sum + Number(p.amount ?? 0), 0);
 
   return (
-    <li className="rounded-lg border border-zinc-200 bg-white px-3 py-2 dark:border-zinc-800 dark:bg-zinc-950">
+    <li className="rounded-lg border border-border-soft bg-surface px-3 py-2">
       <div className="flex flex-wrap items-center gap-2">
-        <span className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
+        <span className="text-[14px] font-medium text-text-primary">
           {customer.label}
         </span>
         <Badge tone="blue">自分の担当</Badge>
         {customer.prefecture ? (
-          <span className="text-[11px] text-zinc-500 dark:text-zinc-400">
+          <span className="text-[11px] text-text-secondary">
             {customer.prefecture}
           </span>
         ) : null}
@@ -62,20 +62,20 @@ function CustomerNode({ customer }: { customer: CommerceMapCustomer }) {
       {customer.purchases.length > 0 ? (
         <ul className="mt-1.5 space-y-0.5">
           {customer.purchases.map((p) => (
-            <li key={p.purchase_id} className="text-xs text-zinc-600 dark:text-zinc-400">
+            <li key={p.purchase_id} className="text-[12px] text-text-secondary">
               {p.product_name}
-              <span className="ml-1.5 text-zinc-400 dark:text-zinc-500">
+              <span className="ml-1.5 text-text-secondary">
                 ({PRODUCT_CATEGORY_LABELS[p.product_category] ?? p.product_category} ·{" "}
                 {formatYen(Number(p.amount))})
               </span>
             </li>
           ))}
-          <li className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
+          <li className="text-[12px] font-medium text-text-primary">
             合計 {formatYen(total)}
           </li>
         </ul>
       ) : (
-        <p className="mt-1 text-xs text-zinc-400 dark:text-zinc-500">購入履歴はありません</p>
+        <p className="mt-1 text-[12px] text-text-secondary">購入履歴はありません</p>
       )}
     </li>
   );
@@ -100,21 +100,21 @@ function AgentNode({
         onClick={() => onSelect(node, customers)}
         className="flex w-full flex-wrap items-center gap-2 rounded-lg px-1 py-1 text-left transition-colors hover:bg-surface-muted"
       >
-        <span className="font-mono text-xs text-zinc-500 dark:text-zinc-400">{node.public_id}</span>
-        <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+        <span className="font-mono text-[12px] text-text-secondary">{node.public_id}</span>
+        <span className="text-[14px] font-semibold text-text-primary">
           {node.display_name}
         </span>
         {node.is_self ? <Badge tone="blue">自分</Badge> : null}
         <Badge tone="neutral">担当顧客 {node.customer_count}件</Badge>
         {anonymousCount > 0 ? (
-          <span className="text-[11px] text-zinc-400 dark:text-zinc-500">
+          <span className="text-[11px] text-text-secondary">
             (うち匿名表示 {anonymousCount}件)
           </span>
         ) : null}
       </button>
 
       {customers.length > 0 ? (
-        <ul className="ml-4 space-y-1.5 border-l border-zinc-200 pl-4 dark:border-zinc-800">
+        <ul className="ml-4 space-y-1.5 border-l border-border-soft pl-4">
           {customers.map((c, i) => (
             <CustomerNode key={c.anonymous ? `anon-${node.agent_id}-${i}` : c.customer_id} customer={c} />
           ))}
@@ -122,7 +122,7 @@ function AgentNode({
       ) : null}
 
       {node.children.length > 0 ? (
-        <ul className="ml-4 space-y-4 border-l border-zinc-200 pl-4 dark:border-zinc-800">
+        <ul className="ml-4 space-y-4 border-l border-border-soft pl-4">
           {node.children.map((child) => (
             <AgentNode
               key={child.agent_id}

@@ -155,3 +155,10 @@ export function labelForBucket(dimension: string, key: string): string {
       return key;
   }
 }
+
+export const PURCHASE_STATUS_LABELS: Record<string, string> = {
+  pending: "処理中",
+  completed: "完了",
+  cancelled: "キャンセル",
+  refunded: "返金済み",
+};

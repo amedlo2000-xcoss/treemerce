@@ -198,3 +198,121 @@ export function EmptyState({ title, description }: { title: string; description?
     </div>
   );
 }
+
+/** 名前の先頭1文字をアバターに使う (画像を持たないため)。 */
+export function initialOf(name: string | null | undefined) {
+  const trimmed = (name ?? "").trim();
+  return trimmed ? Array.from(trimmed)[0] : "?";
+}
+
+/**
+ * プロフィールのヒーローカード (顧客詳細 / MY / 代理店プロフィール共通)。
+ * 上部にブランドグラデーションの帯、そこに重なる頭文字アバター、名前と補足情報。
+ */
+export function ProfileHero({
+  name,
+  subtitle,
+  mono = false,
+  pills,
+  meta,
+  actions,
+  compact = false,
+}: {
+  name: string;
+  subtitle?: string | null;
+  mono?: boolean;
+  pills?: ReactNode;
+  meta?: ReactNode;
+  actions?: ReactNode;
+  compact?: boolean;
+}) {
+  return (
+    <section className="overflow-hidden rounded-[24px] border border-border-soft bg-surface shadow-[var(--shadow-card)]">
+      <div
+        className={`bg-linear-to-br from-brand via-brand/80 to-[#a78bfa] ${compact ? "h-16" : "h-24"}`}
+        aria-hidden
+      />
+      <div className="px-5 pb-5">
+        <div className={`flex items-end justify-between gap-3 ${compact ? "-mt-8" : "-mt-10"}`}>
+          <div
+            className={`flex shrink-0 items-center justify-center rounded-full border-4 border-surface bg-brand-soft font-bold text-brand shadow-[var(--shadow-card)] ${
+              compact ? "h-16 w-16 text-[24px]" : "h-20 w-20 text-[30px]"
+            }`}
+            aria-hidden
+          >
+            {initialOf(name)}
+          </div>
+          {actions ? <div className="flex gap-2 pb-1">{actions}</div> : null}
+        </div>
+        <div className="mt-3 min-w-0">
+          <p className={`truncate font-bold text-text-primary ${compact ? "text-[19px]" : "text-[22px]"}`}>
+            {name}
+          </p>
+          {subtitle ? (
+            <p className={`truncate text-[13px] text-text-secondary ${mono ? "font-mono" : ""}`}>
+              {subtitle}
+            </p>
+          ) : null}
+          {pills ? <div className="mt-2.5 flex flex-wrap gap-1.5">{pills}</div> : null}
+          {meta ? <div className="mt-4">{meta}</div> : null}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/** ヒーロー下部などに並べる小さな数値タイル。 */
+export function StatTile({ label, value }: { label: string; value: ReactNode }) {
+  return (
+    <div className="rounded-2xl bg-surface-muted px-3 py-2.5">
+      <p className="text-[12px] text-text-secondary">{label}</p>
+      <p className="mt-0.5 truncate text-[15px] font-bold tabular-nums text-text-primary">{value}</p>
+    </div>
+  );
+}
+
+/** アイコン付きの丸ボタン (電話・メールなどのクイックアクション)。 */
+export function IconAction({
+  href,
+  label,
+  children,
+}: {
+  href: string;
+  label: string;
+  children: ReactNode;
+}) {
+  return (
+    <a
+      href={href}
+      aria-label={label}
+      title={label}
+      className="flex h-10 w-10 items-center justify-center rounded-full border border-border-soft bg-surface text-brand transition-colors hover:bg-brand-soft"
+    >
+      {children}
+    </a>
+  );
+}
+
+/** ラベル: 値 の1行。dl の中で使う。 */
+export function InfoRow({
+  label,
+  value,
+  mono = false,
+}: {
+  label: string;
+  value: ReactNode;
+  mono?: boolean;
+}) {
+  return (
+    <div className="flex items-start justify-between gap-4 py-3">
+      <dt className="shrink-0 text-[13px] text-text-secondary">{label}</dt>
+      <dd
+        className={`min-w-0 break-words text-right text-[14px] font-medium text-text-primary ${
+          mono ? "font-mono" : ""
+        }`}
+      >
+        {value}
+      </dd>
+    </div>
+  );
+}

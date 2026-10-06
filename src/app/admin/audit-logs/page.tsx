@@ -1,4 +1,4 @@
-import { DataTable, EmptyState, Notice, PageHeader, formatDateTime } from "@/components/ui";
+import { DataTable, EmptyState, Notice, PageHeader, TD, formatDateTime } from "@/components/ui";
 import { requireAdminPage } from "@/lib/auth/viewer";
 import type { AuditLogRow } from "@/lib/domain/types";
 
@@ -40,38 +40,28 @@ export default async function AdminAuditLogsPage() {
         description="管理者操作の変更前後・理由・実行者・日時の記録です。"
       />
 
-      <Notice tone="info">
-        監査ログは追記専用です。作成後に更新・削除することはできません。
-      </Notice>
+      <Notice tone="info">監査ログは追記専用です。作成後に更新・削除することはできません。</Notice>
 
       {logs.length === 0 ? (
         <EmptyState title="監査ログはまだありません" />
       ) : (
         <DataTable headers={["日時", "操作", "対象", "変更前", "変更後", "理由", "実行者"]}>
           {logs.map((log) => (
-            <tr key={log.id} className="bg-white dark:bg-zinc-950">
-              <td className="px-4 py-3 text-xs whitespace-nowrap text-zinc-600 dark:text-zinc-400">
-                {formatDateTime(log.created_at)}
+            <tr key={log.id}>
+              <td className={`${TD} whitespace-nowrap`}>{formatDateTime(log.created_at)}</td>
+              <td className={TD}>
+                <span className="rounded-lg bg-surface-muted px-2 py-1 font-mono text-[12px] text-text-primary">
+                  {log.action}
+                </span>
               </td>
-              <td className="px-4 py-3 font-mono text-xs text-zinc-700 dark:text-zinc-300">
-                {log.action}
-              </td>
-              <td className="px-4 py-3 text-xs text-zinc-600 dark:text-zinc-400">
-                {log.target_table}
-              </td>
-              <td className="px-4 py-3 text-xs text-zinc-700 dark:text-zinc-300">
-                {label(summarize(log.before_state))}
-              </td>
-              <td className="px-4 py-3 text-xs text-zinc-700 dark:text-zinc-300">
-                {label(summarize(log.after_state))}
-              </td>
-              <td className="px-4 py-3 text-xs text-zinc-700 dark:text-zinc-300">
-                {log.reason ?? "—"}
-              </td>
-              <td className="px-4 py-3 text-xs text-zinc-600 dark:text-zinc-400">
+              <td className={TD}>{log.target_table}</td>
+              <td className={TD}>{label(summarize(log.before_state))}</td>
+              <td className={TD}>{label(summarize(log.after_state))}</td>
+              <td className={`${TD} text-text-primary`}>{log.reason ?? "—"}</td>
+              <td className={TD}>
                 {log.actor_role}
                 <br />
-                <span className="font-mono text-[11px] text-zinc-400">
+                <span className="font-mono text-[11px] text-text-secondary">
                   {log.actor_user_id ?? "—"}
                 </span>
               </td>

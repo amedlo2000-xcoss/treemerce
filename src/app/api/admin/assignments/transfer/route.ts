@@ -1,20 +1,20 @@
-import { fail, failFromPostgrest, ok, readJson, requireAdminApi } from "@/lib/api/http";
+import { fail, failFromPostgrest, ok, readJson, requireSuperAdminApi } from "@/lib/api/http";
 
 type Body = { customer_id?: string; new_agent_id?: string; reason?: string };
 
 /**
- * 担当代理店の変更 (ADMIN 専用)。
+ * 担当代理店の変更 (super_admin 専用)。
  *
  * 絶対原則4 / 8, CASE7 / CASE8。
  * 防御は 2 段:
- *   1. ここ (API 層) で requireAdminApi() が管理者以外を 403 で弾く
- *   2. DB 側 `treemerce_admin_transfer_customer` が app.is_admin() を再チェックし、
+ *   1. ここ (API 層) で requireSuperAdminApi() が super_admin 以外を 403 で弾く
+ *   2. DB 側 `treemerce_admin_transfer_customer` が app.is_super_admin() を再チェックし、
  *      さらに customer_assignments のガードトリガが認可コンテキスト外の書込みを拒否する
  * 変更前後・理由・実行者・日時は admin_audit_logs と
  * customer_assignment_history の両方に保存される。
  */
 export async function POST(request: Request) {
-  const guard = await requireAdminApi();
+  const guard = await requireSuperAdminApi();
   if ("error" in guard) return guard.error;
 
   const body = await readJson<Body>(request);

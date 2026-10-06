@@ -130,3 +130,19 @@ export async function requireAdminApi() {
   }
   return { ctx } as const;
 }
+
+/**
+ * API 層の super_admin 専用ガード。統括管理ページ(全代理店・全顧客の横断詳細/編集/
+ * 担当変更/ステータス変更)の書込みエンドポイントはここを通す。
+ * DB 側の `app.is_super_admin()` チェックと重ねる多層防御。
+ */
+export async function requireSuperAdminApi() {
+  const guard = await requireAdminApi();
+  if ("error" in guard) return guard;
+  if (guard.ctx.viewer.adminRole !== "super_admin") {
+    return {
+      error: fail("TREEMERCE_SUPER_ADMIN_ONLY", "この操作は super_admin のみ実行できます。", 403),
+    } as const;
+  }
+  return guard;
+}

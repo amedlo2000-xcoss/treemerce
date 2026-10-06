@@ -1,7 +1,8 @@
 import Link from "next/link";
 
 import { RatioBars } from "@/components/charts/RatioBars";
-import { EmptyState, Notice, PageHeader, Stat } from "@/components/ui";
+import { Notice } from "@/components/ui";
+import { BigStat, EmptyState, MobilePageHeader, Surface } from "@/components/mobile/primitives";
 import { requireAgentPage } from "@/lib/auth/viewer";
 import { ANALYTICS_PERIODS } from "@/lib/domain/enums";
 import { DEMOGRAPHIC_DIMENSIONS, type Demographics } from "@/lib/domain/types";
@@ -33,7 +34,7 @@ export default async function AgentAnalyticsPage({
 
   return (
     <>
-      <PageHeader
+      <MobilePageHeader
         title="客層分析"
         description="あなたと傘下代理店全員が担当する購入者を、属性値のみで集計しています。"
       />
@@ -45,16 +46,15 @@ export default async function AgentAnalyticsPage({
       </Notice>
 
       {/* 期間フィルターはチャート群の上に1行で置く */}
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="text-xs text-zinc-500 dark:text-zinc-400">期間</span>
+      <div className="flex flex-wrap items-center gap-2 px-1">
         {ANALYTICS_PERIODS.map((p) => (
           <Link
             key={p.value}
             href={`/agent/analytics?period=${p.value}`}
-            className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
+            className={`inline-flex items-center justify-center rounded-2xl border px-4 py-2.5 text-[14px] font-medium transition-colors ${
               period === p.value
-                ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
-                : "border border-zinc-300 text-zinc-700 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
+                ? "border-brand bg-brand-soft text-brand"
+                : "border-border-soft bg-surface text-text-primary hover:bg-surface-muted"
             }`}
           >
             {p.label}
@@ -62,24 +62,30 @@ export default async function AgentAnalyticsPage({
         ))}
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2">
-        <Stat
-          label="集計対象の購入者"
-          value={stats?.total_customers ?? 0}
-          hint="自分 + 傘下代理店の担当合計"
-        />
-        <Stat
-          label="集計対象の代理店"
-          value={stats?.scope_agent_count ?? 0}
-          hint="自分を含む部分木の代理店数"
-        />
+      <div className="grid grid-cols-2 gap-3">
+        <Surface className="!p-4">
+          <BigStat
+            label="集計対象の購入者"
+            value={stats?.total_customers ?? 0}
+            hint="自分 + 傘下代理店の担当合計"
+          />
+        </Surface>
+        <Surface className="!p-4">
+          <BigStat
+            label="集計対象の代理店"
+            value={stats?.scope_agent_count ?? 0}
+            hint="自分を含む部分木の代理店数"
+          />
+        </Surface>
       </div>
 
       {!stats || stats.total_customers === 0 ? (
-        <EmptyState
-          title="集計対象のデータがありません"
-          description="担当顧客が登録されると、ここに客層の内訳が表示されます。"
-        />
+        <Surface>
+          <EmptyState
+            title="集計対象のデータがありません"
+            description="担当顧客が登録されると、ここに客層の内訳が表示されます。"
+          />
+        </Surface>
       ) : (
         <div className="grid gap-4 lg:grid-cols-2">
           {DEMOGRAPHIC_DIMENSIONS.map((dim) => (

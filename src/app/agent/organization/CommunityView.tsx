@@ -5,7 +5,7 @@ import { useMemo, useState } from "react";
 
 import { BottomSheet } from "@/components/mobile/BottomSheet";
 import { SwipeDeck } from "@/components/mobile/SwipeDeck";
-import { StatusPill, Surface } from "@/components/mobile/primitives";
+import { ProfileHero, StatTile, StatusPill, Surface } from "@/components/mobile/primitives";
 import { formatDate } from "@/components/ui";
 import { AGENT_STATUS_LABELS } from "@/lib/domain/enums";
 import type { CommunityMapNode } from "@/lib/domain/types";
@@ -39,42 +39,37 @@ const STATUS_TONE = {
 function AgentProfileCard({ item }: { item: FlatAgent }) {
   const { node } = item;
   return (
-    <Surface className="flex h-full flex-col">
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0">
-          <p className="truncate text-[19px] font-bold text-text-primary">{node.display_name}</p>
-          <p className="mt-0.5 font-mono text-[12px] text-text-secondary">{node.public_id}</p>
-        </div>
-        <StatusPill tone={STATUS_TONE[node.status] ?? "neutral"}>
-          {AGENT_STATUS_LABELS[node.status] ?? node.status}
-        </StatusPill>
-      </div>
-
-      <dl className="mt-4 grid grid-cols-2 gap-3">
-        <div className="rounded-2xl bg-surface-muted px-3 py-2.5">
-          <dt className="text-[12px] text-text-secondary">登録日</dt>
-          <dd className="mt-0.5 text-[14px] font-semibold text-text-primary">
-            {formatDate(node.registered_at)}
-          </dd>
-        </div>
-        <div className="rounded-2xl bg-surface-muted px-3 py-2.5">
-          <dt className="text-[12px] text-text-secondary">傘下代理店</dt>
-          <dd className="mt-0.5 text-[14px] font-semibold tabular-nums text-text-primary">
-            {item.descendantCount}
-          </dd>
-        </div>
-      </dl>
-
-      <div className="mt-4 flex-1 space-y-1">
-        <p className="text-[12px] text-text-secondary">招待元 (登録経路)</p>
-        <p className="text-[14px] font-medium text-text-primary">
-          {node.is_self ? "自分" : (item.parentName ?? "—")}
-        </p>
-        {node.prefecture ? (
-          <p className="text-[12px] text-text-secondary">{node.prefecture}</p>
-        ) : null}
-      </div>
-    </Surface>
+    <div className="h-full [&>section]:h-full">
+      <ProfileHero
+        compact
+        name={node.display_name}
+        subtitle={node.public_id}
+        mono
+        pills={
+          <>
+            {node.is_self ? <StatusPill tone="brand">自分</StatusPill> : null}
+            <StatusPill tone={STATUS_TONE[node.status] ?? "neutral"}>
+              {AGENT_STATUS_LABELS[node.status] ?? node.status}
+            </StatusPill>
+            {node.prefecture ? <StatusPill>{node.prefecture}</StatusPill> : null}
+          </>
+        }
+        meta={
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-2">
+              <StatTile label="登録日" value={formatDate(node.registered_at)} />
+              <StatTile label="傘下代理店" value={item.descendantCount} />
+            </div>
+            <div className="rounded-2xl border border-border-soft px-3 py-2.5">
+              <p className="text-[12px] text-text-secondary">招待元 (登録経路)</p>
+              <p className="mt-0.5 text-[14px] font-medium text-text-primary">
+                {node.is_self ? "自分" : (item.parentName ?? "—")}
+              </p>
+            </div>
+          </div>
+        }
+      />
+    </div>
   );
 }
 

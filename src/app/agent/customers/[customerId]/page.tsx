@@ -1,8 +1,18 @@
-import { Lock, User } from "lucide-react";
+import { ChevronLeft, Lock, Mail, MessageSquare, Phone, ShoppingBag } from "lucide-react";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 
-import { LinkButton, formatDate, formatDateTime, formatYen } from "@/components/ui";
-import { EmptyState, StatusPill, Surface } from "@/components/mobile/primitives";
+import { formatDate, formatDateTime, formatYen } from "@/components/ui";
+import {
+  EmptyState,
+  IconAction,
+  InfoRow,
+  ProfileHero,
+  SectionLabel,
+  StatTile,
+  StatusPill,
+  Surface,
+} from "@/components/mobile/primitives";
 import { requireAgentPage } from "@/lib/auth/viewer";
 import {
   AGE_GROUP_LABELS,
@@ -10,15 +20,24 @@ import {
   CUSTOMER_TYPE_LABELS,
   GENDER_LABELS,
   PRODUCT_CATEGORY_LABELS,
+  PURCHASE_STATUS_LABELS,
 } from "@/lib/domain/enums";
 import type { CustomerRow, PurchaseRow } from "@/lib/domain/types";
+
+const PURCHASE_STATUS_TONE: Record<string, "success" | "warning" | "danger" | "neutral"> = {
+  completed: "success",
+  pending: "warning",
+  cancelled: "neutral",
+  refunded: "danger",
+};
 
 /**
  * CASE5 / CASE6:
  * RLS により、担当していない購入者は 0 行になり notFound() になる。
  * 「存在するが権限がない」ことも伝えないため 403 ではなく 404 とする。
  *
- * STEP3: 顧客プロフィール。基本情報→担当情報 (固定・編集UIなし)→購入情報→問い合わせ の順。
+ * STEP3: 顧客プロフィール。ヒーロー→基本情報→担当情報 (固定・編集UIなし)→購入情報→問い合わせ の順。
+ * PC (lg 以上) では左にプロフィール列を固定し、右に購入情報を並べる。
  */
 export default async function AgentCustomerDetailPage({
   params,
@@ -59,147 +78,164 @@ export default async function AgentCustomerDetailPage({
 
   return (
     <>
-      <div className="flex justify-end px-1">
-        <LinkButton href="/agent/customers" variant="secondary">
-          一覧へ戻る
-        </LinkButton>
-      </div>
+      <Link
+        href="/agent/customers"
+        className="inline-flex items-center gap-1 px-1 text-[14px] font-medium text-text-secondary transition-colors hover:text-text-primary"
+      >
+        <ChevronLeft size={18} />
+        顧客一覧
+      </Link>
 
-      <Surface className="flex items-center gap-4">
-        <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-brand-soft text-brand">
-          <User size={30} strokeWidth={1.6} />
-        </div>
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-[20px] font-bold text-text-primary">{customer.full_name}</p>
-          {customer.full_name_kana ? (
-            <p className="truncate text-[13px] text-text-secondary">{customer.full_name_kana}</p>
-          ) : null}
-          <div className="mt-1.5">
-            <StatusPill tone="brand">
-              {CUSTOMER_TYPE_LABELS[customer.customer_type] ?? customer.customer_type}
-            </StatusPill>
+      <div className="space-y-5 lg:grid lg:grid-cols-[minmax(0,22rem)_minmax(0,1fr)] lg:items-start lg:gap-6 lg:space-y-0">
+        {/* 左列: プロフィール (PC では追従) */}
+        <div className="space-y-5 lg:sticky lg:top-6">
+          <ProfileHero
+            name={customer.full_name}
+            subtitle={customer.full_name_kana}
+            pills={
+              <>
+                <StatusPill tone="brand">
+                  {CUSTOMER_TYPE_LABELS[customer.customer_type] ?? customer.customer_type}
+                </StatusPill>
+                {customer.age_group ? (
+                  <StatusPill>{AGE_GROUP_LABELS[customer.age_group] ?? customer.age_group}</StatusPill>
+                ) : null}
+                {customer.prefecture ? <StatusPill>{customer.prefecture}</StatusPill> : null}
+              </>
+            }
+            actions={
+              <>
+                {customer.phone ? (
+                  <IconAction href={`tel:${customer.phone}`} label="電話する">
+                    <Phone size={18} />
+                  </IconAction>
+                ) : null}
+                {customer.email ? (
+                  <IconAction href={`mailto:${customer.email}`} label="メールする">
+                    <Mail size={18} />
+                  </IconAction>
+                ) : null}
+              </>
+            }
+            meta={
+              <div className="grid grid-cols-3 gap-2">
+                <StatTile label="購入合計" value={formatYen(total)} />
+                <StatTile label="購入件数" value={`${purchases.length}件`} />
+                <StatTile
+                  label="最終購入"
+                  value={lastPurchase ? formatDate(lastPurchase.purchased_at) : "—"}
+                />
+              </div>
+            }
+          />
+
+          <div className="space-y-2">
+            <SectionLabel>基本情報</SectionLabel>
+            <Surface className="!py-1">
+              <dl className="divide-y divide-border-soft">
+                <InfoRow label="メール" value={customer.email ?? "—"} />
+                <InfoRow label="電話番号" value={customer.phone ?? "—"} />
+                <InfoRow
+                  label="年代"
+                  value={customer.age_group ? (AGE_GROUP_LABELS[customer.age_group] ?? "—") : "未回答"}
+                />
+                <InfoRow
+                  label="性別"
+                  value={customer.gender ? (GENDER_LABELS[customer.gender] ?? "—") : "未回答"}
+                />
+                <InfoRow label="都道府県" value={customer.prefecture ?? "—"} />
+              </dl>
+            </Surface>
           </div>
-        </div>
-      </Surface>
 
-      <div className="space-y-5 md:grid md:grid-cols-2 md:items-start md:gap-4 md:space-y-0">
-        <div className="space-y-2">
-          <div className="space-y-2 px-1">
-            <p className="text-[13px] font-semibold tracking-wide text-text-secondary">基本情報</p>
-          </div>
-          <Surface>
-            <dl className="divide-y divide-border-soft">
-              <Row label="メール" value={customer.email ?? "—"} />
-              <Row label="電話番号" value={customer.phone ?? "—"} />
-              <Row
-                label="年代"
-                value={customer.age_group ? (AGE_GROUP_LABELS[customer.age_group] ?? "—") : "未回答"}
-              />
-              <Row
-                label="性別"
-                value={customer.gender ? (GENDER_LABELS[customer.gender] ?? "—") : "未回答"}
-              />
-              <Row label="都道府県" value={customer.prefecture ?? "—"} />
-              <Row label="担当開始日" value={formatDate(assignment.assigned_at)} />
-            </dl>
-          </Surface>
-        </div>
-
-        <div className="space-y-2">
-          <div className="space-y-2 px-1">
-            <p className="text-[13px] font-semibold tracking-wide text-text-secondary">担当情報</p>
-          </div>
-          <Surface>
-            <div className="mb-3 flex items-center gap-2">
-              <Lock size={16} className="text-text-secondary" />
-              <p className="text-[13px] text-text-secondary">
-                担当代理店は初回登録時に確定し、以後変更されません。
-              </p>
-            </div>
-            <dl className="divide-y divide-border-soft">
-              <Row
-                label="担当代理店"
-                value={
-                  <span className="inline-flex items-center gap-1.5">
-                    {agent.display_name}
-                    <StatusPill tone="brand">自分</StatusPill>
-                  </span>
-                }
-              />
-              <Row label="代理店ID" value={agent.public_id} mono />
-              <Row
-                label="確定経路"
-                value={
-                  ASSIGNMENT_SOURCE_LABELS[assignment.assignment_source] ?? assignment.assignment_source
-                }
-              />
-            </dl>
-          </Surface>
-        </div>
-      </div>
-
-      <div className="space-y-2 px-1">
-        <p className="text-[13px] font-semibold tracking-wide text-text-secondary">購入情報</p>
-      </div>
-      <div className="grid grid-cols-2 gap-3">
-        <Surface className="!p-4">
-          <p className="text-[13px] text-text-secondary">購入合計</p>
-          <p className="mt-0.5 text-[22px] font-bold tabular-nums text-text-primary">
-            {formatYen(total)}
-          </p>
-        </Surface>
-        <Surface className="!p-4">
-          <p className="text-[13px] text-text-secondary">最終購入日</p>
-          <p className="mt-0.5 text-[22px] font-bold tabular-nums text-text-primary">
-            {lastPurchase ? formatDate(lastPurchase.purchased_at) : "—"}
-          </p>
-        </Surface>
-      </div>
-
-      {purchases.length === 0 ? (
-        <EmptyState title="購入履歴はありません" />
-      ) : (
-        <Surface padded={false} className="divide-y divide-border-soft px-4">
-          {purchases.map((p) => (
-            <div key={p.id} className="py-3">
-              <div className="flex items-center justify-between">
-                <p className="text-[14px] font-medium text-text-primary">{p.product_name}</p>
-                <p className="text-[14px] font-semibold tabular-nums text-text-primary">
-                  {formatYen(Number(p.amount))}
+          <div className="space-y-2">
+            <SectionLabel>担当情報</SectionLabel>
+            <Surface>
+              <div className="mb-2 flex items-start gap-2.5 rounded-2xl bg-surface-muted px-3 py-2.5">
+                <Lock size={16} className="mt-0.5 shrink-0 text-text-secondary" />
+                <p className="text-[12px] leading-5 text-text-secondary">
+                  担当代理店は初回登録時に確定し、以後変更されません。
                 </p>
               </div>
-              <p className="mt-0.5 text-[12px] text-text-secondary">
-                {PRODUCT_CATEGORY_LABELS[p.product_category] ?? p.product_category} ·{" "}
-                {formatDateTime(p.purchased_at)} · 数量 {p.quantity} · {p.status}
-              </p>
-            </div>
-          ))}
-        </Surface>
-      )}
+              <dl className="divide-y divide-border-soft">
+                <InfoRow
+                  label="担当代理店"
+                  value={
+                    <span className="inline-flex items-center gap-1.5">
+                      {agent.display_name}
+                      <StatusPill tone="brand">自分</StatusPill>
+                    </span>
+                  }
+                />
+                <InfoRow label="代理店ID" value={agent.public_id} mono />
+                <InfoRow label="担当開始日" value={formatDate(assignment.assigned_at)} />
+                <InfoRow
+                  label="確定経路"
+                  value={
+                    ASSIGNMENT_SOURCE_LABELS[assignment.assignment_source] ??
+                    assignment.assignment_source
+                  }
+                />
+              </dl>
+            </Surface>
+          </div>
+        </div>
 
-      <div className="space-y-2 px-1">
-        <p className="text-[13px] font-semibold tracking-wide text-text-secondary">問い合わせ履歴</p>
+        {/* 右列: 購入情報・問い合わせ */}
+        <div className="space-y-5">
+          <div className="space-y-2">
+            <SectionLabel>購入履歴</SectionLabel>
+            {purchases.length === 0 ? (
+              <EmptyState title="購入履歴はありません" />
+            ) : (
+              <Surface padded={false} className="divide-y divide-border-soft">
+                {purchases.map((p) => (
+                  <div key={p.id} className="flex items-start gap-3 px-4 py-3.5">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-brand-soft text-brand">
+                      <ShoppingBag size={18} />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-start justify-between gap-3">
+                        <p className="truncate text-[15px] font-semibold text-text-primary">
+                          {p.product_name}
+                        </p>
+                        <p className="shrink-0 text-[15px] font-bold tabular-nums text-text-primary">
+                          {formatYen(Number(p.amount))}
+                        </p>
+                      </div>
+                      <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px] text-text-secondary">
+                        <span>
+                          {PRODUCT_CATEGORY_LABELS[p.product_category] ?? p.product_category}
+                        </span>
+                        <span aria-hidden>·</span>
+                        <span>{formatDateTime(p.purchased_at)}</span>
+                        <span aria-hidden>·</span>
+                        <span>数量 {p.quantity}</span>
+                        <StatusPill tone={PURCHASE_STATUS_TONE[p.status] ?? "neutral"}>
+                          {PURCHASE_STATUS_LABELS[p.status] ?? p.status}
+                        </StatusPill>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </Surface>
+            )}
+          </div>
+
+          <div className="space-y-2">
+            <SectionLabel>問い合わせ履歴</SectionLabel>
+            <Surface className="flex items-center gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-surface-muted text-text-secondary">
+                <MessageSquare size={18} />
+              </div>
+              <div>
+                <p className="text-[14px] font-semibold text-text-primary">準備中の機能です</p>
+                <p className="text-[12px] text-text-secondary">今後のアップデートで対応予定です。</p>
+              </div>
+            </Surface>
+          </div>
+        </div>
       </div>
-      <EmptyState title="準備中の機能です" description="今後のアップデートで対応予定です。" />
     </>
-  );
-}
-
-function Row({
-  label,
-  value,
-  mono = false,
-}: {
-  label: string;
-  value: React.ReactNode;
-  mono?: boolean;
-}) {
-  return (
-    <div className="flex items-center justify-between py-2.5">
-      <dt className="text-[13px] text-text-secondary">{label}</dt>
-      <dd className={`text-[14px] font-medium text-text-primary ${mono ? "font-mono" : ""}`}>
-        {value}
-      </dd>
-    </div>
   );
 }

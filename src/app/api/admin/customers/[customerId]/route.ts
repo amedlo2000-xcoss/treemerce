@@ -1,4 +1,4 @@
-import { fail, failFromPostgrest, ok, readJson, requireAdminApi } from "@/lib/api/http";
+import { fail, failFromPostgrest, ok, readJson, requireSuperAdminApi } from "@/lib/api/http";
 
 type Body = { patch?: Record<string, unknown>; reason?: string | null };
 
@@ -17,11 +17,11 @@ const EDITABLE_FIELDS = new Set([
 ]);
 
 /**
- * 購入者情報の更新 (ADMIN 専用)。
+ * 購入者情報の更新 (super_admin 専用)。
  * ここでは担当代理店を変更できない。担当変更は /api/admin/assignments/transfer のみ。
  */
 export async function PATCH(request: Request, context: { params: Promise<{ customerId: string }> }) {
-  const guard = await requireAdminApi();
+  const guard = await requireSuperAdminApi();
   if ("error" in guard) return guard.error;
 
   const { customerId } = await context.params;
@@ -29,6 +29,9 @@ export async function PATCH(request: Request, context: { params: Promise<{ custo
 
   if (!body?.patch || typeof body.patch !== "object") {
     return fail("TREEMERCE_INVALID_INPUT", "更新内容が指定されていません。", 400);
+  }
+  if (!body.reason?.trim()) {
+    return fail("TREEMERCE_REASON_REQUIRED", "変更理由は必須です。", 400);
   }
 
   const patch = Object.fromEntries(
@@ -42,7 +45,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ custo
   const { data, error } = await guard.ctx.supabase.rpc("treemerce_admin_update_customer", {
     p_customer_id: customerId,
     p_patch: patch,
-    p_reason: body.reason?.trim() || null,
+    p_reason: body.reason.trim(),
   });
 
   if (error) return failFromPostgrest(error);

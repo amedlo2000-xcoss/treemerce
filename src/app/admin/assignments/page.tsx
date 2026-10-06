@@ -3,11 +3,15 @@ import {
   Card,
   DataTable,
   EmptyState,
+  Mono,
   Notice,
   PageHeader,
+  SectionTitle,
+  TD,
+  TD_STRONG,
   formatDateTime,
 } from "@/components/ui";
-import { requireAdminPage } from "@/lib/auth/viewer";
+import { requireSuperAdminPage } from "@/lib/auth/viewer";
 import { ASSIGNMENT_SOURCE_LABELS, ASSIGNMENT_STATUS_LABELS } from "@/lib/domain/enums";
 
 import { TransferForm } from "./TransferForm";
@@ -44,7 +48,7 @@ export default async function AdminAssignmentsPage({
   searchParams: Promise<{ customer_id?: string }>;
 }) {
   const { customer_id: customerId } = await searchParams;
-  const { supabase } = await requireAdminPage("/admin/assignments");
+  const { supabase } = await requireSuperAdminPage("/admin/assignments");
 
   let assignmentQuery = supabase
     .from("customer_assignments")
@@ -85,9 +89,7 @@ export default async function AdminAssignmentsPage({
   const activeAssignments = assignments.filter((a) => a.status === "active");
   const customerOptions = activeAssignments.map((a) => ({
     id: a.customer_id,
-    label: `${a.customer?.full_name ?? a.customer_id} — 現担当: ${
-      a.agent?.display_name ?? "不明"
-    }`,
+    label: `${a.customer?.full_name ?? a.customer_id} — 現担当: ${a.agent?.display_name ?? "不明"}`,
     currentAgentId: a.assigned_agent_id,
   }));
 
@@ -109,9 +111,7 @@ export default async function AdminAssignmentsPage({
         description="この操作は管理者のみが実行できます。理由の入力は必須です。"
       >
         {customerOptions.length === 0 ? (
-          <p className="text-sm text-zinc-500 dark:text-zinc-400">
-            変更できる担当関係がありません。
-          </p>
+          <p className="text-[13px] text-text-secondary">変更できる担当関係がありません。</p>
         ) : (
           <TransferForm
             customers={customerOptions}
@@ -121,31 +121,27 @@ export default async function AdminAssignmentsPage({
       </Card>
 
       <section className="space-y-3">
-        <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">担当一覧</h2>
+        <SectionTitle count={assignments.length}>担当一覧</SectionTitle>
         {assignments.length === 0 ? (
           <EmptyState title="担当関係がありません" />
         ) : (
           <DataTable headers={["購入者", "担当代理店", "状態", "確定経路", "担当開始"]}>
             {assignments.map((a) => (
-              <tr key={a.id} className="bg-white dark:bg-zinc-950">
-                <td className="px-4 py-3 text-sm text-zinc-900 dark:text-zinc-100">
-                  {a.customer?.full_name ?? "—"}
+              <tr key={a.id}>
+                <td className={TD_STRONG}>{a.customer?.full_name ?? "—"}</td>
+                <td className={TD}>
+                  <Mono>{a.agent?.public_id}</Mono>{" "}
+                  <span className="text-text-primary">{a.agent?.display_name}</span>
                 </td>
-                <td className="px-4 py-3 text-xs text-zinc-700 dark:text-zinc-300">
-                  <span className="font-mono text-zinc-500">{a.agent?.public_id}</span>{" "}
-                  {a.agent?.display_name}
-                </td>
-                <td className="px-4 py-3">
+                <td className={TD}>
                   <Badge tone={a.status === "active" ? "green" : "neutral"}>
                     {ASSIGNMENT_STATUS_LABELS[a.status] ?? a.status}
                   </Badge>
                 </td>
-                <td className="px-4 py-3 text-xs text-zinc-600 dark:text-zinc-400">
+                <td className={TD}>
                   {ASSIGNMENT_SOURCE_LABELS[a.assignment_source] ?? a.assignment_source}
                 </td>
-                <td className="px-4 py-3 text-xs text-zinc-600 dark:text-zinc-400">
-                  {formatDateTime(a.assigned_at)}
-                </td>
+                <td className={`${TD} whitespace-nowrap`}>{formatDateTime(a.assigned_at)}</td>
               </tr>
             ))}
           </DataTable>
@@ -153,27 +149,25 @@ export default async function AdminAssignmentsPage({
       </section>
 
       <section className="space-y-3">
-        <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">担当変更履歴</h2>
+        <SectionTitle count={history.length}>担当変更履歴</SectionTitle>
         {history.length === 0 ? (
           <EmptyState title="担当変更の履歴はありません" />
         ) : (
           <DataTable headers={["変更日時", "変更前", "変更後", "理由", "実行者区分"]}>
             {history.map((h) => (
-              <tr key={h.id} className="bg-white dark:bg-zinc-950">
-                <td className="px-4 py-3 text-xs text-zinc-600 dark:text-zinc-400">
-                  {formatDateTime(h.changed_at)}
-                </td>
-                <td className="px-4 py-3 text-xs text-zinc-700 dark:text-zinc-300">
+              <tr key={h.id}>
+                <td className={`${TD} whitespace-nowrap`}>{formatDateTime(h.changed_at)}</td>
+                <td className={TD}>
                   {h.previous_agent_id
                     ? (agentById.get(h.previous_agent_id)?.display_name ?? h.previous_agent_id)
                     : "—（初回登録）"}
                 </td>
-                <td className="px-4 py-3 text-xs text-zinc-700 dark:text-zinc-300">
+                <td className={TD}>
                   {agentById.get(h.new_agent_id)?.display_name ?? h.new_agent_id}
                 </td>
-                <td className="px-4 py-3 text-xs text-zinc-700 dark:text-zinc-300">{h.reason}</td>
-                <td className="px-4 py-3 text-xs text-zinc-600 dark:text-zinc-400">
-                  {h.changed_by_role}
+                <td className={TD}>{h.reason}</td>
+                <td className={TD}>
+                  <Mono>{h.changed_by_role}</Mono>
                 </td>
               </tr>
             ))}

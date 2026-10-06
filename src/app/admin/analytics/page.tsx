@@ -51,39 +51,39 @@ export default async function AdminAnalyticsPage({
       />
 
       <Notice tone="info">
-        管理者は全体を集計できますが、レスポンスに含まれるのは属性値の集計のみです。
-        該当件数が {stats?.k_threshold ?? 5} 件未満のセグメントは「該当データ少数」にまとめています。
+        管理者は全体を集計できますが、レスポンスに含まれるのは属性値の集計のみです。 該当件数が{" "}
+        {stats?.k_threshold ?? 5} 件未満のセグメントは「該当データ少数」にまとめています。
       </Notice>
 
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="text-xs text-zinc-500 dark:text-zinc-400">期間</span>
+      <div className="flex flex-wrap items-center gap-2 rounded-[20px] border border-border-soft bg-surface p-4 shadow-[var(--shadow-card)]">
+        <span className="mr-1 text-[12px] font-semibold text-text-secondary">期間</span>
         {ANALYTICS_PERIODS.map((p) => (
           <Link
             key={p.value}
             href={buildHref({ period: p.value })}
-            className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
+            className={`rounded-full px-3.5 py-2 text-[13px] font-medium transition-colors ${
               period === p.value
-                ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
-                : "border border-zinc-300 text-zinc-700 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
+                ? "bg-brand text-brand-foreground"
+                : "border border-border-soft bg-surface text-text-secondary hover:bg-surface-muted hover:text-text-primary"
             }`}
           >
             {p.label}
           </Link>
         ))}
 
-        <span className="ml-4 text-xs text-zinc-500 dark:text-zinc-400">対象</span>
+        <span className="mr-1 text-[12px] font-semibold text-text-secondary sm:ml-4">対象</span>
         <Link
           href={buildHref({ root: "" })}
-          className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
+          className={`rounded-full px-3.5 py-2 text-[13px] font-medium transition-colors ${
             !root
-              ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
-              : "border border-zinc-300 text-zinc-700 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
+              ? "bg-brand text-brand-foreground"
+              : "border border-border-soft bg-surface text-text-secondary hover:bg-surface-muted hover:text-text-primary"
           }`}
         >
           全代理店
         </Link>
         {rootAgent ? (
-          <span className="rounded-lg bg-zinc-900 px-3 py-1.5 text-xs font-medium text-white dark:bg-zinc-100 dark:text-zinc-900">
+          <span className="rounded-full bg-brand px-3 py-1.5 text-[12px] font-medium text-brand-foreground">
             {rootAgent.public_id} {rootAgent.display_name} の傘下
           </span>
         ) : null}
@@ -109,18 +109,16 @@ export default async function AdminAnalyticsPage({
         </div>
       )}
 
-      <section className="space-y-2">
-        <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-          代理店を指定して集計
-        </h2>
+      <section className="space-y-3">
+        <h2 className="px-1 text-[15px] font-semibold text-text-primary">代理店を指定して集計</h2>
         <div className="flex flex-wrap gap-2">
           {agents.map((a) => (
             <Link
               key={a.id}
               href={buildHref({ root: a.id })}
-              className="rounded-lg border border-zinc-300 px-2.5 py-1 text-xs text-zinc-700 transition-colors hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
+              className="rounded-full border border-border-soft bg-surface px-3 py-1.5 text-[12px] text-text-primary transition-colors hover:border-brand/40 hover:bg-brand-soft"
             >
-              <span className="font-mono text-zinc-500">{a.public_id}</span> {a.display_name}
+              <span className="font-mono text-text-secondary">{a.public_id}</span> {a.display_name}
             </Link>
           ))}
         </div>

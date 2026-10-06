@@ -3,6 +3,11 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
+import { PrimaryButton } from "@/components/mobile/primitives";
+
+const INPUT =
+  "w-full rounded-2xl border border-border-soft bg-surface px-3.5 py-2.5 text-[15px] text-text-primary outline-none focus:border-brand";
+
 export function InvitationPanel({ origin }: { origin: string }) {
   const router = useRouter();
   const [note, setNote] = useState("");
@@ -33,7 +38,7 @@ export function InvitationPanel({ origin }: { origin: string }) {
 
   return (
     <div className="space-y-3">
-      <p className="text-xs leading-5 text-zinc-500 dark:text-zinc-400">
+      <p className="text-[13px] leading-5 text-text-secondary">
         発行した招待URLから登録した代理店は、あなたを招待元として記録されます。
         招待元は1代理店につき1つで、登録時に一度だけ確定します。
         {origin ? null : ""}
@@ -43,18 +48,13 @@ export function InvitationPanel({ origin }: { origin: string }) {
           value={note}
           onChange={(e) => setNote(e.target.value)}
           placeholder="メモ (任意)"
-          className="flex-1 rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-900"
+          className={`flex-1 ${INPUT}`}
         />
-        <button
-          type="button"
-          onClick={create}
-          disabled={pending}
-          className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-zinc-700 disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
-        >
+        <PrimaryButton type="button" onClick={create} disabled={pending} className="!w-auto px-5">
           {pending ? "発行中…" : "招待URLを発行"}
-        </button>
+        </PrimaryButton>
       </div>
-      {error ? <p className="text-xs text-red-700 dark:text-red-400">{error}</p> : null}
+      {error ? <p className="text-[13px] text-danger">{error}</p> : null}
     </div>
   );
 }
@@ -64,8 +64,8 @@ export function CopyField({ label, value }: { label: string; value: string }) {
 
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <span className="w-24 shrink-0 text-xs text-zinc-500 dark:text-zinc-400">{label}</span>
-      <code className="flex-1 truncate rounded-md bg-zinc-100 px-2 py-1 font-mono text-xs text-zinc-800 dark:bg-zinc-800 dark:text-zinc-200">
+      {label ? <span className="w-16 shrink-0 text-[13px] text-text-secondary">{label}</span> : null}
+      <code className="flex-1 truncate rounded-lg bg-surface-muted px-2.5 py-1.5 font-mono text-[12px] text-text-primary">
         {value}
       </code>
       <button
@@ -75,7 +75,7 @@ export function CopyField({ label, value }: { label: string; value: string }) {
           setCopied(true);
           setTimeout(() => setCopied(false), 1500);
         }}
-        className="rounded-md border border-zinc-300 px-2 py-1 text-xs text-zinc-700 transition-colors hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
+        className="shrink-0 rounded-lg border border-border-soft px-2.5 py-1.5 text-[12px] font-medium text-text-primary transition-colors hover:bg-surface-muted"
       >
         {copied ? "コピー済" : "コピー"}
       </button>

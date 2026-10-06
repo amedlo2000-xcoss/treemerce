@@ -24,11 +24,11 @@ export function RatioBars({
   const max = buckets.reduce((acc, b) => Math.max(acc, b.count), 0);
 
   return (
-    <section className="rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-950">
-      <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{title}</h3>
+    <section className="rounded-[20px] border border-border-soft bg-surface p-5 shadow-[var(--shadow-card)]">
+      <h3 className="text-[15px] font-semibold text-text-primary">{title}</h3>
 
       {buckets.length === 0 ? (
-        <p className="mt-4 text-xs text-zinc-500 dark:text-zinc-400">{emptyLabel}</p>
+        <p className="mt-4 text-[13px] text-text-secondary">{emptyLabel}</p>
       ) : (
         <ul className="mt-4 space-y-3">
           {buckets.map((bucket) => {
@@ -39,7 +39,7 @@ export function RatioBars({
             return (
               <li key={bucket.key} className="group grid grid-cols-[7rem_1fr_5.5rem] items-center gap-3">
                 <span
-                  className="truncate text-xs text-zinc-600 dark:text-zinc-400"
+                  className="truncate text-[13px] text-text-secondary"
                   title={label}
                 >
                   {label}
@@ -57,14 +57,14 @@ export function RatioBars({
                     }}
                   />
                   {/* ホバー時の詳細 */}
-                  <span className="pointer-events-none absolute -top-8 left-0 z-10 hidden whitespace-nowrap rounded-md bg-zinc-900 px-2 py-1 text-[11px] font-medium text-white group-hover:block dark:bg-zinc-100 dark:text-zinc-900">
+                  <span className="pointer-events-none absolute -top-8 left-0 z-10 hidden whitespace-nowrap rounded-md bg-text-primary px-2 py-1 text-[11px] font-medium text-app-bg group-hover:block">
                     {label}: {bucket.count}件 ({bucket.ratio}%)
                   </span>
                 </span>
 
-                <span className="text-right text-xs tabular-nums text-zinc-700 dark:text-zinc-300">
+                <span className="text-right text-[13px] tabular-nums text-text-primary">
                   {bucket.ratio}%
-                  <span className="ml-1 text-zinc-400 dark:text-zinc-500">({bucket.count})</span>
+                  <span className="ml-1 text-text-secondary">({bucket.count})</span>
                 </span>
               </li>
             );

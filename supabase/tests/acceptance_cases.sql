@@ -866,7 +866,7 @@ end $$;
 do $$
 declare v_profile jsonb;
 begin
-  -- A (R の招待で登録) として呼ぶ → R の public_id/display_name が返る
+  -- A (R の招待で登録) として呼ぶ → R の display_name だけが返る (0009)
   perform set_config('request.jwt.claims',
     '{"sub":"00000000-0000-4000-8000-000000000002","role":"authenticated"}', true);
   set local role authenticated;
@@ -875,8 +875,13 @@ begin
   if (v_profile ->> 'found') is distinct from 'true' then
     raise exception 'CASE20 FAILED: A から見た招待元が found=false だった (%)', v_profile;
   end if;
-  if (v_profile ->> 'public_id') is distinct from 'TM-TEST-R' then
+  if (v_profile ->> 'display_name') is distinct from 'テスト代理店R' then
     raise exception 'CASE20 FAILED: A の招待元が R ではなかった (%)', v_profile;
+  end if;
+  -- 代理店名以外 (public_id・連絡先・傘上の他情報) は一切含めない
+  if (select array_agg(k order by k) from jsonb_object_keys(v_profile) k)
+     is distinct from array['display_name', 'found'] then
+    raise exception 'CASE20 FAILED: 代理店名以外の項目が返った (%)', v_profile;
   end if;
 
   reset role;
@@ -987,6 +992,120 @@ begin
   if not v_ok then raise exception 'EXTRA7 FAILED: anon が担当変更RPCを実行できた'; end if;
 
   raise notice 'EXTRA7 OK: anon は顧客データにも担当変更RPCにも到達できない';
+end $$;
+
+reset role;
+
+-- ============================================================================
+-- EXTRA8 : 統括管理ページの書込みRPCは super_admin 以外 (admin/support) を拒否する
+-- (0008_treemerce_admin_console.sql: app.is_super_admin() への格上げ)
+-- ============================================================================
+
+insert into auth.users (instance_id, id, aud, role, email, encrypted_password,
+                        email_confirmed_at, created_at, updated_at)
+values
+  ('00000000-0000-0000-0000-000000000000', '00000000-0000-4000-8000-000000000008',
+   'authenticated', 'authenticated', 'tm-test-admin-plain@treemerce.test', '', now(), now(), now());
+
+insert into public.admin_roles (auth_user_id, role)
+values ('00000000-0000-4000-8000-000000000008', 'admin');
+
+select set_config('request.jwt.claims',
+  '{"sub":"00000000-0000-4000-8000-000000000008","role":"authenticated"}', true);
+set local role authenticated;
+
+do $$
+declare v_x uuid; v_c uuid; v_ok boolean;
+begin
+  v_x := current_setting('tm.customer_x')::uuid;
+  v_c := current_setting('tm.agent_c')::uuid;
+
+  v_ok := false;
+  begin
+    perform public.treemerce_admin_transfer_customer(v_x, v_c, '一般adminによる移管');
+  exception when insufficient_privilege then
+    v_ok := true;
+  end;
+  if not v_ok then raise exception 'EXTRA8 FAILED: 一般adminが担当変更RPCを実行できた'; end if;
+
+  v_ok := false;
+  begin
+    perform public.treemerce_admin_update_customer(v_x, jsonb_build_object('note', '改ざん'), '一般adminによる編集');
+  exception when insufficient_privilege then
+    v_ok := true;
+  end;
+  if not v_ok then raise exception 'EXTRA8 FAILED: 一般adminが顧客更新RPCを実行できた'; end if;
+
+  v_ok := false;
+  begin
+    perform public.treemerce_admin_set_agent_status(v_c, 'suspended', '一般adminによる停止');
+  exception when insufficient_privilege then
+    v_ok := true;
+  end;
+  if not v_ok then raise exception 'EXTRA8 FAILED: 一般adminがステータス変更RPCを実行できた'; end if;
+
+  raise notice 'EXTRA8 OK: 一般admin(非super_admin)は統括管理の3RPCすべてで拒否される';
+end $$;
+
+reset role;
+
+-- ============================================================================
+-- EXTRA9 : super_admin なら顧客更新/ステータス変更が成功し、監査ログに残る
+-- ============================================================================
+
+select set_config('request.jwt.claims',
+  '{"sub":"00000000-0000-4000-8000-000000000007","role":"authenticated"}', true);
+set local role authenticated;
+
+do $$
+declare
+  v_x uuid; v_c uuid; v_res jsonb; v_note text; v_audit_cnt int;
+begin
+  v_x := current_setting('tm.customer_x')::uuid;
+  v_c := current_setting('tm.agent_c')::uuid;
+
+  v_res := public.treemerce_admin_update_customer(
+    v_x, jsonb_build_object('note', 'super_adminによる編集メモ'), '本人確認のため備考を更新');
+  select note into v_note from public.customers where id = v_x;
+  if v_note is distinct from 'super_adminによる編集メモ' then
+    raise exception 'EXTRA9 FAILED: super_adminによる顧客更新が反映されていない (%)', v_note;
+  end if;
+
+  select count(*) into v_audit_cnt from public.admin_audit_logs
+  where target_table = 'customers' and target_id = v_x and action = 'customer.update';
+  if v_audit_cnt < 1 then
+    raise exception 'EXTRA9 FAILED: 顧客更新が監査ログに残っていない';
+  end if;
+
+  v_res := public.treemerce_admin_set_agent_status(v_c, 'suspended', '本人確認のため一時停止');
+  if v_res ->> 'status' <> 'suspended' then
+    raise exception 'EXTRA9 FAILED: super_adminによるステータス変更が成功しなかった (%)', v_res::text;
+  end if;
+
+  -- 元に戻す (以降のテストに影響させない)
+  perform public.treemerce_admin_set_agent_status(v_c, 'active', 'テスト後の復旧');
+
+  raise notice 'EXTRA9 OK: super_adminは顧客更新/ステータス変更を実行でき、監査ログに残る';
+end $$;
+
+-- ============================================================================
+-- EXTRA10 : 顧客更新は理由(reason)が必須
+-- ============================================================================
+
+do $$
+declare v_x uuid; v_ok boolean;
+begin
+  v_x := current_setting('tm.customer_x')::uuid;
+
+  v_ok := false;
+  begin
+    perform public.treemerce_admin_update_customer(v_x, jsonb_build_object('note', '理由なし更新'), null);
+  exception when invalid_parameter_value then
+    v_ok := true;
+  end;
+  if not v_ok then raise exception 'EXTRA10 FAILED: 理由なしで顧客更新が成功した'; end if;
+
+  raise notice 'EXTRA10 OK: 顧客更新は理由が必須 (TREEMERCE_REASON_REQUIRED)';
 end $$;
 
 reset role;

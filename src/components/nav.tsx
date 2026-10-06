@@ -1,34 +1,22 @@
-import {
-  BarChart3,
-  ClipboardList,
-  Home,
-  Network,
-  Package,
-  ArrowRightLeft,
-  User,
-  UserCircle,
-  Users,
-} from "lucide-react";
-
 import { signOutAction } from "@/app/actions";
 import { BottomNav, SideNav, type NavItem } from "@/components/mobile/BottomNav";
 
 /** 代理店マイページ: スマホ下部ナビ/PCサイドバー共通の5項目。 */
 export const AGENT_NAV: NavItem[] = [
-  { href: "/agent", label: "ホーム", icon: Home, exact: true },
-  { href: "/agent/customers", label: "顧客", icon: User },
-  { href: "/agent/organization", label: "組織", icon: Network },
-  { href: "/agent/content", label: "コンテンツ", icon: Package },
-  { href: "/agent/my", label: "MY", icon: UserCircle },
+  { href: "/agent", label: "ホーム", icon: "home", exact: true },
+  { href: "/agent/customers", label: "顧客", icon: "user" },
+  { href: "/agent/organization", label: "組織", icon: "network" },
+  { href: "/agent/content", label: "コンテンツ", icon: "package" },
+  { href: "/agent/my", label: "MY", icon: "user-circle" },
 ];
 
 export const ADMIN_NAV: NavItem[] = [
-  { href: "/admin", label: "ダッシュボード", icon: Home, exact: true },
-  { href: "/admin/agents", label: "代理店管理", icon: Users },
-  { href: "/admin/customers", label: "購入者管理", icon: User },
-  { href: "/admin/assignments", label: "担当管理", icon: ArrowRightLeft },
-  { href: "/admin/analytics", label: "客層分析", icon: BarChart3 },
-  { href: "/admin/audit-logs", label: "監査ログ", icon: ClipboardList },
+  { href: "/admin", label: "ダッシュボード", icon: "home", exact: true },
+  { href: "/admin/agents", label: "代理店管理", icon: "users" },
+  { href: "/admin/customers", label: "購入者管理", icon: "user" },
+  { href: "/admin/assignments", label: "担当管理", icon: "arrow-right-left" },
+  { href: "/admin/analytics", label: "客層分析", icon: "bar-chart" },
+  { href: "/admin/audit-logs", label: "監査ログ", icon: "clipboard-list" },
 ];
 
 export function AppShell({
@@ -36,12 +24,15 @@ export function AppShell({
   subtitle,
   nav,
   identity,
+  wide = false,
   children,
 }: {
   brand: string;
   subtitle: string;
   nav: NavItem[];
   identity: string;
+  /** 管理画面: テーブル中心のため PC 幅を広く取る */
+  wide?: boolean;
   children: React.ReactNode;
 }) {
   return (
@@ -55,10 +46,13 @@ export function AppShell({
               <span className="text-[15px] font-bold tracking-tight text-text-primary">{brand}</span>
             </div>
             <div className="hidden md:block">
-              <p className="text-[13px] text-text-secondary">{identity}</p>
+              <p className="inline-flex items-center gap-2 rounded-full border border-border-soft bg-surface px-3 py-1.5 text-[12px] font-medium text-text-secondary">
+                <span className="h-2 w-2 rounded-full bg-success" aria-hidden />
+                {identity}
+              </p>
             </div>
             <div className="flex items-center gap-3">
-              <span className="text-[12px] text-text-secondary md:hidden">{identity}</span>
+              <span className="max-w-[45vw] truncate text-[12px] text-text-secondary md:hidden">{identity}</span>
               <form action={signOutAction}>
                 <button
                   type="submit"
@@ -71,7 +65,7 @@ export function AppShell({
           </div>
         </header>
 
-        <main className="mx-auto w-full max-w-3xl flex-1 space-y-5 px-4 pb-28 pt-4 md:max-w-5xl md:space-y-6 md:px-8 md:pb-10 md:pt-0">
+        <main className={`mx-auto w-full max-w-3xl flex-1 space-y-5 px-4 pb-28 pt-4 ${wide ? "md:max-w-6xl" : "md:max-w-5xl"} md:space-y-6 md:px-8 md:pb-10 md:pt-0`}>
           {children}
         </main>
       </div>
