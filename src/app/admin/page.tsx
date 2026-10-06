@@ -4,7 +4,12 @@ import {
   ChevronRight,
   ClipboardList,
   Link2,
+  Package,
+  Settings,
   ShieldAlert,
+  ShoppingBag,
+  Truck,
+  Wallet,
   User,
   Users,
 } from "lucide-react";
@@ -18,8 +23,11 @@ const QUICK_LINKS: { href: string; title: string; description: string; icon: Luc
   { href: "/admin/agents", title: "代理店管理", description: "招待経路・ステータスの確認", icon: Users },
   { href: "/admin/customers", title: "商品購入者管理", description: "購入者情報の確認・編集", icon: User },
   { href: "/admin/assignments", title: "顧客担当管理", description: "担当代理店の確認・変更", icon: ArrowRightLeft },
+  { href: "/admin/orders", title: "注文管理", description: "入金確認・発送・キャンセル", icon: ShoppingBag },
+  { href: "/admin/products", title: "商品管理", description: "商品の登録・価格・在庫・公開", icon: Package },
   { href: "/admin/analytics", title: "客層分析", description: "全体・部分木の匿名集計", icon: BarChart3 },
   { href: "/admin/audit-logs", title: "監査ログ", description: "管理者操作の記録", icon: ClipboardList },
+  { href: "/admin/settings", title: "ショップ設定", description: "振込先・特商法表記・注文受付", icon: Settings },
 ];
 
 export default async function AdminDashboard({
@@ -30,7 +38,7 @@ export default async function AdminDashboard({
   const { error } = await searchParams;
   const { supabase } = await requireAdminPage("/admin");
 
-  const [agents, customers, assignments, { data: recentLogs }] = await Promise.all([
+  const [agents, customers, assignments, { data: recentLogs }, awaitingPayment, awaitingShipment] = await Promise.all([
     supabase.from("agents").select("id", { count: "exact", head: true }),
     supabase.from("customers").select("id", { count: "exact", head: true }),
     supabase
@@ -42,6 +50,11 @@ export default async function AdminDashboard({
       .select("id, action, target_table, reason, created_at, actor_role")
       .order("created_at", { ascending: false })
       .limit(5),
+    supabase.from("orders").select("id", { count: "exact", head: true }).eq("status", "received"),
+    supabase
+      .from("orders")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "payment_confirmed"),
   ]);
 
   return (
@@ -72,6 +85,25 @@ export default async function AdminDashboard({
           hint="1購入者につき1件"
           icon={<Link2 size={18} />}
         />
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-2 md:gap-4">
+        <Link href="/admin/orders?status=received" className="block transition-opacity hover:opacity-90">
+          <Stat
+            label="入金待ちの注文"
+            value={awaitingPayment.count ?? 0}
+            hint="支払期限を過ぎると自動キャンセル"
+            icon={<Wallet size={18} />}
+          />
+        </Link>
+        <Link href="/admin/orders?status=payment_confirmed" className="block transition-opacity hover:opacity-90">
+          <Stat
+            label="発送待ちの注文"
+            value={awaitingShipment.count ?? 0}
+            hint="入金確認済み・未発送"
+            icon={<Truck size={18} />}
+          />
+        </Link>
       </div>
 
       <div className="flex items-start gap-3 rounded-[20px] border border-warning/25 bg-warning-soft px-4 py-3.5">

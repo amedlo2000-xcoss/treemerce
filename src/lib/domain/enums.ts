@@ -151,6 +151,8 @@ export function labelForBucket(dimension: string, key: string): string {
       return CUSTOMER_TYPE_LABELS[key] ?? key;
     case "product_category":
       return PRODUCT_CATEGORY_LABELS[key] ?? key;
+    case "amount_band":
+      return AMOUNT_BAND_LABELS[key] ?? key;
     default:
       return key;
   }
@@ -161,4 +163,41 @@ export const PURCHASE_STATUS_LABELS: Record<string, string> = {
   completed: "完了",
   cancelled: "キャンセル",
   refunded: "返金済み",
+};
+
+/* ------------------------------------------------------------- 商品・注文 */
+
+export const ORDER_STATUSES = [
+  "received",
+  "payment_confirmed",
+  "shipped",
+  "completed",
+  "cancelled",
+] as const;
+export type OrderStatus = (typeof ORDER_STATUSES)[number];
+
+export const ORDER_STATUS_LABELS: Record<string, string> = {
+  received: "注文受付",
+  payment_confirmed: "入金確認済み",
+  shipped: "発送済み",
+  completed: "完了",
+  cancelled: "キャンセル",
+};
+
+/** DB (0010 の状態遷移トリガ) と同じ遷移表。UI の選択肢を絞るためだけに使う。 */
+export const ORDER_NEXT_STATUSES: Record<OrderStatus, OrderStatus[]> = {
+  received: ["payment_confirmed", "cancelled"],
+  payment_confirmed: ["shipped", "cancelled"],
+  shipped: ["completed", "cancelled"],
+  completed: [],
+  cancelled: [],
+};
+
+/** 客層分析の購入金額帯 (0011 の amount_band と同じキー) */
+export const AMOUNT_BAND_LABELS: Record<string, string> = {
+  lt_10k: "1万円未満",
+  "10k_30k": "1万〜3万円",
+  "30k_50k": "3万〜5万円",
+  "50k_100k": "5万〜10万円",
+  gte_100k: "10万円以上",
 };

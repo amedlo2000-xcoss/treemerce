@@ -65,6 +65,7 @@ grant execute on function auth.uid() to anon, authenticated, service_role;
 grant select on auth.users to service_role;
 `;
 
+const EXPECTED_CASES = 35;
 const notices = [];
 
 function record(message) {
@@ -102,10 +103,10 @@ async function main() {
   for (const line of notices) console.log("  " + line);
 
   const passed = notices.filter((n) => /CASE\d+ OK/.test(n)).length;
-  console.log(`\n✓ 受け入れテスト完了 (${passed} / 20 CASE)`);
+  console.log(`\n✓ 受け入れテスト完了 (${passed} / ${EXPECTED_CASES} CASE)`);
 
   await db.close();
-  if (passed !== 20) process.exit(1);
+  if (passed !== EXPECTED_CASES) process.exit(1);
 }
 
 main().catch((error) => {

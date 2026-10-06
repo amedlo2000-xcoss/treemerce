@@ -1,9 +1,12 @@
-import { Network, UserCircle, UserPlus, Users } from "lucide-react";
+import { ChevronRight, Network, UserCircle, UserPlus, Users } from "lucide-react";
+import Link from "next/link";
+
+import { AgentOrderSummaryCard } from "@/components/AgentOrderSummaryCard";
 
 import { PrimaryButton, BigStat, Surface, EmptyState } from "@/components/mobile/primitives";
 import { formatDate } from "@/components/ui";
 import { requireAgentPage } from "@/lib/auth/viewer";
-import type { CommerceMap } from "@/lib/domain/types";
+import type { AgentOrderSummary, CommerceMap } from "@/lib/domain/types";
 
 function startOfMonthISOString() {
   const now = new Date();
@@ -17,7 +20,13 @@ function startOfMonthISOString() {
 export default async function AgentDashboard() {
   const { supabase, agent } = await requireAgentPage("/agent");
 
-  const [{ count: customerCount }, { count: newThisMonthCount }, { data: mapData }, { data: notifications }] =
+  const [
+    { count: customerCount },
+    { count: newThisMonthCount },
+    { data: mapData },
+    { data: notifications },
+    { data: orderSummaryData },
+  ] =
     await Promise.all([
       supabase
         .from("customer_assignments")
@@ -34,7 +43,9 @@ export default async function AgentDashboard() {
         .select("id, title, body, created_at, read_at")
         .order("created_at", { ascending: false })
         .limit(5),
+      supabase.rpc("treemerce_agent_order_summary", { p_period: "all" }),
     ]);
+  const orderSummary = orderSummaryData as AgentOrderSummary | null;
 
   const map = mapData as CommerceMap | null;
   const downlineCount = Math.max((map?.agents.length ?? 1) - 1, 0);
@@ -81,6 +92,22 @@ export default async function AgentDashboard() {
             組織を見る
           </PrimaryButton>
         </div>
+
+        {orderSummary ? (
+          <div className="space-y-2">
+            <div className="flex items-center justify-between px-1">
+              <h2 className="text-[13px] font-semibold tracking-wide text-text-secondary">注文</h2>
+              <Link
+                href="/agent/orders"
+                className="inline-flex items-center gap-0.5 text-[13px] font-semibold text-brand hover:underline"
+              >
+                担当顧客の注文
+                <ChevronRight size={14} />
+              </Link>
+            </div>
+            <AgentOrderSummaryCard summary={orderSummary} />
+          </div>
+        ) : null}
       </div>
 
       <div className="space-y-3">

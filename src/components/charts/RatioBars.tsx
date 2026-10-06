@@ -58,7 +58,7 @@ export function RatioBars({
                   />
                   {/* ホバー時の詳細 */}
                   <span className="pointer-events-none absolute -top-8 left-0 z-10 hidden whitespace-nowrap rounded-md bg-text-primary px-2 py-1 text-[11px] font-medium text-app-bg group-hover:block">
-                    {label}: {bucket.count}件 ({bucket.ratio}%)
+                    {label}: {bucket.count}人 ({bucket.ratio}%)
                   </span>
                 </span>
 

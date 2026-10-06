@@ -1,10 +1,10 @@
 -- ============================================================================
--- TREEMERCE 受け入れテスト  CASE1 - CASE20
+-- TREEMERCE 受け入れテスト  CASE1 - CASE35
 -- ----------------------------------------------------------------------------
 -- Supabase SQL Editor にそのまま貼り付けて実行する。
 -- 全体が 1 トランザクションで、最後に ROLLBACK するため本番データは残らない。
 -- 途中で失敗した CASE があれば例外で停止する。全て通れば最後に
--- 「ALL 20 CASES PASSED」が NOTICE として出力される。
+-- 「ALL 35 CASES PASSED」が NOTICE として出力される。
 --
 -- 木構造:
 --            R  (root)
@@ -1110,10 +1110,1135 @@ end $$;
 
 reset role;
 
+-- ============================================================================
+-- 商品・注文機能 (0010 / 0011)  CASE21 - CASE31
+-- ----------------------------------------------------------------------------
+-- 認証 ID: R=..001 A=..002 B=..003 C=..004 D=..005 S=..006 super_admin=..007 admin=..008
+-- ============================================================================
+
+-- SETUP: super_admin がショップ設定と商品を登録する (RPC 経由)
+-- B / C は招待経由で登録したため public_id は自動採番。実際の値を控えておく。
+select set_config('tm.agent_b_public',
+  (select public_id from public.agents where id = current_setting('tm.agent_b')::uuid), true);
+
+select set_config('request.jwt.claims',
+  '{"sub":"00000000-0000-4000-8000-000000000007","role":"authenticated"}', true);
+set local role authenticated;
+
+do $$
+declare v_ok boolean; v_p jsonb;
+begin
+  -- 振込先・販売事業者が未設定のまま注文受付を開始できない
+  v_ok := false;
+  begin
+    perform public.treemerce_admin_update_shop_settings(
+      jsonb_build_object('is_accepting_orders', true), '受付開始');
+  exception when invalid_parameter_value then
+    v_ok := true;
+  end;
+  if not v_ok then raise exception 'SETUP FAILED: 振込先未設定で注文受付を開始できた'; end if;
+
+  perform public.treemerce_admin_update_shop_settings(jsonb_build_object(
+    'seller_name', 'テスト運営株式会社', 'seller_address', '東京都港区テスト1-1',
+    'seller_phone', '03-0000-0000', 'shipping_fee', 800, 'payment_due_days', 7,
+    'bank_name', 'テスト銀行', 'bank_branch', '本店', 'bank_account_type', 'ordinary',
+    'bank_account_number', '1234567', 'bank_account_holder', 'テストウンエイ(カ',
+    'is_accepting_orders', true), '受付開始');
+
+  v_p := public.treemerce_admin_upsert_product('テスト健康食品', 5000, 10, true, 'health');
+  perform set_config('tm.p1', v_p ->> 'id', true);
+  v_p := public.treemerce_admin_upsert_product('テスト美容液', 12000, 1, true, 'beauty');
+  perform set_config('tm.p2', v_p ->> 'id', true);
+  v_p := public.treemerce_admin_upsert_product('テスト非公開商品', 3000, 5, false, 'food');
+  perform set_config('tm.p3', v_p ->> 'id', true);
+end $$;
+
+reset role;
+
+-- ============================================================================
+-- CASE21 : 未ログインは商品/注文/設定テーブルに直接触れない。
+--          公開 RPC は稼働代理店のリンクでのみ、公開中の商品だけを返す。振込先は返さない。
+-- ============================================================================
+
+select set_config('request.jwt.claims', '', true);
+set local role anon;
+
+do $$
+declare v_ok boolean; v_res jsonb;
+begin
+  v_ok := false;
+  begin perform count(*) from public.products; exception when insufficient_privilege then v_ok := true; end;
+  if not v_ok then raise exception 'CASE21 FAILED: anon が products を直接読めた'; end if;
+
+  v_ok := false;
+  begin perform count(*) from public.orders; exception when insufficient_privilege then v_ok := true; end;
+  if not v_ok then raise exception 'CASE21 FAILED: anon が orders を直接読めた'; end if;
+
+  v_ok := false;
+  begin perform count(*) from public.shop_settings; exception when insufficient_privilege then v_ok := true; end;
+  if not v_ok then raise exception 'CASE21 FAILED: anon が shop_settings を直接読めた'; end if;
+
+  v_res := public.treemerce_shop_products(current_setting('tm.agent_b_public'));
+  if (v_res ->> 'valid')::boolean is not true then
+    raise exception 'CASE21 FAILED: 稼働代理店のリンクで valid=false (%)', v_res;
+  end if;
+  if jsonb_array_length(v_res -> 'products') <> 2 or v_res::text like '%テスト非公開商品%' then
+    raise exception 'CASE21 FAILED: 非公開商品が返った / 件数不一致 (%)', v_res;
+  end if;
+  if v_res::text like '%"stock"%' or v_res::text like '%テスト代理店B%' then
+    raise exception 'CASE21 FAILED: 在庫の正確な数または代理店名が返った';
+  end if;
+
+  if (public.treemerce_shop_products('NO-SUCH-AGENT') ->> 'valid')::boolean then
+    raise exception 'CASE21 FAILED: 無効なリンクで valid=true';
+  end if;
+
+  v_res := public.treemerce_shop_public_settings();
+  if v_res ->> 'seller_name' is distinct from 'テスト運営株式会社' then
+    raise exception 'CASE21 FAILED: 特商法表記の販売事業者が返らない';
+  end if;
+  if v_res::text like '%1234567%' then
+    raise exception 'CASE21 FAILED: 公開設定に振込先口座番号が含まれる';
+  end if;
+
+  raise notice 'CASE21 OK: anon は公開RPC経由の公開商品のみ閲覧でき、テーブル直接・非公開商品・口座番号には届かない';
+end $$;
+
+-- ============================================================================
+-- CASE22 : B の紹介リンクから新規顧客 N が注文 → N の担当は B、注文の帰属も B
+-- ============================================================================
+
+do $$
+declare v_res jsonb;
+begin
+  v_res := public.treemerce_place_order(
+    current_setting('tm.agent_b_public'),
+    jsonb_build_array(jsonb_build_object('product_id', current_setting('tm.p1'), 'quantity', 2)),
+    '新規花子', '東京都千代田区テスト1-1', 'tm-test-n@treemerce.test', '090-7777-8888', '100-0001');
+
+  if v_res ->> 'status' <> 'received' then
+    raise exception 'CASE22 FAILED: status=%', v_res ->> 'status';
+  end if;
+  if (v_res ->> 'total')::numeric <> 10800 then
+    raise exception 'CASE22 FAILED: 合計金額 % (期待 5000*2+送料800=10800)', v_res ->> 'total';
+  end if;
+  if v_res -> 'payment' ->> 'bank_account_number' is distinct from '1234567' then
+    raise exception 'CASE22 FAILED: 注文完了応答に振込先が含まれない';
+  end if;
+  if v_res ? 'customer_id' or v_res ? 'agent_id' or v_res::text like '%' || current_setting('tm.agent_b_public') || '%'
+     or v_res::text like '%テスト代理店B%' then
+    raise exception 'CASE22 FAILED: 応答に顧客ID/担当代理店が含まれる (%)', v_res;
+  end if;
+
+  perform set_config('tm.order_n_no', v_res ->> 'order_no', true);
+  perform set_config('tm.keys_new',
+    (select string_agg(k, ',' order by k) from jsonb_object_keys(v_res) k), true);
+end $$;
+
+reset role;
+
+do $$
+declare v_n uuid; v_assigned uuid; v_order public.orders%rowtype; v_stock int; v_hist int; v_b uuid;
+begin
+  v_b := current_setting('tm.agent_b')::uuid;
+  select id into v_n from public.customers where email_normalized = 'tm-test-n@treemerce.test';
+  if v_n is null then raise exception 'CASE22 FAILED: 新規顧客 N が作成されていない'; end if;
+
+  select assigned_agent_id into v_assigned from public.customer_assignments
+  where customer_id = v_n and status = 'active';
+  select * into v_order from public.orders where order_no = current_setting('tm.order_n_no');
+  select stock into v_stock from public.products where id = current_setting('tm.p1')::uuid;
+  select count(*) into v_hist from public.order_status_history where order_id = v_order.id;
+
+  if v_assigned is distinct from v_b then
+    raise exception 'CASE22 FAILED: N の担当が B でない (%)', v_assigned;
+  end if;
+  if v_order.agent_id is distinct from v_b or v_order.referral_agent_id is distinct from v_b then
+    raise exception 'CASE22 FAILED: 注文の帰属/紹介元が B でない (%/%)', v_order.agent_id, v_order.referral_agent_id;
+  end if;
+  if v_order.customer_id is distinct from v_n or v_order.status <> 'received' then
+    raise exception 'CASE22 FAILED: 注文の顧客/ステータスが不正';
+  end if;
+  if v_stock <> 8 then raise exception 'CASE22 FAILED: 在庫が減っていない (%)', v_stock; end if;
+  if v_hist <> 1 then raise exception 'CASE22 FAILED: 注文受付の履歴が 1 件でない (%)', v_hist; end if;
+
+  perform set_config('tm.customer_n', v_n::text, true);
+  perform set_config('tm.order_n', v_order.id::text, true);
+  raise notice 'CASE22 OK: 新規顧客は紹介リンクの代理店が担当に確定し、注文もその代理店に帰属';
+end $$;
+
+-- ============================================================================
+-- CASE23 : B 担当の既存顧客 X が、兄弟枝 S の紹介リンクから別の氏名で注文
+--          → 帰属は現担当 B のまま (原則4)。担当・顧客マスタは変わらない。
+--          応答は新規時と同じ形で、誰が担当かは出ない (原則6)。
+-- ============================================================================
+
+set local role anon;
+
+do $$
+declare v_res jsonb; v_keys text;
+begin
+  v_res := public.treemerce_place_order(
+    'TM-TEST-S',
+    jsonb_build_array(jsonb_build_object('product_id', current_setting('tm.p1'), 'quantity', 1)),
+    '別人太郎', '北海道テスト市1-1', 'tm-test-x@treemerce.test', null);
+
+  select string_agg(k, ',' order by k) into v_keys from jsonb_object_keys(v_res) k;
+  if v_keys is distinct from current_setting('tm.keys_new') then
+    raise exception 'CASE23 FAILED: 既存顧客と新規顧客で応答の形が異なる (% / %)',
+      v_keys, current_setting('tm.keys_new');
+  end if;
+  if v_res::text like '%' || current_setting('tm.agent_b_public') || '%' or v_res::text like '%テスト代理店%'
+     or v_res::text like '%山田太郎%' then
+    raise exception 'CASE23 FAILED: 担当代理店または既存の顧客情報が応答に含まれる (%)', v_res;
+  end if;
+  perform set_config('tm.order_x_no', v_res ->> 'order_no', true);
+end $$;
+
+reset role;
+
+do $$
+declare v_order public.orders%rowtype; v_name text; v_assigned uuid; v_cnt int; v_x uuid;
+begin
+  v_x := current_setting('tm.customer_x')::uuid;
+  select * into v_order from public.orders where order_no = current_setting('tm.order_x_no');
+
+  if v_order.customer_id is distinct from v_x then
+    raise exception 'CASE23 FAILED: 識別子一致の既存顧客 X に紐づいていない';
+  end if;
+  if v_order.agent_id is distinct from current_setting('tm.agent_b')::uuid then
+    raise exception 'CASE23 FAILED: 帰属が現担当 B でない (%)', v_order.agent_id;
+  end if;
+  if v_order.referral_agent_id is distinct from '10000000-0000-4000-8000-000000000006'::uuid then
+    raise exception 'CASE23 FAILED: 紹介元 S が記録されていない';
+  end if;
+  if not v_order.identity_mismatch then
+    raise exception 'CASE23 FAILED: 氏名不一致フラグが立っていない';
+  end if;
+
+  select full_name into v_name from public.customers where id = v_x;
+  if v_name <> '山田太郎' then raise exception 'CASE23 FAILED: 顧客マスタが上書きされた (%)', v_name; end if;
+
+  select assigned_agent_id into v_assigned from public.customer_assignments
+  where customer_id = v_x and status = 'active';
+  if v_assigned is distinct from current_setting('tm.agent_b')::uuid then
+    raise exception 'CASE23 FAILED: 注文で担当が変わった';
+  end if;
+
+  select count(*) into v_cnt from public.customers where email_normalized = 'tm-test-x@treemerce.test';
+  if v_cnt <> 1 then raise exception 'CASE23 FAILED: 顧客が重複作成された (%)', v_cnt; end if;
+
+  perform set_config('tm.order_x', v_order.id::text, true);
+  raise notice 'CASE23 OK: 別代理店リンク経由でも帰属は現担当のまま。担当・マスタ不変、応答は中立';
+end $$;
+
+-- ============================================================================
+-- CASE24 : 在庫不足・非公開商品・数量超過・識別子なしは拒否され、注文は作られない
+-- ============================================================================
+
+set local role anon;
+
+do $$
+declare v_ok boolean; v_before int; v_after int;
+begin
+  -- anon は orders を数えられないので SECURITY DEFINER の公開RPCの結果だけで判定する
+  v_ok := false;
+  begin
+    perform public.treemerce_place_order(current_setting('tm.agent_b_public'),
+      jsonb_build_array(jsonb_build_object('product_id', current_setting('tm.p2'), 'quantity', 2)),
+      '在庫太郎', '大阪府テスト1-1', 'tm-test-stock@treemerce.test');
+  exception when invalid_parameter_value then v_ok := true; end;
+  if not v_ok then raise exception 'CASE24 FAILED: 在庫不足で注文できた'; end if;
+
+  v_ok := false;
+  begin
+    perform public.treemerce_place_order(current_setting('tm.agent_b_public'),
+      jsonb_build_array(jsonb_build_object('product_id', current_setting('tm.p3'), 'quantity', 1)),
+      '非公開太郎', '大阪府テスト1-1', 'tm-test-hidden@treemerce.test');
+  exception when invalid_parameter_value then v_ok := true; end;
+  if not v_ok then raise exception 'CASE24 FAILED: 非公開商品を注文できた'; end if;
+
+  v_ok := false;
+  begin
+    perform public.treemerce_place_order(current_setting('tm.agent_b_public'),
+      jsonb_build_array(jsonb_build_object('product_id', current_setting('tm.p1'), 'quantity', 100)),
+      '大量太郎', '大阪府テスト1-1', 'tm-test-bulk@treemerce.test');
+  exception when invalid_parameter_value then v_ok := true; end;
+  if not v_ok then raise exception 'CASE24 FAILED: 数量 100 で注文できた'; end if;
+
+  v_ok := false;
+  begin
+    perform public.treemerce_place_order(current_setting('tm.agent_b_public'),
+      jsonb_build_array(jsonb_build_object('product_id', current_setting('tm.p1'), 'quantity', 1)),
+      '名前だけ太郎', '大阪府テスト1-1', null, null);
+  exception when invalid_parameter_value then v_ok := true; end;
+  if not v_ok then raise exception 'CASE24 FAILED: 識別子なし (氏名のみ) で注文できた'; end if;
+
+  v_ok := false;
+  begin
+    perform public.treemerce_place_order('TM-TEST-NOPE',
+      jsonb_build_array(jsonb_build_object('product_id', current_setting('tm.p1'), 'quantity', 1)),
+      'リンク太郎', '大阪府テスト1-1', 'tm-test-link@treemerce.test');
+  exception when invalid_parameter_value then v_ok := true; end;
+  if not v_ok then raise exception 'CASE24 FAILED: 無効な紹介リンクで注文できた'; end if;
+end $$;
+
+reset role;
+
+do $$
+declare v_cnt int; v_stock int;
+begin
+  select count(*) into v_cnt from public.orders;
+  if v_cnt <> 2 then raise exception 'CASE24 FAILED: 拒否されたはずの注文が作られた (orders=%)', v_cnt; end if;
+  select count(*) into v_cnt from public.customers
+  where email_normalized in ('tm-test-stock@treemerce.test', 'tm-test-hidden@treemerce.test',
+                             'tm-test-bulk@treemerce.test', 'tm-test-link@treemerce.test');
+  if v_cnt <> 0 then raise exception 'CASE24 FAILED: 拒否された注文で顧客が作られた (%)', v_cnt; end if;
+  select stock into v_stock from public.products where id = current_setting('tm.p2')::uuid;
+  if v_stock <> 1 then raise exception 'CASE24 FAILED: 拒否された注文で在庫が動いた (%)', v_stock; end if;
+  raise notice 'CASE24 OK: 在庫不足・非公開・数量超過・識別子なし・無効リンクはすべて拒否され、副作用なし';
+end $$;
+
+-- ============================================================================
+-- CASE25 : 注文の帰属代理店・金額は postgres 直接操作でも変更できない。削除も不可。
+--          明細・ステータス履歴は改ざんできない。
+-- ============================================================================
+
+do $$
+declare v_ok boolean; v_o uuid;
+begin
+  v_o := current_setting('tm.order_x')::uuid;
+
+  v_ok := false;
+  begin
+    update public.orders set agent_id = '10000000-0000-4000-8000-000000000006'::uuid where id = v_o;
+  exception when insufficient_privilege then v_ok := true; end;
+  if not v_ok then raise exception 'CASE25 FAILED: 注文の帰属代理店を書き換えられた'; end if;
+
+  v_ok := false;
+  begin
+    update public.orders set total = 1, subtotal = 1, shipping_fee = 0 where id = v_o;
+  exception when insufficient_privilege then v_ok := true; end;
+  if not v_ok then raise exception 'CASE25 FAILED: 注文金額を書き換えられた'; end if;
+
+  v_ok := false;
+  begin
+    delete from public.orders where id = v_o;
+  exception when insufficient_privilege then v_ok := true; end;
+  if not v_ok then raise exception 'CASE25 FAILED: 注文を削除できた'; end if;
+
+  v_ok := false;
+  begin
+    update public.order_items set quantity = 5, amount = unit_price * 5 where order_id = v_o;
+  exception when insufficient_privilege then v_ok := true; end;
+  if not v_ok then raise exception 'CASE25 FAILED: 注文明細を書き換えられた'; end if;
+
+  v_ok := false;
+  begin
+    update public.order_status_history set reason = '改ざん' where order_id = v_o;
+  exception when insufficient_privilege then v_ok := true; end;
+  if not v_ok then raise exception 'CASE25 FAILED: ステータス履歴を書き換えられた'; end if;
+
+  raise notice 'CASE25 OK: 帰属代理店・金額・注文番号は不変、削除不可、明細と履歴は改ざん不可';
+end $$;
+
+-- ============================================================================
+-- CASE26 : 注文の実データは現担当 B だけが見られる。
+--          傘上 A・紹介元 S・傘下 C からは 0 行。紹介元列は B にも見えない。
+-- ============================================================================
+
+select set_config('request.jwt.claims',
+  '{"sub":"00000000-0000-4000-8000-000000000003","role":"authenticated"}', true);
+set local role authenticated;
+
+do $$
+declare v_cnt int; v_name text; v_ok boolean; v_ref uuid;
+begin
+  select count(*) into v_cnt from public.orders where id = current_setting('tm.order_x')::uuid;
+  if v_cnt <> 1 then raise exception 'CASE26 FAILED: 現担当 B が担当顧客 X の注文を見られない'; end if;
+  select ship_name into v_name from public.orders where id = current_setting('tm.order_x')::uuid;
+  if v_name is distinct from '別人太郎' then raise exception 'CASE26 FAILED: B から配送先氏名が見えない'; end if;
+  select count(*) into v_cnt from public.order_items where order_id = current_setting('tm.order_x')::uuid;
+  if v_cnt <> 1 then raise exception 'CASE26 FAILED: B が明細を見られない'; end if;
+
+  v_ok := false;
+  begin
+    select referral_agent_id into v_ref from public.orders limit 1;
+  exception when insufficient_privilege then v_ok := true; end;
+  if not v_ok then raise exception 'CASE26 FAILED: 一般代理店が referral_agent_id を参照できた'; end if;
+
+  v_ok := false;
+  begin
+    perform identity_mismatch from public.orders limit 1;
+  exception when insufficient_privilege then v_ok := true; end;
+  if not v_ok then raise exception 'CASE26 FAILED: 一般代理店が identity_mismatch を参照できた'; end if;
+end $$;
+
+reset role;
+
+select set_config('request.jwt.claims',
+  '{"sub":"00000000-0000-4000-8000-000000000002","role":"authenticated"}', true);
+set local role authenticated;
+
+do $$
+declare v_cnt int;
+begin
+  select count(*) into v_cnt from public.orders;
+  if v_cnt <> 0 then raise exception 'CASE26 FAILED: 傘上 A に傘下 B 担当顧客の注文が見えた (%)', v_cnt; end if;
+  select count(*) into v_cnt from public.order_items;
+  if v_cnt <> 0 then raise exception 'CASE26 FAILED: 傘上 A に明細が見えた (%)', v_cnt; end if;
+end $$;
+
+reset role;
+
+select set_config('request.jwt.claims',
+  '{"sub":"00000000-0000-4000-8000-000000000006","role":"authenticated"}', true);
+set local role authenticated;
+
+do $$
+declare v_cnt int;
+begin
+  select count(*) into v_cnt from public.orders;
+  if v_cnt <> 0 then raise exception 'CASE26 FAILED: 紹介元 S に他代理店担当顧客の注文が見えた (%)', v_cnt; end if;
+end $$;
+
+reset role;
+
+select set_config('request.jwt.claims',
+  '{"sub":"00000000-0000-4000-8000-000000000004","role":"authenticated"}', true);
+set local role authenticated;
+
+do $$
+declare v_cnt int;
+begin
+  select count(*) into v_cnt from public.orders;
+  if v_cnt <> 0 then raise exception 'CASE26 FAILED: 傘下 C に B 担当顧客の注文が見えた (%)', v_cnt; end if;
+  raise notice 'CASE26 OK: 注文の実データは現担当のみ。傘上・紹介元・傘下は 0 行、紹介元列は代理店に非公開';
+end $$;
+
+reset role;
+
+-- ============================================================================
+-- CASE27 : 一般代理店・一般admin は注文/商品/設定を書き込めない
+-- ============================================================================
+
+select set_config('request.jwt.claims',
+  '{"sub":"00000000-0000-4000-8000-000000000003","role":"authenticated"}', true);
+set local role authenticated;
+
+do $$
+declare v_ok boolean; v_o uuid;
+begin
+  v_o := current_setting('tm.order_x')::uuid;
+
+  v_ok := false;
+  begin update public.orders set status = 'completed' where id = v_o;
+  exception when insufficient_privilege then v_ok := true; end;
+  if not v_ok then raise exception 'CASE27 FAILED: 代理店が注文ステータスを直接更新できた'; end if;
+
+  v_ok := false;
+  begin
+    insert into public.products (name, price) values ('代理店の商品', 1);
+  exception when insufficient_privilege then v_ok := true; end;
+  if not v_ok then raise exception 'CASE27 FAILED: 代理店が商品を直接登録できた'; end if;
+
+  v_ok := false;
+  begin perform public.treemerce_admin_set_order_status(v_o, 'payment_confirmed', '代理店による入金確認');
+  exception when insufficient_privilege then v_ok := true; end;
+  if not v_ok then raise exception 'CASE27 FAILED: 代理店がステータス変更RPCを実行できた'; end if;
+
+  v_ok := false;
+  begin perform public.treemerce_admin_upsert_product('代理店の商品', 1, 1, true);
+  exception when insufficient_privilege then v_ok := true; end;
+  if not v_ok then raise exception 'CASE27 FAILED: 代理店が商品登録RPCを実行できた'; end if;
+
+  v_ok := false;
+  begin perform public.treemerce_admin_update_shop_settings(
+    jsonb_build_object('bank_account_number', '9999999'), '口座差し替え');
+  exception when insufficient_privilege then v_ok := true; end;
+  if not v_ok then raise exception 'CASE27 FAILED: 代理店が振込先を変更できた'; end if;
+
+  v_ok := false;
+  begin perform public.treemerce_admin_get_order(v_o);
+  exception when insufficient_privilege then v_ok := true; end;
+  if not v_ok then raise exception 'CASE27 FAILED: 代理店が管理者用注文詳細 (紹介元を含む) を取得できた'; end if;
+end $$;
+
+reset role;
+
+select set_config('request.jwt.claims',
+  '{"sub":"00000000-0000-4000-8000-000000000008","role":"authenticated"}', true);
+set local role authenticated;
+
+do $$
+declare v_ok boolean;
+begin
+  v_ok := false;
+  begin perform public.treemerce_admin_set_order_status(
+    current_setting('tm.order_x')::uuid, 'payment_confirmed', '一般adminによる入金確認');
+  exception when insufficient_privilege then v_ok := true; end;
+  if not v_ok then raise exception 'CASE27 FAILED: 一般adminがステータス変更RPCを実行できた'; end if;
+
+  v_ok := false;
+  begin perform public.treemerce_admin_upsert_product('一般adminの商品', 1, 1, true);
+  exception when insufficient_privilege then v_ok := true; end;
+  if not v_ok then raise exception 'CASE27 FAILED: 一般adminが商品登録RPCを実行できた'; end if;
+
+  raise notice 'CASE27 OK: 一般代理店・一般adminは注文/商品/振込先を書き込めない';
+end $$;
+
+reset role;
+
+-- ============================================================================
+-- CASE28 : super_admin のステータス変更。正しい遷移のみ許可、理由必須、
+--          履歴と監査ログの両方に記録。キャンセルで在庫が戻る。帰属は不変。
+-- ============================================================================
+
+select set_config('request.jwt.claims',
+  '{"sub":"00000000-0000-4000-8000-000000000007","role":"authenticated"}', true);
+set local role authenticated;
+
+do $$
+declare
+  v_n uuid; v_x uuid; v_ok boolean; v_res jsonb; v_cnt int; v_stock_before int; v_stock_after int;
+  v_paid timestamptz; v_agent uuid;
+begin
+  v_n := current_setting('tm.order_n')::uuid;
+  v_x := current_setting('tm.order_x')::uuid;
+
+  v_res := public.treemerce_admin_set_order_status(v_n, 'payment_confirmed', '入金を確認');
+  if v_res ->> 'status' <> 'payment_confirmed' then
+    raise exception 'CASE28 FAILED: 入金確認に変更できない (%)', v_res;
+  end if;
+  select paid_at, agent_id into v_paid, v_agent from public.orders where id = v_n;
+  if v_paid is null then raise exception 'CASE28 FAILED: paid_at が記録されていない'; end if;
+  if v_agent is distinct from current_setting('tm.agent_b')::uuid then
+    raise exception 'CASE28 FAILED: ステータス変更で帰属が変わった';
+  end if;
+
+  select count(*) into v_cnt from public.order_status_history where order_id = v_n;
+  if v_cnt <> 2 then raise exception 'CASE28 FAILED: ステータス履歴が 2 件でない (%)', v_cnt; end if;
+  select count(*) into v_cnt from public.admin_audit_logs
+  where target_table = 'orders' and target_id = v_n and action = 'order.status_change';
+  if v_cnt <> 1 then raise exception 'CASE28 FAILED: 監査ログに記録されていない (%)', v_cnt; end if;
+
+  v_ok := false;
+  begin perform public.treemerce_admin_set_order_status(v_n, 'received', '戻す');
+  exception when invalid_parameter_value then v_ok := true; end;
+  if not v_ok then raise exception 'CASE28 FAILED: 入金確認済み → 注文受付 に戻せた'; end if;
+
+  v_ok := false;
+  begin perform public.treemerce_admin_set_order_status(v_n, 'completed', '発送を飛ばして完了');
+  exception when invalid_parameter_value then v_ok := true; end;
+  if not v_ok then raise exception 'CASE28 FAILED: 発送済みを飛ばして完了にできた'; end if;
+
+  v_ok := false;
+  begin perform public.treemerce_admin_set_order_status(v_n, 'shipped', null);
+  exception when invalid_parameter_value then v_ok := true; end;
+  if not v_ok then raise exception 'CASE28 FAILED: 理由なしでステータスを変更できた'; end if;
+
+  select stock into v_stock_before from public.products where id = current_setting('tm.p1')::uuid;
+  perform public.treemerce_admin_set_order_status(v_x, 'cancelled', '本人確認が取れないためキャンセル');
+  select stock into v_stock_after from public.products where id = current_setting('tm.p1')::uuid;
+  if v_stock_after <> v_stock_before + 1 then
+    raise exception 'CASE28 FAILED: キャンセルで在庫が戻っていない (% → %)', v_stock_before, v_stock_after;
+  end if;
+
+  v_ok := false;
+  begin perform public.treemerce_admin_set_order_status(v_x, 'payment_confirmed', 'キャンセル後に入金確認');
+  exception when invalid_parameter_value then v_ok := true; end;
+  if not v_ok then raise exception 'CASE28 FAILED: キャンセル済みの注文を復活できた'; end if;
+
+  v_res := public.treemerce_admin_get_order(v_x);
+  if v_res -> 'referral_agent' ->> 'public_id' is distinct from 'TM-TEST-S'
+     or (v_res -> 'order' ->> 'identity_mismatch')::boolean is not true then
+    raise exception 'CASE28 FAILED: super_admin の注文詳細に紹介元/本人確認フラグが無い (%)', v_res;
+  end if;
+
+  raise notice 'CASE28 OK: 正しい遷移のみ・理由必須・履歴と監査ログに記録・キャンセルで在庫復元・帰属不変';
+end $$;
+
+reset role;
+
+-- ============================================================================
+-- CASE29 : ADMIN が N の担当を B → C に変更すると、過去注文の実データは
+--          新担当 C にだけ見え、旧担当 B からは見えなくなる。帰属は B のまま。
+-- ============================================================================
+
+savepoint before_case29;
+
+select set_config('request.jwt.claims',
+  '{"sub":"00000000-0000-4000-8000-000000000007","role":"authenticated"}', true);
+set local role authenticated;
+
+select public.treemerce_admin_transfer_customer(
+  current_setting('tm.customer_n')::uuid, current_setting('tm.agent_c')::uuid, '担当変更テスト');
+
+reset role;
+
+select set_config('request.jwt.claims',
+  '{"sub":"00000000-0000-4000-8000-000000000003","role":"authenticated"}', true);
+set local role authenticated;
+
+do $$
+declare v_cnt int; v_sum jsonb;
+begin
+  select count(*) into v_cnt from public.orders where id = current_setting('tm.order_n')::uuid;
+  if v_cnt <> 0 then raise exception 'CASE29 FAILED: 旧担当 B に移管済み顧客の注文が見えた'; end if;
+
+  v_sum := public.treemerce_agent_order_summary('all');
+  if (v_sum -> 'own_transferred' ->> 'suppressed')::boolean is not true then
+    raise exception 'CASE29 FAILED: 移管済み顧客分の売上が n<5 で丸められていない (%)', v_sum;
+  end if;
+  if v_sum::text like '%新規花子%' or v_sum::text like '%tm-test-n%' then
+    raise exception 'CASE29 FAILED: 移管済み顧客の PII が集計に含まれる';
+  end if;
+end $$;
+
+reset role;
+
+select set_config('request.jwt.claims',
+  '{"sub":"00000000-0000-4000-8000-000000000004","role":"authenticated"}', true);
+set local role authenticated;
+
+do $$
+declare v_cnt int;
+begin
+  select count(*) into v_cnt from public.orders where id = current_setting('tm.order_n')::uuid;
+  if v_cnt <> 1 then raise exception 'CASE29 FAILED: 新担当 C が担当顧客の過去注文を見られない'; end if;
+end $$;
+
+reset role;
+
+do $$
+declare v_agent uuid;
+begin
+  select agent_id into v_agent from public.orders where id = current_setting('tm.order_n')::uuid;
+  if v_agent is distinct from current_setting('tm.agent_b')::uuid then
+    raise exception 'CASE29 FAILED: 担当変更で注文の帰属が変わった (%)', v_agent;
+  end if;
+  raise notice 'CASE29 OK: 担当変更後、実データは新担当のみ・旧担当は匿名集計のみ・帰属は旧担当のまま';
+end $$;
+
+rollback to savepoint before_case29;
+
+-- ============================================================================
+-- CASE30 : 代理店向け注文サマリ。傘下は件数・金額のみで n<5 は丸め、代理店別内訳なし。
+--          集計は入金確認済み以降のみ。
+-- ============================================================================
+
+-- C 担当の既存顧客 Z が C のリンクから注文 (各 5000 + 送料 800)。
+-- 未入金は 1 連絡先あたり 3 件まで (0013) なので、3 件注文 → 入金確認 → 2 件注文 の順に行う。
+select set_config('tm.agent_c_public',
+  (select public_id from public.agents where id = current_setting('tm.agent_c')::uuid), true);
+
+set local role anon;
+
+do $$
+declare i int;
+begin
+  for i in 1..3 loop
+    perform public.treemerce_place_order(
+      current_setting('tm.agent_c_public'),
+      jsonb_build_array(jsonb_build_object('product_id', current_setting('tm.p1'), 'quantity', 1)),
+      '鈴木一郎', '東京都テスト1-1', 'tm-test-z@treemerce.test');
+  end loop;
+end $$;
+
+reset role;
+
+select set_config('request.jwt.claims',
+  '{"sub":"00000000-0000-4000-8000-000000000007","role":"authenticated"}', true);
+set local role authenticated;
+
+do $$
+declare v_o uuid;
+begin
+  for v_o in
+    select o.id from public.orders o
+    join public.customers c on c.id = o.customer_id
+    where c.email_normalized = 'tm-test-z@treemerce.test' and o.status = 'received'
+    order by o.ordered_at
+  loop
+    perform public.treemerce_admin_set_order_status(v_o, 'payment_confirmed', '入金を確認');
+  end loop;
+end $$;
+
+reset role;
+
+set local role anon;
+
+do $$
+declare i int;
+begin
+  for i in 1..2 loop
+    perform public.treemerce_place_order(
+      current_setting('tm.agent_c_public'),
+      jsonb_build_array(jsonb_build_object('product_id', current_setting('tm.p1'), 'quantity', 1)),
+      '鈴木一郎', '東京都テスト1-1', 'tm-test-z@treemerce.test');
+  end loop;
+end $$;
+
+reset role;
+
+-- 入金確認済みを 4 件にする → 傘下は n<5 で丸め
+select set_config('request.jwt.claims',
+  '{"sub":"00000000-0000-4000-8000-000000000007","role":"authenticated"}', true);
+set local role authenticated;
+
+do $$
+declare v_o uuid;
+begin
+  select o.id into v_o from public.orders o
+  join public.customers c on c.id = o.customer_id
+  where c.email_normalized = 'tm-test-z@treemerce.test' and o.status = 'received'
+  order by o.ordered_at limit 1;
+  perform public.treemerce_admin_set_order_status(v_o, 'payment_confirmed', '入金を確認');
+end $$;
+
+reset role;
+
+select set_config('request.jwt.claims',
+  '{"sub":"00000000-0000-4000-8000-000000000003","role":"authenticated"}', true);
+set local role authenticated;
+
+do $$
+declare v_sum jsonb; v_txt text;
+begin
+  v_sum := public.treemerce_agent_order_summary('all');
+  v_txt := v_sum::text;
+  if (v_sum -> 'subtree' ->> 'suppressed')::boolean is not true then
+    raise exception 'CASE30 FAILED: 傘下 4 件が丸められていない (%)', v_sum;
+  end if;
+  if (v_sum -> 'own_current' ->> 'count')::int <> 1 then
+    raise exception 'CASE30 FAILED: 自分の担当顧客の入金確認済み注文が 1 件でない (%)', v_sum;
+  end if;
+  if v_txt like '%' || current_setting('tm.agent_c') || '%' or v_txt like '%鈴木一郎%'
+     or v_txt like '%' || current_setting('tm.agent_c_public') || '%' then
+    raise exception 'CASE30 FAILED: 傘下代理店・顧客を特定できる情報が含まれる (%)', v_sum;
+  end if;
+end $$;
+
+reset role;
+
+select set_config('request.jwt.claims',
+  '{"sub":"00000000-0000-4000-8000-000000000007","role":"authenticated"}', true);
+set local role authenticated;
+
+do $$
+declare v_o uuid;
+begin
+  select o.id into v_o from public.orders o
+  join public.customers c on c.id = o.customer_id
+  where c.email_normalized = 'tm-test-z@treemerce.test' and o.status = 'received'
+  order by o.ordered_at limit 1;
+  perform public.treemerce_admin_set_order_status(v_o, 'payment_confirmed', '入金を確認');
+end $$;
+
+reset role;
+
+select set_config('request.jwt.claims',
+  '{"sub":"00000000-0000-4000-8000-000000000003","role":"authenticated"}', true);
+set local role authenticated;
+
+do $$
+declare v_sum jsonb; v_ok boolean;
+begin
+  v_sum := public.treemerce_agent_order_summary('all');
+  if (v_sum -> 'subtree' ->> 'suppressed')::boolean
+     or (v_sum -> 'subtree' ->> 'count')::int <> 5
+     or (v_sum -> 'subtree' ->> 'total')::numeric <> 29000 then
+    raise exception 'CASE30 FAILED: 傘下 5 件の件数・金額が正しくない (%)', v_sum;
+  end if;
+  if v_sum ? 'by_agent' or v_sum ? 'agents' or v_sum ? 'customers' then
+    raise exception 'CASE30 FAILED: 代理店別内訳が含まれる';
+  end if;
+
+  v_ok := false;
+  begin perform public.treemerce_agent_order_summary('forever');
+  exception when invalid_parameter_value then v_ok := true; end;
+  if not v_ok then raise exception 'CASE30 FAILED: 不正な期間指定が通った'; end if;
+end $$;
+
+reset role;
+
+do $$
+declare v_vol char;
+begin
+  select provolatile into v_vol from pg_proc
+  where oid = 'public.treemerce_agent_order_summary(text)'::regprocedure;
+  if v_vol <> 's' then raise exception 'CASE30 FAILED: 注文サマリが STABLE でない (%)', v_vol; end if;
+  raise notice 'CASE30 OK: 傘下は件数・金額のみ・n<5丸め・内訳なし・入金確認済み以降のみ・STABLE';
+end $$;
+
+-- ============================================================================
+-- CASE31 : 客層分析に購入カテゴリ・金額帯が反映される (入金確認済み以降のみ)。
+--          未入金の注文は集計されない。金額帯も n<5 は丸め。STABLE のまま。
+-- ============================================================================
+
+-- 未入金のまま残す注文: N が美容液 (beauty) を 1 点
+set local role anon;
+select public.treemerce_place_order(current_setting('tm.agent_b_public'),
+  jsonb_build_array(jsonb_build_object('product_id', current_setting('tm.p2'), 'quantity', 1)),
+  '新規花子', '東京都千代田区テスト1-1', 'tm-test-n@treemerce.test');
+reset role;
+
+select set_config('request.jwt.claims',
+  '{"sub":"00000000-0000-4000-8000-000000000003","role":"authenticated"}', true);
+set local role authenticated;
+
+do $$
+declare v_res jsonb; v_txt text; v_merged int;
+begin
+  v_res := public.treemerce_customer_demographics(null, 'all');
+  v_txt := v_res::text;
+
+  -- 0013: 購入カテゴリは購入者の人数で数える。B 傘下で health を買ったのは X / N / Z の 3 人
+  --       → n<5 なので「該当データ少数」1 つに丸められ、人数は 3。
+  --       未入金の beauty (N) が集計されていれば 4 になる。
+  if (v_res -> 'product_category')::text like '%"health"%' then
+    raise exception 'CASE31 FAILED: 購入者 3 人のカテゴリが丸められていない (%)', v_res -> 'product_category';
+  end if;
+  select (e ->> 'count')::int into v_merged
+  from jsonb_array_elements(v_res -> 'product_category') e where e ->> 'key' = '該当データ少数';
+  if v_merged is distinct from 3 then
+    raise exception 'CASE31 FAILED: 購入カテゴリが購入者の人数 (3) で数えられていない (%)',
+      v_res -> 'product_category';
+  end if;
+  if not (v_res ? 'amount_band') or (v_res -> 'amount_band')::text not like '%該当データ少数%' then
+    raise exception 'CASE31 FAILED: 金額帯が無い、または少数セグメントが丸められていない (%)',
+      v_res -> 'amount_band';
+  end if;
+  if (v_res ->> 'purchasing_customers')::int <> 3 or v_res -> 'total_sales' <> 'null'::jsonb then
+    raise exception 'CASE31 FAILED: 購入者 n<5 なのに売上合計が返った (%)', v_res;
+  end if;
+  if v_txt like '%999999%' or v_txt like '%山田太郎%' or v_txt like '%鈴木一郎%'
+     or v_txt like '%' || current_setting('tm.agent_c') || '%' then
+    raise exception 'CASE31 FAILED: 個人の購入額・PII・傘下代理店IDが含まれる';
+  end if;
+
+  raise notice 'CASE31 OK: 客層分析に購入カテゴリ(購入者の人数)・金額帯を反映 (入金確認済み以降のみ・n<5丸め・内訳なし)';
+end $$;
+
+reset role;
+
+-- ============================================================================
+-- CASE32 : 支払期限を過ぎた未入金注文は自動キャンセルされ、在庫が戻る。
+--          理由は履歴と監査ログの両方に残る。期限内の注文は残る。
+--          自動キャンセル関数は anon / authenticated から実行できない。
+-- ============================================================================
+
+select set_config('request.jwt.claims',
+  '{"sub":"00000000-0000-4000-8000-000000000007","role":"authenticated"}', true);
+set local role authenticated;
+
+select set_config('tm.p4',
+  public.treemerce_admin_upsert_product('テスト定番商品', 3000, 100, true, 'household') ->> 'id', true);
+
+reset role;
+select set_config('request.jwt.claims', '', true);
+
+-- 期限切れ / 期限内の未入金注文を DB 管理者として直接用意する (時刻を戻せないため)
+do $$
+declare v_n uuid; v_b uuid; v_expired uuid; v_live uuid; v_today date;
+begin
+  v_n := current_setting('tm.customer_n')::uuid;
+  v_b := current_setting('tm.agent_b')::uuid;
+  v_today := (now() at time zone 'Asia/Tokyo')::date;
+
+  insert into public.orders (customer_id, agent_id, referral_agent_id, status, subtotal, shipping_fee,
+                             total, ship_name, ship_address, contact_email, ordered_at, payment_due_date)
+  values (v_n, v_b, v_b, 'received', 6000, 0, 6000, '新規花子', '東京都千代田区テスト1-1',
+          'tm-test-expired@treemerce.test', now() - interval '10 days', v_today - 1)
+  returning id into v_expired;
+  insert into public.order_items (order_id, product_id, product_name, product_category,
+                                  unit_price, quantity, amount)
+  values (v_expired, current_setting('tm.p4')::uuid, 'テスト定番商品', 'household', 3000, 2, 6000);
+
+  insert into public.orders (customer_id, agent_id, referral_agent_id, status, subtotal, shipping_fee,
+                             total, ship_name, ship_address, contact_email, ordered_at, payment_due_date)
+  values (v_n, v_b, v_b, 'received', 3000, 0, 3000, '新規花子', '東京都千代田区テスト1-1',
+          'tm-test-live@treemerce.test', now() - interval '7 days', v_today)
+  returning id into v_live;
+  insert into public.order_items (order_id, product_id, product_name, product_category,
+                                  unit_price, quantity, amount)
+  values (v_live, current_setting('tm.p4')::uuid, 'テスト定番商品', 'household', 3000, 1, 3000);
+
+  -- 注文受付で確保されたのと同じ状態にする
+  update public.products set stock = stock - 3 where id = current_setting('tm.p4')::uuid;
+
+  perform set_config('tm.order_expired', v_expired::text, true);
+  perform set_config('tm.order_live', v_live::text, true);
+end $$;
+
+set local role anon;
+do $$
+declare v_ok boolean := false;
+begin
+  begin perform public.treemerce_system_cancel_expired_orders();
+  exception when insufficient_privilege then v_ok := true; end;
+  if not v_ok then raise exception 'CASE32 FAILED: anon が自動キャンセル関数を実行できた'; end if;
+end $$;
+reset role;
+
+select set_config('request.jwt.claims',
+  '{"sub":"00000000-0000-4000-8000-000000000007","role":"authenticated"}', true);
+set local role authenticated;
+do $$
+declare v_ok boolean := false;
+begin
+  begin perform public.treemerce_system_cancel_expired_orders();
+  exception when insufficient_privilege then v_ok := true; end;
+  if not v_ok then raise exception 'CASE32 FAILED: super_admin のセッションから自動キャンセル関数を直接実行できた'; end if;
+end $$;
+reset role;
+select set_config('request.jwt.claims', '', true);
+
+do $$
+declare
+  v_cnt int; v_status public.order_status; v_stock int; v_reason text; v_role text;
+  v_audit int; v_due date;
+begin
+  v_cnt := public.treemerce_system_cancel_expired_orders();
+  if v_cnt <> 1 then raise exception 'CASE32 FAILED: 自動キャンセル件数が 1 でない (%)', v_cnt; end if;
+
+  select status into v_status from public.orders where id = current_setting('tm.order_expired')::uuid;
+  if v_status <> 'cancelled' then raise exception 'CASE32 FAILED: 期限切れ注文がキャンセルされていない'; end if;
+  select status into v_status from public.orders where id = current_setting('tm.order_live')::uuid;
+  if v_status <> 'received' then raise exception 'CASE32 FAILED: 期限当日の注文までキャンセルされた'; end if;
+
+  select stock into v_stock from public.products where id = current_setting('tm.p4')::uuid;
+  if v_stock <> 99 then raise exception 'CASE32 FAILED: 自動キャンセルで在庫が戻っていない (%)', v_stock; end if;
+
+  select reason, changed_by_role into v_reason, v_role from public.order_status_history
+  where order_id = current_setting('tm.order_expired')::uuid and to_status = 'cancelled';
+  if v_reason is distinct from '支払期限切れによる自動キャンセル' or v_role <> 'system' then
+    raise exception 'CASE32 FAILED: 履歴の理由/実行者が不正 (% / %)', v_reason, v_role;
+  end if;
+
+  select count(*) into v_audit from public.admin_audit_logs
+  where target_id = current_setting('tm.order_expired')::uuid and action = 'order.auto_cancel'
+    and reason = '支払期限切れによる自動キャンセル' and (after_state ->> 'restocked')::boolean;
+  if v_audit <> 1 then raise exception 'CASE32 FAILED: 監査ログに自動キャンセルが残っていない'; end if;
+
+  -- 注文受付では支払期限が注文時点で確定している (日本時間の今日 + 7 日)
+  select payment_due_date into v_due from public.orders
+  where order_no = current_setting('tm.order_n_no');
+  if v_due is distinct from ((now() at time zone 'Asia/Tokyo')::date + 7) then
+    raise exception 'CASE32 FAILED: 注文時点の支払期限が保存されていない (%)', v_due;
+  end if;
+
+  -- 2 回目は何もしない (冪等)
+  if public.treemerce_system_cancel_expired_orders() <> 0 then
+    raise exception 'CASE32 FAILED: 2 回目の実行で再度キャンセルした';
+  end if;
+
+  raise notice 'CASE32 OK: 期限切れの未入金注文は自動キャンセル・在庫復元・履歴と監査ログに理由。期限内は残る。一般ロールは実行不可';
+end $$;
+
+-- ============================================================================
+-- CASE33 : 同一メール / 同一電話番号の未入金注文は 3 件まで。
+--          4 件目は新規・既存顧客どちらでも同じ中立メッセージで拒否される (原則6)。
+-- ============================================================================
+
+set local role anon;
+
+do $$
+declare
+  i int; v_ok boolean; v_msg_new text; v_msg_existing text; v_msg_phone text;
+  v_items jsonb := jsonb_build_array(jsonb_build_object('product_id', current_setting('tm.p4'), 'quantity', 1));
+begin
+  -- 新しい連絡先 (初回注文で顧客が作られる)
+  for i in 1..3 loop
+    perform public.treemerce_place_order(current_setting('tm.agent_b_public'), v_items,
+      '連続太郎', '神奈川県テスト1-1', 'tm-test-rate@treemerce.test');
+  end loop;
+  v_ok := false;
+  begin
+    perform public.treemerce_place_order(current_setting('tm.agent_b_public'), v_items,
+      '連続太郎', '神奈川県テスト1-1', 'tm-test-rate@treemerce.test');
+  exception when invalid_parameter_value then v_ok := true; v_msg_new := sqlerrm; end;
+  if not v_ok then raise exception 'CASE33 FAILED: 新しい連絡先で 4 件目の未入金注文ができた'; end if;
+
+  -- 既存顧客 Y (A の担当) の連絡先
+  for i in 1..3 loop
+    perform public.treemerce_place_order('TM-TEST-A', v_items,
+      '佐藤花子', '大阪府テスト1-1', 'tm-test-y@treemerce.test');
+  end loop;
+  v_ok := false;
+  begin
+    perform public.treemerce_place_order('TM-TEST-A', v_items,
+      '佐藤花子', '大阪府テスト1-1', 'tm-test-y@treemerce.test');
+  exception when invalid_parameter_value then v_ok := true; v_msg_existing := sqlerrm; end;
+  if not v_ok then raise exception 'CASE33 FAILED: 既存顧客の連絡先で 4 件目の未入金注文ができた'; end if;
+
+  if v_msg_new is distinct from v_msg_existing then
+    raise exception 'CASE33 FAILED: 新規と既存で拒否メッセージが異なる (% / %)', v_msg_new, v_msg_existing;
+  end if;
+  if v_msg_new not like 'TREEMERCE_ORDER_UNAVAILABLE:%'
+     or v_msg_new like '%担当%' or v_msg_new like '%登録済%' then
+    raise exception 'CASE33 FAILED: 中立でない拒否メッセージ (%)', v_msg_new;
+  end if;
+
+  -- 同一電話番号 (メールアドレスを変えてもすり抜けられない)
+  for i in 1..3 loop
+    perform public.treemerce_place_order(current_setting('tm.agent_b_public'), v_items,
+      '電話次郎', '千葉県テスト1-1', null, '080-1234-0000');
+  end loop;
+  v_ok := false;
+  begin
+    perform public.treemerce_place_order(current_setting('tm.agent_b_public'), v_items,
+      '電話次郎', '千葉県テスト1-1', 'tm-test-phone-other@treemerce.test', '08012340000');
+  exception when invalid_parameter_value then v_ok := true; v_msg_phone := sqlerrm; end;
+  if not v_ok then raise exception 'CASE33 FAILED: 同一電話番号で 4 件目の未入金注文ができた'; end if;
+  if v_msg_phone is distinct from v_msg_new then
+    raise exception 'CASE33 FAILED: 電話番号での拒否メッセージが異なる (%)', v_msg_phone;
+  end if;
+end $$;
+
+reset role;
+
+do $$
+declare v_cnt int;
+begin
+  select count(*) into v_cnt from public.orders where lower(contact_email) = 'tm-test-rate@treemerce.test';
+  if v_cnt <> 3 then raise exception 'CASE33 FAILED: 拒否された注文が作られた (%)', v_cnt; end if;
+  select count(*) into v_cnt from public.customers
+  where email_normalized = 'tm-test-phone-other@treemerce.test';
+  if v_cnt <> 0 then raise exception 'CASE33 FAILED: 拒否された注文で顧客が作られた'; end if;
+end $$;
+
+-- 1 件入金確認すれば、未入金が 2 件になるので再び注文できる
+select set_config('request.jwt.claims',
+  '{"sub":"00000000-0000-4000-8000-000000000007","role":"authenticated"}', true);
+set local role authenticated;
+do $$
+declare v_o uuid;
+begin
+  select id into v_o from public.orders
+  where lower(contact_email) = 'tm-test-rate@treemerce.test' and status = 'received'
+  order by ordered_at limit 1;
+  perform public.treemerce_admin_set_order_status(v_o, 'payment_confirmed', '入金を確認');
+end $$;
+reset role;
+
+set local role anon;
+do $$
+declare v_res jsonb;
+begin
+  v_res := public.treemerce_place_order(current_setting('tm.agent_b_public'),
+    jsonb_build_array(jsonb_build_object('product_id', current_setting('tm.p4'), 'quantity', 1)),
+    '連続太郎', '神奈川県テスト1-1', 'tm-test-rate@treemerce.test');
+  if v_res ->> 'status' <> 'received' then
+    raise exception 'CASE33 FAILED: 入金確認後も注文できない (%)', v_res;
+  end if;
+  raise notice 'CASE33 OK: 未入金は連絡先ごとに 3 件まで。超過は新規/既存とも同一の中立メッセージ。入金確認で枠が戻る';
+end $$;
+reset role;
+
+-- ============================================================================
+-- CASE34 : 発送済みからのキャンセルは在庫を自動で戻さない。
+--          p_restock の指定が必須で、true のときだけ在庫を戻す。監査ログに選択が残る。
+-- ============================================================================
+
+set local role anon;
+do $$
+begin
+  perform public.treemerce_place_order(current_setting('tm.agent_b_public'),
+    jsonb_build_array(jsonb_build_object('product_id', current_setting('tm.p4'), 'quantity', 2)),
+    '発送一郎', '埼玉県テスト1-1', 'tm-test-ship1@treemerce.test');
+  perform public.treemerce_place_order(current_setting('tm.agent_b_public'),
+    jsonb_build_array(jsonb_build_object('product_id', current_setting('tm.p4'), 'quantity', 3)),
+    '発送二郎', '埼玉県テスト1-1', 'tm-test-ship2@treemerce.test');
+  perform public.treemerce_place_order(current_setting('tm.agent_b_public'),
+    jsonb_build_array(jsonb_build_object('product_id', current_setting('tm.p4'), 'quantity', 1)),
+    '入金三郎', '埼玉県テスト1-1', 'tm-test-ship3@treemerce.test');
+end $$;
+reset role;
+
+select set_config('request.jwt.claims',
+  '{"sub":"00000000-0000-4000-8000-000000000007","role":"authenticated"}', true);
+set local role authenticated;
+
+do $$
+declare
+  v_o1 uuid; v_o2 uuid; v_o3 uuid; v_ok boolean; v_before int; v_after int; v_res jsonb; v_audit int;
+begin
+  select id into v_o1 from public.orders where contact_email = 'tm-test-ship1@treemerce.test';
+  select id into v_o2 from public.orders where contact_email = 'tm-test-ship2@treemerce.test';
+  select id into v_o3 from public.orders where contact_email = 'tm-test-ship3@treemerce.test';
+
+  perform public.treemerce_admin_set_order_status(v_o1, 'payment_confirmed', '入金を確認');
+  perform public.treemerce_admin_set_order_status(v_o1, 'shipped', '発送');
+  perform public.treemerce_admin_set_order_status(v_o2, 'payment_confirmed', '入金を確認');
+  perform public.treemerce_admin_set_order_status(v_o2, 'shipped', '発送');
+
+  -- p_restock 未指定は拒否
+  v_ok := false;
+  begin perform public.treemerce_admin_set_order_status(v_o1, 'cancelled', '返品');
+  exception when invalid_parameter_value then v_ok := true; end;
+  if not v_ok then raise exception 'CASE34 FAILED: 発送済みのキャンセルが p_restock 未指定で通った'; end if;
+
+  -- p_restock = false: 在庫は戻らない
+  select stock into v_before from public.products where id = current_setting('tm.p4')::uuid;
+  v_res := public.treemerce_admin_set_order_status(v_o1, 'cancelled', '返品なし (商品破損)', false);
+  select stock into v_after from public.products where id = current_setting('tm.p4')::uuid;
+  if v_after <> v_before or (v_res ->> 'restocked')::boolean then
+    raise exception 'CASE34 FAILED: p_restock=false なのに在庫が戻った (% → %)', v_before, v_after;
+  end if;
+  select count(*) into v_audit from public.admin_audit_logs
+  where target_id = v_o1 and action = 'order.status_change'
+    and after_state ->> 'status' = 'cancelled' and (after_state ->> 'restocked')::boolean = false;
+  if v_audit <> 1 then raise exception 'CASE34 FAILED: 在庫を戻さない選択が監査ログに残っていない'; end if;
+
+  -- p_restock = true: 在庫が戻る
+  select stock into v_before from public.products where id = current_setting('tm.p4')::uuid;
+  perform public.treemerce_admin_set_order_status(v_o2, 'cancelled', '返品受領', true);
+  select stock into v_after from public.products where id = current_setting('tm.p4')::uuid;
+  if v_after <> v_before + 3 then
+    raise exception 'CASE34 FAILED: p_restock=true で在庫が戻っていない (% → %)', v_before, v_after;
+  end if;
+
+  -- 未発送 (入金確認済み) のキャンセルは常に在庫を戻す
+  perform public.treemerce_admin_set_order_status(v_o3, 'payment_confirmed', '入金を確認');
+  select stock into v_before from public.products where id = current_setting('tm.p4')::uuid;
+  perform public.treemerce_admin_set_order_status(v_o3, 'cancelled', 'お客様都合のキャンセル');
+  select stock into v_after from public.products where id = current_setting('tm.p4')::uuid;
+  if v_after <> v_before + 1 then
+    raise exception 'CASE34 FAILED: 未発送のキャンセルで在庫が戻っていない (% → %)', v_before, v_after;
+  end if;
+
+  raise notice 'CASE34 OK: 発送済みのキャンセルは p_restock 必須・true のときだけ在庫復元・選択は監査ログに記録。未発送は常に復元';
+end $$;
+
+reset role;
+
+-- ============================================================================
+-- CASE35 : 商品ページの max_quantity は「在庫数と 10 の小さい方」
+-- ============================================================================
+
+set local role anon;
+
+do $$
+declare v_res jsonb; v_p4 int; v_max int;
+begin
+  v_res := public.treemerce_shop_products(current_setting('tm.agent_b_public'));
+  select (e ->> 'max_quantity')::int into v_p4
+  from jsonb_array_elements(v_res -> 'products') e where e ->> 'id' = current_setting('tm.p4');
+  select max((e ->> 'max_quantity')::int) into v_max from jsonb_array_elements(v_res -> 'products') e;
+  if v_p4 is distinct from 10 or v_max > 10 then
+    raise exception 'CASE35 FAILED: max_quantity が 10 を超える / 在庫が十分な商品で 10 でない (% / %)',
+      v_p4, v_max;
+  end if;
+  raise notice 'CASE35 OK: max_quantity は在庫数と 10 の小さい方 (在庫が多い商品の正確な在庫数は出ない)';
+end $$;
+
+reset role;
+
 do $$
 begin
   raise notice '==========================================';
-  raise notice '  TREEMERCE: ALL 20 CASES PASSED (+EXTRA)';
+  raise notice '  TREEMERCE: ALL 35 CASES PASSED (+EXTRA)';
   raise notice '==========================================';
 end $$;
 

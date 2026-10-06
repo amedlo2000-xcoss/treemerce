@@ -1,13 +1,29 @@
 import { DataTable, EmptyState, Notice, PageHeader, TD, formatDateTime } from "@/components/ui";
 import { requireAdminPage } from "@/lib/auth/viewer";
+import { ORDER_STATUS_LABELS } from "@/lib/domain/enums";
 import type { AuditLogRow } from "@/lib/domain/types";
 
 function summarize(state: Record<string, unknown> | null): string {
   if (!state) return "—";
   const agentId = state["assigned_agent_id"];
   if (typeof agentId === "string") return agentId;
+  const orderNo = state["order_no"];
   const status = state["status"];
+  if (typeof orderNo === "string" && typeof status === "string") {
+    const restocked = state["restocked"] === true ? " (在庫戻し)" : "";
+    return `${orderNo}: ${ORDER_STATUS_LABELS[status] ?? status}${restocked}`;
+  }
   if (typeof status === "string") return status;
+  // 商品 (product.create / product.update)
+  const name = state["name"];
+  if (typeof name === "string") {
+    const published = state["is_published"] === true ? "公開" : "非公開";
+    return `${name} / ¥${state["price"]} / 在庫${state["stock"]} / ${published}`;
+  }
+  // ショップ設定
+  if ("is_accepting_orders" in state) {
+    return state["is_accepting_orders"] ? "注文受付中" : "注文受付停止";
+  }
   return "—";
 }
 

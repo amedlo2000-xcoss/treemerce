@@ -18,6 +18,7 @@ import {
   formatYen,
 } from "@/components/ui";
 import { ProfileHero, StatTile } from "@/components/mobile/primitives";
+import { OrderStatusBadge } from "@/components/OrderStatusBadge";
 import { requireSuperAdminPage } from "@/lib/auth/viewer";
 import {
   AGE_GROUP_LABELS,
@@ -58,6 +59,7 @@ export default async function AdminCustomerDetailPage({
     { data: assignmentData },
     { data: historyData },
     { data: agentData },
+    { data: orderData },
   ] = await Promise.all([
     supabase.from("customers").select("*").eq("id", customerId).maybeSingle(),
     supabase
@@ -83,6 +85,11 @@ export default async function AdminCustomerDetailPage({
       .select("id, public_id, display_name, status")
       .eq("status", "active")
       .order("public_id"),
+    supabase
+      .from("orders")
+      .select("id, order_no, status, total, ordered_at")
+      .eq("customer_id", customerId)
+      .order("ordered_at", { ascending: false }),
   ]);
 
   const customer = customerData as CustomerRow | null;
@@ -100,6 +107,13 @@ export default async function AdminCustomerDetailPage({
   const total = validPurchases.reduce((sum, p) => sum + Number(p.amount ?? 0), 0);
 
   const lastPurchase = purchases[0] ?? null;
+  const orders = (orderData ?? []) as {
+    id: string;
+    order_no: string;
+    status: string;
+    total: number;
+    ordered_at: string;
+  }[];
 
   return (
     <>
@@ -218,6 +232,34 @@ export default async function AdminCustomerDetailPage({
                       </Badge>
                     </td>
                     <td className={`${TD} whitespace-nowrap`}>{formatDateTime(p.purchased_at)}</td>
+                  </tr>
+                ))}
+              </DataTable>
+            )}
+          </Card>
+
+          <Card title="注文履歴" description="ショップからの注文です。詳細・ステータス変更は注文管理から行います。">
+            {orders.length === 0 ? (
+              <EmptyState title="注文はありません" />
+            ) : (
+              <DataTable headers={["注文番号", "合計", "状態", "注文日時"]}>
+                {orders.map((o) => (
+                  <tr key={o.id}>
+                    <td className={TD}>
+                      <Link
+                        href={`/admin/orders/${o.id}`}
+                        className="font-mono text-[12px] font-semibold text-brand hover:underline"
+                      >
+                        {o.order_no}
+                      </Link>
+                    </td>
+                    <td className={`${TD} font-semibold tabular-nums text-text-primary`}>
+                      {formatYen(Number(o.total))}
+                    </td>
+                    <td className={TD}>
+                      <OrderStatusBadge status={o.status} />
+                    </td>
+                    <td className={`${TD} whitespace-nowrap`}>{formatDateTime(o.ordered_at)}</td>
                   </tr>
                 ))}
               </DataTable>

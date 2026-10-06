@@ -13,6 +13,7 @@ import {
   StatusPill,
   Surface,
 } from "@/components/mobile/primitives";
+import { OrderStatusBadge } from "@/components/OrderStatusBadge";
 import { requireAgentPage } from "@/lib/auth/viewer";
 import {
   AGE_GROUP_LABELS,
@@ -57,14 +58,31 @@ export default async function AgentCustomerDetailPage({
   // ページ層でももう一度「自分が担当か」を確認する (多層防御)
   if (!assignment || assignment.assigned_agent_id !== agent.id) notFound();
 
-  const [{ data: customerData }, { data: purchaseData }] = await Promise.all([
+  const [{ data: customerData }, { data: purchaseData }, { data: orderData }] = await Promise.all([
     supabase.from("customers").select("*").eq("id", customerId).maybeSingle(),
     supabase
       .from("purchases")
       .select("*")
       .eq("customer_id", customerId)
       .order("purchased_at", { ascending: false }),
+    // RLS: 現に担当している顧客の注文のみ。帰属代理店 (agent_id) は取得しない。
+    supabase
+      .from("orders")
+      .select(
+        "id, order_no, status, total, ordered_at, payment_due_date, order_items ( id, product_name, quantity, amount )",
+      )
+      .eq("customer_id", customerId)
+      .order("ordered_at", { ascending: false }),
   ]);
+  const orders = (orderData ?? []) as {
+    id: string;
+    order_no: string;
+    status: string;
+    total: number;
+    ordered_at: string;
+    payment_due_date: string;
+    order_items: { id: string; product_name: string; quantity: number; amount: number }[];
+  }[];
 
   const customer = customerData as CustomerRow | null;
   if (!customer) notFound();
@@ -73,8 +91,17 @@ export default async function AgentCustomerDetailPage({
   const validPurchases = purchases.filter(
     (p) => p.status !== "cancelled" && p.status !== "refunded",
   );
-  const total = validPurchases.reduce((sum, p) => sum + Number(p.amount ?? 0), 0);
-  const lastPurchase = purchases[0] ?? null;
+  // 注文は入金確認済み以降のみを購入実績として数える (未入金・キャンセルは含めない)
+  const paidOrders = orders.filter((o) =>
+    ["payment_confirmed", "shipped", "completed"].includes(o.status),
+  );
+  const total =
+    validPurchases.reduce((sum, p) => sum + Number(p.amount ?? 0), 0) +
+    paidOrders.reduce((sum, o) => sum + Number(o.total ?? 0), 0);
+  const purchaseCount = validPurchases.length + paidOrders.length;
+  const lastPurchaseAt =
+    [...validPurchases.map((p) => p.purchased_at), ...paidOrders.map((o) => o.ordered_at)].sort().at(-1) ??
+    null;
 
   return (
     <>
@@ -120,11 +147,8 @@ export default async function AgentCustomerDetailPage({
             meta={
               <div className="grid grid-cols-3 gap-2">
                 <StatTile label="購入合計" value={formatYen(total)} />
-                <StatTile label="購入件数" value={`${purchases.length}件`} />
-                <StatTile
-                  label="最終購入"
-                  value={lastPurchase ? formatDate(lastPurchase.purchased_at) : "—"}
-                />
+                <StatTile label="購入件数" value={`${purchaseCount}件`} />
+                <StatTile label="最終購入" value={lastPurchaseAt ? formatDate(lastPurchaseAt) : "—"} />
               </div>
             }
           />
@@ -181,10 +205,51 @@ export default async function AgentCustomerDetailPage({
           </div>
         </div>
 
-        {/* 右列: 購入情報・問い合わせ */}
+        {/* 右列: 注文・購入情報・問い合わせ */}
         <div className="space-y-5">
           <div className="space-y-2">
-            <SectionLabel>購入履歴</SectionLabel>
+            <SectionLabel>ショップでの注文</SectionLabel>
+            {orders.length === 0 ? (
+              <EmptyState title="注文はありません" />
+            ) : (
+              <Surface padded={false} className="divide-y divide-border-soft">
+                {orders.map((o) => (
+                  <div key={o.id} className="space-y-2 px-4 py-3.5">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0 space-y-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-mono text-[12px] font-semibold text-text-primary">
+                            {o.order_no}
+                          </span>
+                          <OrderStatusBadge status={o.status} />
+                        </div>
+                        <p className="text-[12px] text-text-secondary">
+                          {formatDateTime(o.ordered_at)}
+                          {o.status === "received" ? ` · 支払期限 ${formatDate(o.payment_due_date)}` : ""}
+                        </p>
+                      </div>
+                      <p className="shrink-0 text-[15px] font-bold tabular-nums text-text-primary">
+                        {formatYen(Number(o.total))}
+                      </p>
+                    </div>
+                    <ul className="space-y-0.5">
+                      {o.order_items.map((item) => (
+                        <li key={item.id} className="flex justify-between gap-3 text-[13px] text-text-secondary">
+                          <span className="truncate">
+                            {item.product_name} × {item.quantity}
+                          </span>
+                          <span className="shrink-0 tabular-nums">{formatYen(Number(item.amount))}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ))}
+              </Surface>
+            )}
+          </div>
+
+          <div className="space-y-2">
+            <SectionLabel>その他の購入履歴</SectionLabel>
             {purchases.length === 0 ? (
               <EmptyState title="購入履歴はありません" />
             ) : (

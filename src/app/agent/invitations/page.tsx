@@ -42,6 +42,17 @@ export default async function InvitationsPage() {
       </div>
 
       <div className="space-y-2">
+        <SectionLabel>ショップの紹介リンク</SectionLabel>
+        <Surface>
+          <p className="mb-3 text-[13px] leading-5 text-text-secondary">
+            このリンクから初めて注文したお客様は、あなたが担当代理店として確定します。
+            すでに担当代理店が決まっているお客様が注文した場合は、そのお客様の現在の担当代理店の注文になります。
+          </p>
+          <CopyField label="紹介リンク" value={`${origin}/shop/${agent.public_id}`} />
+        </Surface>
+      </div>
+
+      <div className="space-y-2">
         <SectionLabel>代理店の招待URLを発行</SectionLabel>
         <Surface>
           <InvitationPanel origin={origin} />

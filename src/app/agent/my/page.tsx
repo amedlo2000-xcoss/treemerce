@@ -1,4 +1,4 @@
-import { BarChart3, ChevronRight, GitBranch, Lock, Settings, UserPlus } from "lucide-react";
+import { BarChart3, ChevronRight, GitBranch, Lock, Settings, ShoppingBag, UserPlus } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import Link from "next/link";
 
@@ -128,7 +128,8 @@ export default async function AgentMyPage() {
           </div>
 
           <Surface padded={false} className="divide-y divide-border-soft px-3">
-            <LinkRow icon={UserPlus} label="招待URLの発行・履歴" href="/agent/invitations" />
+            <LinkRow icon={UserPlus} label="招待URL・ショップの紹介リンク" href="/agent/invitations" />
+            <LinkRow icon={ShoppingBag} label="担当顧客の注文" href="/agent/orders" />
             <LinkRow icon={BarChart3} label="客層分析" href="/agent/analytics" />
             <div className="flex items-center gap-3 px-2 py-3.5 opacity-50">
               <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-surface-muted text-text-secondary">

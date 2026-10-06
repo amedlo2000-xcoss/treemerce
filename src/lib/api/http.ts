@@ -56,11 +56,38 @@ const ERROR_MAP: Record<string, { status: number; message: string }> = {
     message: "メールアドレスまたは電話番号のいずれかが必要です。",
   },
   TREEMERCE_REASON_REQUIRED: { status: 400, message: "変更理由は必須です。" },
-  TREEMERCE_NO_CHANGE: { status: 400, message: "既に同じ代理店が担当しています。" },
+  TREEMERCE_NO_CHANGE: { status: 400, message: "変更内容が現在と同じです。" },
   TREEMERCE_INVALID_INPUT: { status: 400, message: "入力内容が不正です。" },
   TREEMERCE_INVALID_PERIOD: { status: 400, message: "期間の指定が不正です。" },
   TREEMERCE_USER_NOT_FOUND: { status: 404, message: "対象ユーザーが見つかりません。" },
   TREEMERCE_CANNOT_REVOKE_SELF: { status: 400, message: "自分自身の権限は剥奪できません。" },
+
+  // 商品・注文 (0010〜0013)
+  // 原則6: 注文の拒否理由は中立に保つ。担当代理店や既存顧客かどうかは一切示さない。
+  TREEMERCE_ORDER_UNAVAILABLE: {
+    status: 409,
+    message: "ご注文を受け付けられませんでした。運営事務局までお問い合わせください。",
+  },
+  TREEMERCE_ORDERS_CLOSED: { status: 409, message: "現在ご注文を受け付けておりません。" },
+  TREEMERCE_PRODUCT_UNAVAILABLE: {
+    status: 409,
+    message: "ご指定の商品は現在お取り扱いできません。",
+  },
+  TREEMERCE_OUT_OF_STOCK: { status: 409, message: "在庫が不足している商品があります。" },
+  TREEMERCE_INVALID_ITEMS: { status: 400, message: "商品の指定が不正です。" },
+  TREEMERCE_PRODUCT_NOT_FOUND: { status: 404, message: "商品が見つかりません。" },
+  TREEMERCE_ORDER_NOT_FOUND: { status: 404, message: "注文が見つかりません。" },
+  TREEMERCE_INVALID_TRANSITION: { status: 409, message: "この状態へは変更できません。" },
+  TREEMERCE_RESTOCK_REQUIRED: {
+    status: 400,
+    message: "発送済み注文のキャンセルでは、在庫を戻すかどうかを選択してください。",
+  },
+  TREEMERCE_SETTINGS_INCOMPLETE: {
+    status: 400,
+    message: "注文受付を開始するには、振込先と販売事業者情報 (名称・所在地・電話番号) が必要です。",
+  },
+  TREEMERCE_ORDER_IMMUTABLE: { status: 403, message: "注文の帰属・金額は変更できません。" },
+  TREEMERCE_ORDER_WRITE_DENIED: { status: 403, message: "注文への直接書込みはできません。" },
 };
 
 export function failFromPostgrest(error: PostgrestError) {

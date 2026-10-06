@@ -15,8 +15,11 @@ export const ADMIN_NAV: NavItem[] = [
   { href: "/admin/agents", label: "代理店管理", icon: "users" },
   { href: "/admin/customers", label: "購入者管理", icon: "user" },
   { href: "/admin/assignments", label: "担当管理", icon: "arrow-right-left" },
+  { href: "/admin/products", label: "商品管理", icon: "package" },
+  { href: "/admin/orders", label: "注文管理", icon: "shopping-bag" },
   { href: "/admin/analytics", label: "客層分析", icon: "bar-chart" },
   { href: "/admin/audit-logs", label: "監査ログ", icon: "clipboard-list" },
+  { href: "/admin/settings", label: "ショップ設定", icon: "settings" },
 ];
 
 export function AppShell({

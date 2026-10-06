@@ -1,7 +1,7 @@
 import Link from "next/link";
 
 import { RatioBars } from "@/components/charts/RatioBars";
-import { Notice } from "@/components/ui";
+import { Notice, formatYen } from "@/components/ui";
 import { BigStat, EmptyState, MobilePageHeader, Surface } from "@/components/mobile/primitives";
 import { requireAgentPage } from "@/lib/auth/viewer";
 import { ANALYTICS_PERIODS } from "@/lib/domain/enums";
@@ -41,7 +41,8 @@ export default async function AgentAnalyticsPage({
 
       <Notice tone="info">
         傘下の他代理店が担当する購入者については、氏名・連絡先・購入明細などの個人情報は使用せず、
-        年代・性別・地域・顧客タイプ・購入カテゴリの属性値のみを匿名のまま合算しています。
+        年代・性別・地域・顧客タイプ・購入カテゴリ・購入金額帯の属性値のみを匿名のまま合算しています。
+        購入カテゴリと購入金額は、入金確認済み以降の注文 (と完了済みの購入) だけを集計し、購入者の人数で数えます。
         該当件数が {stats?.k_threshold ?? 5} 件未満のセグメントは「該当データ少数」にまとめています。
       </Notice>
 
@@ -62,7 +63,7 @@ export default async function AgentAnalyticsPage({
         ))}
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
         <Surface className="!p-4">
           <BigStat
             label="集計対象の購入者"
@@ -75,6 +76,26 @@ export default async function AgentAnalyticsPage({
             label="集計対象の代理店"
             value={stats?.scope_agent_count ?? 0}
             hint="自分を含む部分木の代理店数"
+          />
+        </Surface>
+        <Surface className="!p-4">
+          <BigStat
+            label="購入した人"
+            value={stats?.purchasing_customers ?? 0}
+            hint="入金確認済み以降"
+          />
+        </Surface>
+        <Surface className="!p-4">
+          <BigStat
+            label="売上合計"
+            value={
+              stats?.total_sales == null ? (
+                <span className="text-[16px] text-text-secondary">該当データ少数</span>
+              ) : (
+                formatYen(Number(stats.total_sales))
+              )
+            }
+            hint="購入者が少ない場合は非表示"
           />
         </Surface>
       </div>
@@ -93,7 +114,7 @@ export default async function AgentAnalyticsPage({
               key={dim.key}
               title={dim.title}
               dimension={dim.key}
-              buckets={stats[dim.key]}
+              buckets={stats[dim.key] ?? []}
             />
           ))}
         </div>

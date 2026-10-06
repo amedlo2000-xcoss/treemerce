@@ -15,6 +15,10 @@ Supabase の SQL Editor で、**番号順に**次のファイルを実行して�
 | 7 | `migrations/0007_treemerce_inviter_profile_grant_hardening.sql` | 0006 の GRANT 是正 (anon からの実行権を剥奪) |
 | 8 | `migrations/0008_treemerce_admin_console.sql` | 統括管理ページ向け: `app.is_super_admin()` 新設、担当変更/顧客更新/ステータス変更RPCを super_admin 限定に格上げ、顧客更新の理由を必須化 |
 | 9 | `migrations/0009_treemerce_inviter_profile_name_only.sql` | 0006 の RPC の返却項目を「招待元の代理店名のみ」に縮小 (public_id を返さない) |
+| 10 | `migrations/0010_treemerce_commerce_schema.sql` | 商品・注文: products / orders / order_items / order_status_history / shop_settings、帰属代理店の不変トリガ、状態遷移の検証、RLS (注文の実データは現担当のみ・紹介元は ADMIN 専用) |
+| 11 | `migrations/0011_treemerce_commerce_rpc.sql` | 商品・注文 RPC (公開ショップ・注文受付・商品管理・ステータス変更・ショップ設定・代理店向け匿名サマリ)、客層分析に購入カテゴリ/金額帯を追加 |
+| 12 | `migrations/0012_treemerce_product_images_storage.sql` | 商品画像用 Storage バケット `product-images` (公開閲覧・super_admin のみ書込み) |
+| 13 | `migrations/0013_treemerce_commerce_hardening.sql` | 支払期限切れ注文の自動キャンセル (pg_cron 毎時)、未入金注文は連絡先ごとに3件まで、発送済みキャンセルの在庫戻しは p_restock で明示、購入カテゴリを購入者人数で集計、max_quantity を在庫数と10の小さい方に |
 
 各ファイルは `begin; … commit;` で囲まれているため、途中で失敗しても中途半端な状態にはなりません。
 
@@ -46,7 +50,7 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=<anon key>
 ### ローカル (推奨 / 本番DBに触れない)
 
 PGlite (WebAssembly 版 PostgreSQL) 上に Supabase 相当の前提を作り、
-マイグレーションを適用してから CASE1〜20 (+EXTRA) を実行します。
+マイグレーションを適用してから CASE1〜35 (+EXTRA) を実行します。
 
 ```
 npm run test:db

@@ -9,6 +9,8 @@ import {
   Home,
   Network,
   Package,
+  Settings,
+  ShoppingBag,
   User,
   UserCircle,
   Users,
@@ -29,6 +31,8 @@ const ICONS = {
   "arrow-right-left": ArrowRightLeft,
   "bar-chart": BarChart3,
   "clipboard-list": ClipboardList,
+  "shopping-bag": ShoppingBag,
+  settings: Settings,
 } as const;
 
 export type IconKey = keyof typeof ICONS;
@@ -46,18 +50,28 @@ function isActive(pathname: string, item: NavItem) {
   return pathname === item.href || pathname.startsWith(`${item.href}/`);
 }
 
-/** スマホ幅 (md未満) でのみ表示する下部固定ナビ。5項目、現在地のみブランドカラー。 */
+/**
+ * スマホ幅 (md未満) でのみ表示する下部固定ナビ。現在地のみブランドカラー。
+ * 5 項目までは等幅、それを超える場合 (管理画面) は横スクロールにする。
+ */
 export function BottomNav({ items }: { items: NavItem[] }) {
   const pathname = usePathname();
+  const scrollable = items.length > 5;
 
   return (
     <nav className="pb-safe fixed inset-x-0 bottom-0 z-40 border-t border-border-soft bg-surface/95 backdrop-blur md:hidden">
-      <ul className="mx-auto flex max-w-md items-stretch justify-between">
+      <ul
+        className={
+          scrollable
+            ? "flex items-stretch overflow-x-auto [scrollbar-width:none]"
+            : "mx-auto flex max-w-md items-stretch justify-between"
+        }
+      >
         {items.map((item) => {
           const active = isActive(pathname, item);
           const Icon = ICONS[item.icon];
           return (
-            <li key={item.href} className="flex-1">
+            <li key={item.href} className={scrollable ? "w-[4.5rem] shrink-0" : "flex-1"}>
               <Link
                 href={item.href}
                 aria-current={active ? "page" : undefined}
