@@ -11,11 +11,17 @@ export type ProductInput = {
   p_sku: string | null;
   p_sort_order: number;
   p_reason: string | null;
+  p_producer_id: string | null;
+  p_content_volume: string | null;
+  p_ingredients: string | null;
+  p_best_before_note: string | null;
 };
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
  * 商品フォームの入力を treemerce_admin_upsert_product の引数に整える。
- * 値の妥当性は DB 側 (0011) でも必ず再検証される。ここは早期に分かりやすいエラーを返すため。
+ * 値の妥当性は DB 側 (0011 / 0015) でも必ず再検証される。ここは早期に分かりやすいエラーを返すため。
  */
 export function parseProductInput(
   body: Record<string, unknown> | null,
@@ -39,6 +45,11 @@ export function parseProductInput(
     : "other";
 
   const text = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : null);
+  // 0015 の追加項目: 文字列なら送る (空文字 = 空にする)、未指定なら null (= DB 側で変更しない)
+  const keepable = (v: unknown) => (typeof v === "string" ? v.trim() : null);
+
+  const producerId = text(body.producer_id);
+  if (producerId && !UUID.test(producerId)) return { error: "生産者の指定が不正です。" };
 
   return {
     input: {
@@ -52,6 +63,10 @@ export function parseProductInput(
       p_sku: text(body.sku),
       p_sort_order: sortOrder,
       p_reason: text(body.reason),
+      p_producer_id: producerId,
+      p_content_volume: keepable(body.content_volume),
+      p_ingredients: keepable(body.ingredients),
+      p_best_before_note: keepable(body.best_before_note),
     },
   };
 }

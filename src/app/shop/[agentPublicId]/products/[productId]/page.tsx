@@ -49,6 +49,11 @@ export default async function ShopProductPage({
               {PRODUCT_CATEGORY_LABELS[product.category] ?? product.category}
             </StatusPill>
             <h1 className="text-[24px] font-bold leading-tight text-text-primary">{product.name}</h1>
+            {product.producer ? (
+              <p className="text-[13px] text-text-secondary">
+                {product.producer.name} ・ {product.producer.origin}
+              </p>
+            ) : null}
             <div className="flex items-end gap-3">
               <span className="text-[28px] font-bold tabular-nums text-text-primary">
                 {formatYen(Number(product.price))}
@@ -88,6 +93,50 @@ export default async function ShopProductPage({
               </p>
             </Surface>
           ) : null}
+
+          <Surface>
+            <h2 className="mb-1 text-[14px] font-semibold text-text-primary">商品情報</h2>
+            <dl className="divide-y divide-border-soft text-[14px]">
+              {(
+                [
+                  ["価格", `${formatYen(Number(product.price))} (税込)`],
+                  ["内容量・規格", product.content_volume],
+                  ["原材料・成分", product.ingredients],
+                  ["賞味期限 / 使用期限の目安", product.best_before_note],
+                  ["生産者", product.producer?.name],
+                  ["産地", product.producer?.origin],
+                  ["発送元", product.producer?.ship_from_prefecture],
+                  ["発送の目安", product.producer?.ship_lead_time],
+                ] as [string, string | null | undefined][]
+              )
+                .filter(([, value]) => value)
+                .map(([label, value]) => (
+                  <div key={label} className="flex gap-4 py-2.5">
+                    <dt className="w-32 shrink-0 text-[13px] text-text-secondary">{label}</dt>
+                    <dd className="min-w-0 whitespace-pre-wrap break-words text-text-primary">{value}</dd>
+                  </div>
+                ))}
+            </dl>
+            {product.producer ? (
+              <p className="mt-2 text-[12px] leading-5 text-text-secondary">
+                この商品は生産者から直接お届けします。複数の生産者の商品をご注文の場合は、別々に届きます。
+              </p>
+            ) : null}
+          </Surface>
+
+          <Surface>
+            <h2 className="mb-1 text-[14px] font-semibold text-text-primary">販売者</h2>
+            <p className="text-[14px] text-text-primary">{catalog.seller_name ?? "運営事務局"}</p>
+            <p className="mt-1 text-[12px] leading-5 text-text-secondary">
+              ご注文・お支払い・お問い合わせの窓口は販売者です。代金は販売者の口座へお振込みください。
+            </p>
+            <Link
+              href="/legal/tokushoho"
+              className="mt-2 inline-block text-[13px] font-semibold text-brand hover:underline"
+            >
+              特定商取引法に基づく表記
+            </Link>
+          </Surface>
         </div>
       </div>
     </>

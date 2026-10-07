@@ -5,8 +5,12 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { BUTTON_CLASS, FIELD_CLASS, Field, FormMessage } from "@/components/ui";
-import { PRODUCT_CATEGORIES, PRODUCT_CATEGORY_LABELS } from "@/lib/domain/enums";
-import type { ProductRow } from "@/lib/domain/types";
+import {
+  PLACEHOLDER_PRODUCER_ID,
+  PRODUCT_CATEGORIES,
+  PRODUCT_CATEGORY_LABELS,
+} from "@/lib/domain/enums";
+import type { ProducerPublicRow, ProductRow } from "@/lib/domain/types";
 import { PRODUCT_IMAGE_BUCKET, productImageUrl } from "@/lib/storage";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 
@@ -21,8 +25,18 @@ const IMAGE_TYPES: Record<string, string> = {
  * 商品の登録・編集フォーム (super_admin 専用ページから使う)。
  * 画像は Storage (product-images) にランダム名で直接アップロードし、パスだけを RPC に渡す。
  * アップロードの可否は Storage の RLS (0012: super_admin のみ) でも判定される。
+ *
+ * 生産者が仮の「未設定（運営）」のまま公開する場合は警告を出す (公開自体は止めない)。
+ * 内容量・規格は公開時のみ必須 (商品ページに表示するため)。
  */
-export function ProductForm({ product }: { product?: ProductRow }) {
+export function ProductForm({
+  product,
+  producers,
+}: {
+  product?: ProductRow;
+  /** 選択肢。有効な生産者と仮の生産者 (+ 現在の生産者が無効ならそれも) */
+  producers: ProducerPublicRow[];
+}) {
   const router = useRouter();
   const [form, setForm] = useState({
     name: product?.name ?? "",
@@ -33,6 +47,10 @@ export function ProductForm({ product }: { product?: ProductRow }) {
     sort_order: product ? String(product.sort_order) : "0",
     description: product?.description ?? "",
     is_published: product?.is_published ?? false,
+    producer_id: product?.producer_id ?? PLACEHOLDER_PRODUCER_ID,
+    content_volume: product?.content_volume ?? "",
+    ingredients: product?.ingredients ?? "",
+    best_before_note: product?.best_before_note ?? "",
   });
   const [imagePath, setImagePath] = useState<string | null>(product?.image_path ?? null);
   const [reason, setReason] = useState("");
@@ -102,12 +120,18 @@ export function ProductForm({ product }: { product?: ProductRow }) {
       router.push(`/admin/products/${body.id}?created=1`);
       return;
     }
-    setDone("保存しました。変更内容は監査ログに記録されています。");
+    setDone(
+      unsetProducerOnPublish
+        ? "保存しました (生産者は「未設定（運営）」のまま公開中です)。変更内容は監査ログに記録されています。"
+        : "保存しました。変更内容は監査ログに記録されています。",
+    );
     setReason("");
     router.refresh();
   }
 
   const preview = productImageUrl(imagePath);
+  const unsetProducerOnPublish = form.is_published && form.producer_id === PLACEHOLDER_PRODUCER_ID;
+  const selectedProducer = producers.find((p) => p.id === form.producer_id);
 
   return (
     <form onSubmit={handleSubmit} className="space-y-5">
@@ -193,6 +217,26 @@ export function ProductForm({ product }: { product?: ProductRow }) {
               ))}
             </select>
           </Field>
+          <Field label="生産者" className="sm:col-span-2">
+            <select
+              value={form.producer_id}
+              onChange={(e) => set("producer_id", e.target.value)}
+              className={FIELD_CLASS}
+            >
+              {producers.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.is_placeholder
+                    ? `${p.name} ※運営から発送`
+                    : `${p.name} (${p.origin ?? "—"} / 発送元: ${p.ship_from_prefecture ?? "—"})${p.is_active ? "" : " ※無効"}`}
+                </option>
+              ))}
+            </select>
+            {selectedProducer && !selectedProducer.is_placeholder ? (
+              <span className="mt-1 block text-[12px] text-text-secondary">
+                発送目安: {selectedProducer.ship_lead_time ?? "—"} (商品ページに表示されます)
+              </span>
+            ) : null}
+          </Field>
           <Field label="SKU (任意)">
             <input value={form.sku} onChange={(e) => set("sku", e.target.value)} className={FIELD_CLASS} />
           </Field>
@@ -218,6 +262,31 @@ export function ProductForm({ product }: { product?: ProductRow }) {
               />
             </label>
           </div>
+          <Field label={form.is_published ? "内容量・規格 (公開時は必須)" : "内容量・規格"} className="sm:col-span-2">
+            <input
+              required={form.is_published}
+              value={form.content_volume}
+              onChange={(e) => set("content_volume", e.target.value)}
+              className={FIELD_CLASS}
+              placeholder="例: 500g×2袋"
+            />
+          </Field>
+          <Field label="原材料・成分 (任意)" className="sm:col-span-2">
+            <textarea
+              rows={3}
+              value={form.ingredients}
+              onChange={(e) => set("ingredients", e.target.value)}
+              className={FIELD_CLASS}
+            />
+          </Field>
+          <Field label="賞味期限 / 使用期限の目安 (任意)" className="sm:col-span-2">
+            <input
+              value={form.best_before_note}
+              onChange={(e) => set("best_before_note", e.target.value)}
+              className={FIELD_CLASS}
+              placeholder="例: 製造日から180日"
+            />
+          </Field>
           <Field label="商品説明" className="sm:col-span-2">
             <textarea
               rows={5}
@@ -228,6 +297,16 @@ export function ProductForm({ product }: { product?: ProductRow }) {
           </Field>
         </div>
       </div>
+
+      {unsetProducerOnPublish ? (
+        <p
+          role="status"
+          className="rounded-xl border border-warning/30 bg-warning-soft px-3 py-2.5 text-[13px] leading-5 text-text-primary"
+        >
+          生産者が「未設定（運営）」のまま公開します。生産者から直送する商品の場合は、公開前に正しい生産者を選んでください。
+          運営から発送する商品であればこのままで構いません (商品ページには生産者情報が表示されません)。
+        </p>
+      ) : null}
 
       <Field label="変更理由 (任意・監査ログに記録されます)">
         <input value={reason} onChange={(e) => setReason(e.target.value)} className={FIELD_CLASS} />

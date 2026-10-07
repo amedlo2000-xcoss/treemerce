@@ -11,6 +11,7 @@ import {
   Package,
   Settings,
   ShoppingBag,
+  Sprout,
   User,
   UserCircle,
   Users,
@@ -32,6 +33,7 @@ const ICONS = {
   "bar-chart": BarChart3,
   "clipboard-list": ClipboardList,
   "shopping-bag": ShoppingBag,
+  sprout: Sprout,
   settings: Settings,
 } as const;
 

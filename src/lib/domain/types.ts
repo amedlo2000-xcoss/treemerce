@@ -8,6 +8,7 @@ import type {
   Gender,
   OrderStatus,
   ProductCategory,
+  ShipmentStatus,
 } from "./enums";
 
 export type AgentRow = {
@@ -242,8 +243,49 @@ export type ProductRow = {
   is_published: boolean;
   image_path: string | null;
   sort_order: number;
+  producer_id: string;
+  content_volume: string | null;
+  ingredients: string | null;
+  best_before_note: string | null;
   created_at: string;
   updated_at: string;
+};
+
+/**
+ * producers の公開項目 (ADMIN が直接 SELECT できる列のみ)。
+ * 連絡先・発送依頼の送り先は含まれない (super_admin RPC でのみ取得)。
+ */
+export type ProducerPublicRow = {
+  id: string;
+  name: string;
+  origin: string | null;
+  ship_from_prefecture: string | null;
+  ship_lead_time: string | null;
+  is_active: boolean;
+  is_placeholder: boolean;
+};
+
+/** treemerce_admin_list_producers の 1 件 (super_admin 専用。連絡先を含む) */
+export type ProducerAdminRow = ProducerPublicRow & {
+  notify_email: string | null;
+  contact_name: string | null;
+  contact_phone: string | null;
+  contact_email: string | null;
+  note: string | null;
+  created_at: string;
+  updated_at: string;
+  product_count: number;
+  published_count: number;
+  open_shipments: number;
+};
+
+/** 公開ショップで返る生産者の公開項目 (仮の生産者の場合は null) */
+export type ShopProducer = {
+  id: string;
+  name: string;
+  origin: string;
+  ship_from_prefecture: string;
+  ship_lead_time: string;
 };
 
 /** 公開ショップ RPC (treemerce_shop_products) が返す商品。在庫の正確な数は含まれない。 */
@@ -257,11 +299,22 @@ export type ShopProduct = {
   in_stock: boolean;
   low_stock: boolean;
   max_quantity: number;
+  content_volume: string | null;
+  ingredients: string | null;
+  best_before_note: string | null;
+  producer: ShopProducer | null;
 };
 
 export type ShopCatalog =
   | { valid: false }
-  | { valid: true; accepting_orders: boolean; shipping_fee: number; products: ShopProduct[] };
+  | {
+      valid: true;
+      accepting_orders: boolean;
+      shipping_fee: number;
+      /** 販売者 (運営) の名称。shop_settings.seller_name */
+      seller_name: string | null;
+      products: ShopProduct[];
+    };
 
 /**
  * orders テーブルのうち一般代理店に列 GRANT がある列だけ。
@@ -301,6 +354,55 @@ export type OrderItemRow = {
   unit_price: number;
   quantity: number;
   amount: number;
+  product_content_volume: string | null;
+};
+
+/** treemerce_admin_get_order の shipments の 1 件 (ADMIN 専用。代理店には返らない) */
+export type OrderShipmentRow = {
+  id: string;
+  order_id: string;
+  producer_id: string;
+  producer_name: string;
+  status: ShipmentStatus;
+  carrier: string | null;
+  tracking_number: string | null;
+  shipped_on: string | null;
+  request_channel: "email" | "manual" | null;
+  requested_at: string | null;
+  request_count: number;
+  last_notify_error: string | null;
+  is_placeholder: boolean;
+  producer_active: boolean;
+  ship_lead_time: string | null;
+  has_notify_email: boolean;
+};
+
+/** treemerce_admin_shipment_request (super_admin 専用の発送依頼書) */
+export type ShipmentRequest = {
+  shipment_id: string;
+  status: ShipmentStatus;
+  request_channel: "email" | "manual" | null;
+  requested_at: string | null;
+  request_count: number;
+  order_no: string;
+  ordered_at: string;
+  paid_at: string | null;
+  producer: {
+    id: string;
+    name: string;
+    notify_email: string | null;
+    ship_lead_time: string | null;
+    is_placeholder: boolean;
+  };
+  ship_to: { name: string; postal_code: string | null; address: string; phone: string | null };
+  customer_note: string | null;
+  items: {
+    product_name: string;
+    product_sku: string | null;
+    content_volume: string | null;
+    quantity: number;
+  }[];
+  sender: { name: string | null; address: string | null; phone: string | null; email: string | null };
 };
 
 export type OrderStatusHistoryRow = {
@@ -327,7 +429,8 @@ export type AdminOrderDetail = {
   agent: AgentRef;
   referral_agent: AgentRef;
   current_agent: AgentRef;
-  items: OrderItemRow[];
+  items: (OrderItemRow & { producer_id: string | null })[];
+  shipments: OrderShipmentRow[];
   history: OrderStatusHistoryRow[];
 };
 

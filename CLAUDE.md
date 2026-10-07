@@ -59,5 +59,15 @@
 | 商流マップ | `public.treemerce_commerce_map()` |
 | コミュニティマップ | `public.treemerce_community_map()` |
 | 客層分析 | `public.treemerce_customer_demographics()` |
+| 生産者の登録・編集・無効化 | `public.treemerce_admin_upsert_producer()` (super_admin、編集は理由必須) |
+| 生産者一覧 (連絡先を含む) | `public.treemerce_admin_list_producers()` (super_admin) |
+| 商品の登録・編集 | `public.treemerce_admin_upsert_product()` (0015 で生産者・内容量などを追加) |
+| 公開商品一覧 | `public.treemerce_shop_products()` (0015 で生産者の公開項目・販売者名を追加) |
+| 注文受付 | `public.treemerce_place_order()` (0015 で生産者ごとの発送記録を作成) |
+| 注文ステータス変更 | `public.treemerce_admin_set_order_status()` (super_admin、0015 で発送記録と連動) |
+| 注文詳細 (ADMIN) | `public.treemerce_admin_get_order()` (super_admin、0015 で発送記録を追加) |
+| 発送登録・訂正 | `public.treemerce_admin_ship_shipment()` (super_admin、全発送で注文を自動で発送済み) |
+| 発送依頼書 | `public.treemerce_admin_shipment_request()` (super_admin) |
+| 発送依頼の記録 | `public.treemerce_admin_record_shipment_request()` (super_admin) |
 
 テーブルへの直接書込みは行わない。受け入れテストは `supabase/tests/acceptance_cases.sql`。

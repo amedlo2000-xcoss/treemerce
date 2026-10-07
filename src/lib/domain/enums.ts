@@ -201,3 +201,25 @@ export const AMOUNT_BAND_LABELS: Record<string, string> = {
   "50k_100k": "5万〜10万円",
   gte_100k: "10万円以上",
 };
+
+/* ------------------------------------------------------- 生産者・発送 (0014) */
+
+/** 既存商品の移行先の仮の生産者 (0014 で固定 UUID として作成)。運営が自ら発送する扱い。 */
+export const PLACEHOLDER_PRODUCER_ID = "00000000-0000-4000-8000-000000000001";
+
+export const SHIPMENT_STATUSES = [
+  "awaiting_payment",
+  "ready",
+  "requested",
+  "shipped",
+  "cancelled",
+] as const;
+export type ShipmentStatus = (typeof SHIPMENT_STATUSES)[number];
+
+export const SHIPMENT_STATUS_LABELS: Record<string, string> = {
+  awaiting_payment: "入金待ち",
+  ready: "発送依頼前",
+  requested: "発送依頼済み",
+  shipped: "発送済み",
+  cancelled: "キャンセル",
+};

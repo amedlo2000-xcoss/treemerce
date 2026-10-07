@@ -7,6 +7,7 @@ import {
   EmptyState,
   LinkButton,
   Mono,
+  Notice,
   PageHeader,
   SectionTitle,
   TD,
@@ -16,7 +17,7 @@ import {
 } from "@/components/ui";
 import { requireSuperAdminPage } from "@/lib/auth/viewer";
 import { PRODUCT_CATEGORY_LABELS } from "@/lib/domain/enums";
-import type { ProductRow } from "@/lib/domain/types";
+import type { ProducerPublicRow, ProductRow } from "@/lib/domain/types";
 import { productImageUrl } from "@/lib/storage";
 
 /** 商品管理 (super_admin 専用)。非公開の商品も含めて全件を表示する。 */
@@ -25,10 +26,13 @@ export default async function AdminProductsPage() {
 
   const { data } = await supabase
     .from("products")
-    .select("*")
+    .select("*, producer:producers ( id, name, is_active, is_placeholder )")
     .order("sort_order", { ascending: true })
     .order("created_at", { ascending: true });
-  const products = (data ?? []) as ProductRow[];
+  const products = (data ?? []) as (ProductRow & {
+    producer: Pick<ProducerPublicRow, "id" | "name" | "is_active" | "is_placeholder"> | null;
+  })[];
+  const unsetPublished = products.filter((p) => p.is_published && p.producer?.is_placeholder).length;
 
   return (
     <>
@@ -43,12 +47,19 @@ export default async function AdminProductsPage() {
         }
       />
 
+      {unsetPublished > 0 ? (
+        <Notice tone="warning">
+          生産者が「未設定（運営）」のまま公開中の商品が {unsetPublished} 件あります。
+          生産者から直送する商品は、編集画面で正しい生産者を選んでください (運営から発送する商品はそのままで構いません)。
+        </Notice>
+      ) : null}
+
       <SectionTitle count={products.length}>商品一覧</SectionTitle>
 
       {products.length === 0 ? (
         <EmptyState title="商品がまだありません" description="「商品を登録」から追加してください。" />
       ) : (
-        <DataTable headers={["", "商品名", "カテゴリ", "価格", "在庫", "公開", "更新日時", ""]}>
+        <DataTable headers={["", "商品名", "生産者", "カテゴリ", "価格", "在庫", "公開", "更新日時", ""]}>
           {products.map((p) => {
             const image = productImageUrl(p.image_path);
             return (
@@ -72,6 +83,32 @@ export default async function AdminProductsPage() {
                       <Mono>{p.sku}</Mono>
                     </div>
                   ) : null}
+                  {p.is_published && !p.content_volume ? (
+                    <div className="mt-1">
+                      <Badge tone="amber">内容量未入力</Badge>
+                    </div>
+                  ) : null}
+                </td>
+                <td className={TD}>
+                  {p.producer?.is_placeholder ? (
+                    <>
+                      <span>{p.producer.name}</span>
+                      {p.is_published ? (
+                        <div className="mt-1">
+                          <Badge tone="amber">生産者未設定のまま公開中</Badge>
+                        </div>
+                      ) : null}
+                    </>
+                  ) : (
+                    <>
+                      <span className="text-text-primary">{p.producer?.name ?? "—"}</span>
+                      {p.producer && !p.producer.is_active ? (
+                        <div className="mt-1">
+                          <Badge tone="red">生産者が無効 (ショップ非表示)</Badge>
+                        </div>
+                      ) : null}
+                    </>
+                  )}
                 </td>
                 <td className={TD}>{PRODUCT_CATEGORY_LABELS[p.category] ?? p.category}</td>
                 <td className={`${TD} font-semibold tabular-nums text-text-primary`}>

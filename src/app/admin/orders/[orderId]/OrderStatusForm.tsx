@@ -9,8 +9,20 @@ import { ORDER_NEXT_STATUSES, ORDER_STATUS_LABELS, type OrderStatus } from "@/li
 /**
  * 注文ステータスの変更 (super_admin)。選べるのは DB の遷移表と同じ次の状態のみ。
  * 発送済みからのキャンセルでは「在庫を戻すか」を必ず選ばせる (0013 の p_restock)。
+ * 一部の生産者が発送済みの注文のキャンセルも同様 (0015)。未発送分の在庫は常に戻る。
+ * 実在の生産者の未発送分がある間は「発送済み」にできない (生産者ごとの発送登録で自動的に変わる)。
  */
-export function OrderStatusForm({ orderId, current }: { orderId: string; current: OrderStatus }) {
+export function OrderStatusForm({
+  orderId,
+  current,
+  hasShippedShipments = false,
+  pendingRealShipments = 0,
+}: {
+  orderId: string;
+  current: OrderStatus;
+  hasShippedShipments?: boolean;
+  pendingRealShipments?: number;
+}) {
   const router = useRouter();
   const options = ORDER_NEXT_STATUSES[current];
   const [status, setStatus] = useState<OrderStatus | "">(options[0] ?? "");
@@ -28,7 +40,8 @@ export function OrderStatusForm({ orderId, current }: { orderId: string; current
     );
   }
 
-  const needsRestockChoice = current === "shipped" && status === "cancelled";
+  const needsRestockChoice = (current === "shipped" || hasShippedShipments) && status === "cancelled";
+  const shippedBlocked = status === "shipped" && pendingRealShipments > 0;
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
@@ -80,14 +93,28 @@ export function OrderStatusForm({ orderId, current }: { orderId: string; current
         ))}
       </div>
 
-      {status === "cancelled" && current !== "shipped" ? (
+      {status === "cancelled" && !needsRestockChoice ? (
         <p className="text-[12px] text-text-secondary">未発送の注文をキャンセルすると、在庫は自動で戻ります。</p>
+      ) : null}
+
+      {shippedBlocked ? (
+        <p className="rounded-xl border border-warning/30 bg-warning-soft px-3 py-2.5 text-[13px] leading-5 text-text-primary">
+          未発送の生産者が {pendingRealShipments} 件あります。下の「生産者ごとの発送」で発送登録を行うと、
+          全生産者の発送完了時に自動で「発送済み」になります。
+        </p>
+      ) : null}
+
+      {status === "cancelled" && current !== "shipped" && hasShippedShipments ? (
+        <p className="text-[12px] leading-5 text-text-secondary">
+          一部の生産者は発送済みです。未発送の生産者の分は在庫が自動で戻り、発送記録もキャンセルになります。
+          依頼済みの生産者には、発送の取りやめを別途ご連絡ください。
+        </p>
       ) : null}
 
       {needsRestockChoice ? (
         <fieldset className="space-y-2 rounded-xl border border-warning/30 bg-warning-soft p-3">
           <legend className="px-1 text-[12px] font-semibold text-text-primary">
-            発送済みのため、在庫を戻すかを選んでください (必須)
+            発送済みの商品の在庫を戻すかを選んでください (必須)
           </legend>
           {[
             ["yes", "在庫を戻す (返品された商品を再販売できる)"],
@@ -124,7 +151,7 @@ export function OrderStatusForm({ orderId, current }: { orderId: string; current
 
       <button
         type="submit"
-        disabled={pending || !status || !reason.trim() || (needsRestockChoice && !restock)}
+        disabled={pending || !status || !reason.trim() || (needsRestockChoice && !restock) || shippedBlocked}
         className={BUTTON_CLASS}
       >
         {pending ? "変更中…" : "ステータスを変更する"}

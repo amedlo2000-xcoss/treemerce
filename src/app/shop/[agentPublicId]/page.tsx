@@ -44,6 +44,14 @@ export default async function ShopPage({
                   <span className="line-clamp-2 text-[14px] font-semibold leading-5 text-text-primary group-hover:text-brand">
                     {p.name}
                   </span>
+                  {p.producer ? (
+                    <span className="line-clamp-1 text-[11px] text-text-secondary">
+                      {p.producer.name} ・ {p.producer.origin}
+                    </span>
+                  ) : null}
+                  {p.content_volume ? (
+                    <span className="line-clamp-1 text-[11px] text-text-secondary">{p.content_volume}</span>
+                  ) : null}
                   <span className="mt-auto flex items-end justify-between gap-2 pt-1">
                     <span className="text-[16px] font-bold tabular-nums text-text-primary">
                       {formatYen(Number(p.price))}

@@ -18,7 +18,12 @@ import {
   formatYen,
 } from "@/components/ui";
 import { requireSuperAdminPage } from "@/lib/auth/viewer";
-import { ORDER_STATUSES, ORDER_STATUS_LABELS, type OrderStatus } from "@/lib/domain/enums";
+import {
+  ORDER_STATUSES,
+  ORDER_STATUS_LABELS,
+  type OrderStatus,
+  type ShipmentStatus,
+} from "@/lib/domain/enums";
 
 type Row = {
   id: string;
@@ -32,7 +37,16 @@ type Row = {
   contact_phone: string | null;
   customer: { id: string; full_name: string } | null;
   agent: { id: string; public_id: string; display_name: string } | null;
+  shipments: { status: ShipmentStatus }[];
 };
+
+/** 入金確認済みの注文の生産者ごとの発送の進み具合 (例: 発送 1/2)。旧注文・対象外は null。 */
+function shipmentProgress(o: Row) {
+  if (o.status !== "payment_confirmed" || !o.shipments?.length) return null;
+  const active = o.shipments.filter((s) => s.status !== "cancelled");
+  const shipped = active.filter((s) => s.status === "shipped").length;
+  return `発送 ${shipped}/${active.length}`;
+}
 
 /**
  * 注文管理 (super_admin 専用)。全注文を横断して確認する。
@@ -54,7 +68,8 @@ export default async function AdminOrdersPage({
     .select(
       `id, order_no, status, total, ordered_at, payment_due_date, ship_name, contact_email, contact_phone,
        customer:customers ( id, full_name ),
-       agent:agents!orders_agent_id_fkey ( id, public_id, display_name )`,
+       agent:agents!orders_agent_id_fkey ( id, public_id, display_name ),
+       shipments:order_shipments ( status )`,
     )
     .order("ordered_at", { ascending: false })
     .limit(200);
@@ -166,6 +181,9 @@ export default async function AdminOrdersPage({
               </td>
               <td className={TD}>
                 <OrderStatusBadge status={o.status} />
+                {shipmentProgress(o) ? (
+                  <div className="mt-1 whitespace-nowrap text-[12px] tabular-nums">{shipmentProgress(o)}</div>
+                ) : null}
               </td>
               <td className={`${TD} whitespace-nowrap`}>
                 {o.status === "received" ? formatDate(o.payment_due_date) : "—"}

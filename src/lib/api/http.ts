@@ -88,13 +88,45 @@ const ERROR_MAP: Record<string, { status: number; message: string }> = {
   },
   TREEMERCE_ORDER_IMMUTABLE: { status: 403, message: "注文の帰属・金額は変更できません。" },
   TREEMERCE_ORDER_WRITE_DENIED: { status: 403, message: "注文への直接書込みはできません。" },
+
+  // 生産者・発送 (0014〜0015)
+  TREEMERCE_PRODUCER_NOT_FOUND: { status: 404, message: "生産者が見つかりません。" },
+  TREEMERCE_PRODUCER_INACTIVE: { status: 400, message: "無効な生産者は選べません。" },
+  TREEMERCE_PRODUCER_PLACEHOLDER: {
+    status: 400,
+    message: "仮の生産者「未設定（運営）」は編集できません。",
+  },
+  TREEMERCE_SHIPMENT_NOT_FOUND: { status: 404, message: "発送記録が見つかりません。" },
+  TREEMERCE_SHIPMENT_NOT_READY: {
+    status: 409,
+    message: "入金確認前またはキャンセル済みのため、発送依頼書は作成できません。",
+  },
+  TREEMERCE_SHIPMENT_INVALID_STATE: { status: 409, message: "この発送記録は現在の状態では操作できません。" },
+  TREEMERCE_SHIPMENTS_PENDING: {
+    status: 409,
+    message: "未発送の生産者があります。生産者ごとの発送登録を完了してください。",
+  },
 };
+
+/**
+ * DB 側で自前に raise した "TREEMERCE_XXX: 理由" (1 行のみ) から理由部分だけを取り出す。
+ * メッセージが TREEMERCE_ で始まらないもの (制約違反・SQL エラー等) や複数行のものは null を返し、
+ * 呼び出し側で汎用メッセージにする。制約名・テーブル名・SQL の内容を画面に出さないため。
+ */
+function detailMessage(message: string | undefined, code: string): string | null {
+  const match = message?.match(new RegExp(`^${code}:[ \\t]*([^\\r\\n]+)$`));
+  return match?.[1]?.trim() || null;
+}
 
 export function failFromPostgrest(error: PostgrestError) {
   const raw = `${error.message ?? ""} ${error.details ?? ""} ${error.hint ?? ""}`;
 
   for (const [code, mapped] of Object.entries(ERROR_MAP)) {
-    if (raw.includes(code)) return fail(code, mapped.message, mapped.status);
+    if (raw.includes(code)) {
+      // TREEMERCE_INVALID_INPUT は DB 側の具体的な理由 (「産地は必須です」等) をそのまま返す
+      const detail = code === "TREEMERCE_INVALID_INPUT" ? detailMessage(error.message, code) : null;
+      return fail(code, detail ?? mapped.message, mapped.status);
+    }
   }
 
   if (error.code === "42501") {

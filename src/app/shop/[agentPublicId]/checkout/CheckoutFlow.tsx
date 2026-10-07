@@ -116,6 +116,8 @@ export function CheckoutFlow({
   const unavailableCount = lines.length - items.length;
   const subtotal = items.reduce((sum, x) => sum + Number(x.product.price) * x.line.quantity, 0);
   const overStock = items.some((x) => !x.product.in_stock || x.line.quantity > x.product.max_quantity);
+  // 発送元の数 (生産者ごと。生産者情報の無い商品は運営からの 1 口にまとめる)
+  const shipFromCount = new Set(items.map((x) => x.product.producer?.id ?? "operator")).size;
 
   const contactOk = form.email.trim() !== "" || form.phone.trim() !== "";
   const customerOk = form.full_name.trim() !== "" && contactOk;
@@ -279,7 +281,14 @@ export function CheckoutFlow({
                 <ProductImage path={product.image_path} className="h-16 w-16 shrink-0 rounded-xl" />
                 <div className="min-w-0 flex-1 space-y-2">
                   <div className="flex items-start justify-between gap-2">
-                    <p className="text-[14px] font-semibold leading-5 text-text-primary">{product.name}</p>
+                    <div className="min-w-0">
+                      <p className="text-[14px] font-semibold leading-5 text-text-primary">{product.name}</p>
+                      {product.producer ? (
+                        <p className="text-[12px] text-text-secondary">
+                          {product.producer.name} ・ {product.producer.ship_from_prefecture}から発送
+                        </p>
+                      ) : null}
+                    </div>
                     <button
                       type="button"
                       aria-label="カートから削除"
@@ -340,6 +349,12 @@ export function CheckoutFlow({
               </div>
             </div>
           </Surface>
+          {shipFromCount > 1 ? (
+            <p className="px-1 text-[12px] leading-5 text-text-secondary">
+              ご注文の商品は生産者ごとに産地から直接お届けするため、{shipFromCount} 個に分かれて届きます。
+              送料は 1 回のご注文につき {formatYen(shippingFee)} のままです。
+            </p>
+          ) : null}
           <PrimaryButton
             type="button"
             disabled={!acceptingOrders || items.length === 0 || overStock}

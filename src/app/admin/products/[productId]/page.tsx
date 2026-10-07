@@ -5,6 +5,7 @@ import { requireSuperAdminPage } from "@/lib/auth/viewer";
 import type { ProductRow } from "@/lib/domain/types";
 
 import { ProductForm } from "../ProductForm";
+import { loadProducerOptions } from "../producer-options";
 
 export default async function AdminProductEditPage({
   params,
@@ -20,6 +21,7 @@ export default async function AdminProductEditPage({
   const { data } = await supabase.from("products").select("*").eq("id", productId).maybeSingle();
   const product = data as ProductRow | null;
   if (!product) notFound();
+  const producers = await loadProducerOptions(supabase, product.producer_id);
 
   return (
     <>
@@ -30,7 +32,7 @@ export default async function AdminProductEditPage({
       />
       {created ? <Notice tone="info">商品を登録しました。</Notice> : null}
       <Card>
-        <ProductForm key={product.updated_at} product={product} />
+        <ProductForm key={product.updated_at} product={product} producers={producers} />
       </Card>
     </>
   );

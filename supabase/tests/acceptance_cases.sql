@@ -2235,10 +2235,552 @@ end $$;
 
 reset role;
 
+-- ============================================================================
+-- 生産者・発送 (0014 / 0015) の準備:
+--   生産者 X (送り先メールあり) / Y (送り先メールなし) と、その商品 px / py を登録する。
+-- ============================================================================
+
+select set_config('request.jwt.claims',
+  '{"sub":"00000000-0000-4000-8000-000000000007","role":"authenticated"}', true);
+set local role authenticated;
+
+do $$
+declare v_r jsonb;
+begin
+  v_r := public.treemerce_admin_upsert_producer(
+    'テスト農園X', '静岡県 牧之原市', '静岡県', '入金確認後3営業日以内',
+    'order-x@farm.test', '農園 太郎', '0548-00-0000', 'contact-x@farm.test', '取引条件メモ');
+  perform set_config('tm.prod_x', v_r ->> 'id', true);
+  v_r := public.treemerce_admin_upsert_producer(
+    'テスト牧場Y', '北海道 十勝', '北海道', '入金確認後5営業日以内');
+  perform set_config('tm.prod_y', v_r ->> 'id', true);
+
+  v_r := public.treemerce_admin_upsert_product('テスト緑茶', 2000, 50, true, 'food',
+    p_producer_id => current_setting('tm.prod_x')::uuid, p_content_volume => '100g×2袋',
+    p_ingredients => '緑茶 (静岡県産)');
+  perform set_config('tm.px', v_r ->> 'id', true);
+  v_r := public.treemerce_admin_upsert_product('テストチーズ', 3000, 50, true, 'food',
+    p_producer_id => current_setting('tm.prod_y')::uuid, p_content_volume => '200g',
+    p_best_before_note => '製造日から60日');
+  perform set_config('tm.py', v_r ->> 'id', true);
+end $$;
+
+reset role;
+
+-- 代理店 B の紹介リンクから新規顧客が px・py を注文 (担当・帰属は B)
+set local role anon;
+do $$
+begin
+  perform public.treemerce_place_order(current_setting('tm.agent_b_public'),
+    jsonb_build_array(
+      jsonb_build_object('product_id', current_setting('tm.px'), 'quantity', 1),
+      jsonb_build_object('product_id', current_setting('tm.py'), 'quantity', 1)),
+    '直送花子', '東京都テスト区1-1', 'tm-test-case36@treemerce.test', '090-3636-3636');
+end $$;
+reset role;
+
+-- ============================================================================
+-- CASE36 : order_items は列 GRANT。現担当の代理店は許可列 (商品名・数量など) を読めるが、
+--          producer_id は読めない。生産者マスタ・発送記録・発送依頼書には一切届かない。
+-- ============================================================================
+
+select set_config('request.jwt.claims',
+  '{"sub":"00000000-0000-4000-8000-000000000003","role":"authenticated"}', true);
+set local role authenticated;
+
+do $$
+declare v_ok boolean; v_cnt int; v_order uuid; v_names text;
+begin
+  select id into v_order from public.orders where contact_email = 'tm-test-case36@treemerce.test';
+  if v_order is null then raise exception 'CASE36 FAILED: 現担当 B が自分の担当顧客の注文を読めない'; end if;
+
+  -- 許可された列は読める
+  select count(*), string_agg(product_name || ':' || quantity::text || ':' || coalesce(product_content_volume, ''), ',')
+    into v_cnt, v_names
+  from public.order_items where order_id = v_order;
+  if v_cnt <> 2 or v_names not like '%テスト緑茶:1:100g×2袋%' then
+    raise exception 'CASE36 FAILED: 許可列 (商品名・数量・内容量) が読めない (% / %)', v_cnt, v_names;
+  end if;
+
+  -- producer_id は列 GRANT が無いため拒否される
+  v_ok := false;
+  begin perform producer_id from public.order_items where order_id = v_order;
+  exception when insufficient_privilege then v_ok := true; end;
+  if not v_ok then raise exception 'CASE36 FAILED: 代理店が order_items.producer_id を読めた'; end if;
+
+  v_ok := false;
+  begin perform * from public.order_items where order_id = v_order;
+  exception when insufficient_privilege then v_ok := true; end;
+  if not v_ok then raise exception 'CASE36 FAILED: 代理店が order_items を select * で読めた'; end if;
+
+  -- 発送記録・生産者マスタは 0 行、連絡先列は権限なし
+  select count(*) into v_cnt from public.order_shipments;
+  if v_cnt <> 0 then raise exception 'CASE36 FAILED: 代理店に発送記録が % 行見えた', v_cnt; end if;
+  select count(*) into v_cnt from public.producers;
+  if v_cnt <> 0 then raise exception 'CASE36 FAILED: 代理店に生産者マスタが % 行見えた', v_cnt; end if;
+  v_ok := false;
+  begin perform notify_email from public.producers;
+  exception when insufficient_privilege then v_ok := true; end;
+  if not v_ok then raise exception 'CASE36 FAILED: 代理店が生産者の送り先メール列に届いた'; end if;
+
+  -- 発送依頼書・発送管理・生産者管理の RPC は拒否
+  v_ok := false;
+  begin
+    perform public.treemerce_admin_shipment_request(
+      (select '00000000-0000-0000-0000-000000000000'::uuid));
+  exception when insufficient_privilege then v_ok := true; end;
+  if not v_ok then raise exception 'CASE36 FAILED: 代理店が発送依頼書 RPC を実行できた'; end if;
+
+  v_ok := false;
+  begin perform public.treemerce_admin_list_producers();
+  exception when insufficient_privilege then v_ok := true; end;
+  if not v_ok then raise exception 'CASE36 FAILED: 代理店が生産者一覧 RPC を実行できた'; end if;
+
+  raise notice 'CASE36 OK: 代理店は order_items の許可列のみ読め、producer_id・select *・生産者マスタ・発送記録・依頼書には届かない';
+end $$;
+
+reset role;
+
+-- ============================================================================
+-- CASE37 : 生産者マスタの操作は super_admin のみ。編集は理由必須、仮の生産者は編集不可。
+--          一般 admin は公開項目のみ参照でき、連絡先列には届かない。
+--          監査ログには連絡先・送り先メールの値を書かない (変更の有無のみ)。
+-- ============================================================================
+
+select set_config('request.jwt.claims',
+  '{"sub":"00000000-0000-4000-8000-000000000008","role":"authenticated"}', true);
+set local role authenticated;
+
+do $$
+declare v_ok boolean; v_cnt int;
+begin
+  v_ok := false;
+  begin
+    perform public.treemerce_admin_upsert_producer('一般adminの生産者', '産地', '東京都', '3日以内');
+  exception when insufficient_privilege then v_ok := true; end;
+  if not v_ok then raise exception 'CASE37 FAILED: 一般 admin が生産者を登録できた'; end if;
+
+  v_ok := false;
+  begin perform public.treemerce_admin_list_producers();
+  exception when insufficient_privilege then v_ok := true; end;
+  if not v_ok then raise exception 'CASE37 FAILED: 一般 admin が生産者の連絡先一覧を取得できた'; end if;
+
+  select count(*) into v_cnt from public.producers where name in ('テスト農園X', 'テスト牧場Y');
+  if v_cnt <> 2 then raise exception 'CASE37 FAILED: 一般 admin が生産者の公開項目を読めない'; end if;
+
+  v_ok := false;
+  begin perform contact_phone from public.producers;
+  exception when insufficient_privilege then v_ok := true; end;
+  if not v_ok then raise exception 'CASE37 FAILED: 一般 admin が生産者の連絡先列を読めた'; end if;
+
+  -- support / admin は発送記録 (状況) を参照できる
+  select count(*) into v_cnt from public.order_shipments s
+  join public.orders o on o.id = s.order_id
+  where o.contact_email = 'tm-test-case36@treemerce.test';
+  if v_cnt <> 2 then raise exception 'CASE37 FAILED: 一般 admin が発送記録を参照できない (%)', v_cnt; end if;
+end $$;
+
+reset role;
+
+select set_config('request.jwt.claims',
+  '{"sub":"00000000-0000-4000-8000-000000000007","role":"authenticated"}', true);
+set local role authenticated;
+
+do $$
+declare v_ok boolean; v_cnt int; v_list jsonb; v_audit public.admin_audit_logs%rowtype;
+begin
+  -- 編集は理由必須
+  v_ok := false;
+  begin
+    perform public.treemerce_admin_upsert_producer('テスト農園X', '静岡県 牧之原市', '静岡県',
+      '入金確認後3営業日以内', p_producer_id => current_setting('tm.prod_x')::uuid);
+  exception when invalid_parameter_value then v_ok := true; end;
+  if not v_ok then raise exception 'CASE37 FAILED: 理由なしで生産者を編集できた'; end if;
+
+  -- 仮の生産者は編集不可
+  v_ok := false;
+  begin
+    perform public.treemerce_admin_upsert_producer('書き換え', '産地', '東京都', '3日以内',
+      p_producer_id => '00000000-0000-4000-8000-000000000001'::uuid, p_reason => '試験');
+  exception when invalid_parameter_value then v_ok := true; end;
+  if not v_ok then raise exception 'CASE37 FAILED: 仮の生産者を編集できた'; end if;
+
+  -- 不正な都道府県は拒否
+  v_ok := false;
+  begin
+    perform public.treemerce_admin_upsert_producer('不正県の生産者', '産地', 'テスト県', '3日以内');
+  exception when invalid_parameter_value then v_ok := true; end;
+  if not v_ok then raise exception 'CASE37 FAILED: 不正な都道府県で登録できた'; end if;
+
+  -- テーブルへの直接書込みは super_admin でも不可 (RPC 経由のみ)
+  v_ok := false;
+  begin
+    update public.producers set name = '直接書換' where id = current_setting('tm.prod_x')::uuid;
+  exception when insufficient_privilege then v_ok := true; end;
+  if not v_ok then raise exception 'CASE37 FAILED: producers を直接 UPDATE できた'; end if;
+
+  -- 送り先メールを変更 (理由あり)
+  perform public.treemerce_admin_upsert_producer('テスト農園X', '静岡県 牧之原市', '静岡県',
+    '入金確認後3営業日以内', 'order-x2@farm.test', '農園 太郎', '0548-00-0000',
+    'contact-x@farm.test', '取引条件メモ', true, current_setting('tm.prod_x')::uuid, '送り先メールの変更');
+
+  select * into v_audit from public.admin_audit_logs
+  where target_table = 'producers' and target_id = current_setting('tm.prod_x')::uuid
+    and action = 'producer.update'
+  order by created_at desc limit 1;
+  if v_audit.id is null or (v_audit.after_state ->> 'private_fields_changed')::boolean is not true
+     or v_audit.reason <> '送り先メールの変更' then
+    raise exception 'CASE37 FAILED: 生産者の変更が監査ログに残っていない / 変更の有無が記録されていない';
+  end if;
+
+  select count(*) into v_cnt from public.admin_audit_logs
+  where target_table = 'producers'
+    and (coalesce(before_state::text, '') || coalesce(after_state::text, '')) ~ '(farm\.test|0548-00-0000|農園 太郎|取引条件メモ)';
+  if v_cnt <> 0 then
+    raise exception 'CASE37 FAILED: 監査ログに生産者の連絡先・送り先メール・メモの値が % 件残った', v_cnt;
+  end if;
+
+  -- super_admin の一覧 RPC では連絡先が見える
+  v_list := public.treemerce_admin_list_producers(current_setting('tm.prod_x')::uuid);
+  if v_list -> 0 ->> 'notify_email' is distinct from 'order-x2@farm.test' then
+    raise exception 'CASE37 FAILED: super_admin の一覧で送り先メールが取得できない (%)', v_list;
+  end if;
+
+  raise notice 'CASE37 OK: 生産者の操作は super_admin のみ・編集は理由必須・仮の生産者は不可・直接書込み不可・監査ログに連絡先の値は残らない';
+end $$;
+
+reset role;
+
+-- ============================================================================
+-- CASE38 : 公開ショップには生産者の公開項目 (名前・産地・発送元・発送目安) と販売者名だけが出る。
+--          連絡先・送り先メールは出ない。仮の生産者の商品は producer = null。
+--          生産者を無効にすると、その商品は一覧から消え、注文もできない。
+-- ============================================================================
+
+set local role anon;
+
+do $$
+declare v_res jsonb; v_px jsonb; v_p4 jsonb;
+begin
+  v_res := public.treemerce_shop_products(current_setting('tm.agent_b_public'));
+  select e into v_px from jsonb_array_elements(v_res -> 'products') e where e ->> 'id' = current_setting('tm.px');
+  select e into v_p4 from jsonb_array_elements(v_res -> 'products') e where e ->> 'id' = current_setting('tm.p4');
+
+  if v_px -> 'producer' ->> 'name' is distinct from 'テスト農園X'
+     or v_px -> 'producer' ->> 'origin' is distinct from '静岡県 牧之原市'
+     or v_px -> 'producer' ->> 'ship_from_prefecture' is distinct from '静岡県'
+     or v_px -> 'producer' ->> 'ship_lead_time' is distinct from '入金確認後3営業日以内'
+     or v_px ->> 'content_volume' is distinct from '100g×2袋' then
+    raise exception 'CASE38 FAILED: 商品の生産者・内容量が返らない (%)', v_px;
+  end if;
+  if v_res::text ~ '(farm\.test|0548-00-0000|農園 太郎|取引条件メモ)' then
+    raise exception 'CASE38 FAILED: 公開ショップに生産者の連絡先・送り先メール・メモが含まれる';
+  end if;
+  if v_p4 is null or jsonb_typeof(v_p4 -> 'producer') <> 'null' then
+    raise exception 'CASE38 FAILED: 仮の生産者の商品で producer が null でない (%)', v_p4;
+  end if;
+  if v_res ->> 'seller_name' is distinct from 'テスト運営株式会社' then
+    raise exception 'CASE38 FAILED: 販売者名が返らない';
+  end if;
+end $$;
+
+reset role;
+
+select set_config('request.jwt.claims',
+  '{"sub":"00000000-0000-4000-8000-000000000007","role":"authenticated"}', true);
+set local role authenticated;
+do $$
+declare v_r jsonb;
+begin
+  v_r := public.treemerce_admin_upsert_producer('テスト牧場Y', '北海道 十勝', '北海道',
+    '入金確認後5営業日以内', p_is_active => false,
+    p_producer_id => current_setting('tm.prod_y')::uuid, p_reason => '一時休止');
+  if (v_r ->> 'open_shipments')::int <> 1 then
+    raise exception 'CASE38 FAILED: 無効化時に未発送件数が返らない (%)', v_r;
+  end if;
+end $$;
+reset role;
+
+set local role anon;
+do $$
+declare v_res jsonb; v_ok boolean;
+begin
+  v_res := public.treemerce_shop_products(current_setting('tm.agent_b_public'));
+  if v_res::text like '%' || current_setting('tm.py') || '%' then
+    raise exception 'CASE38 FAILED: 無効な生産者の商品が公開一覧に出た';
+  end if;
+
+  v_ok := false;
+  begin
+    perform public.treemerce_place_order(current_setting('tm.agent_b_public'),
+      jsonb_build_array(jsonb_build_object('product_id', current_setting('tm.py'), 'quantity', 1)),
+      '休止注文', '東京都テスト区1-1', 'tm-test-case38@treemerce.test');
+  exception when invalid_parameter_value then v_ok := true; end;
+  if not v_ok then raise exception 'CASE38 FAILED: 無効な生産者の商品を注文できた'; end if;
+end $$;
+reset role;
+
+select set_config('request.jwt.claims',
+  '{"sub":"00000000-0000-4000-8000-000000000007","role":"authenticated"}', true);
+set local role authenticated;
+do $$
+begin
+  perform public.treemerce_admin_upsert_producer('テスト牧場Y', '北海道 十勝', '北海道',
+    '入金確認後5営業日以内', p_is_active => true,
+    p_producer_id => current_setting('tm.prod_y')::uuid, p_reason => '再開');
+  raise notice 'CASE38 OK: ショップには生産者の公開項目と販売者名のみ・連絡先は出ない・仮の生産者は null・無効な生産者の商品は非表示で注文不可';
+end $$;
+reset role;
+
+-- ============================================================================
+-- CASE39 : 複数生産者の注文は生産者ごとに発送記録ができる。入金確認で依頼可能になり、
+--          依頼書はその生産者の分だけ (代理店・顧客メール・価格を含まない)。
+--          実在の生産者の未発送分がある間は手動で「発送済み」にできない。
+--          発送登録・訂正は監査ログに残り、帰属代理店は変わらない。
+-- ============================================================================
+
+set local role anon;
+do $$
+begin
+  perform public.treemerce_place_order(current_setting('tm.agent_b_public'),
+    jsonb_build_array(
+      jsonb_build_object('product_id', current_setting('tm.px'), 'quantity', 2),
+      jsonb_build_object('product_id', current_setting('tm.py'), 'quantity', 1),
+      jsonb_build_object('product_id', current_setting('tm.p4'), 'quantity', 1)),
+    '直送三郎', '大阪府テスト市1-1', 'tm-test-case39@treemerce.test', '090-3939-3939',
+    '530-0001', p_note => '置き配希望');
+end $$;
+reset role;
+
+select set_config('request.jwt.claims',
+  '{"sub":"00000000-0000-4000-8000-000000000007","role":"authenticated"}', true);
+set local role authenticated;
+
+do $$
+declare
+  v_o uuid; v_agent uuid; v_detail jsonb; v_sx uuid; v_sy uuid; v_sp uuid;
+  v_req jsonb; v_ok boolean; v_cnt int; v_res jsonb;
+  v_today date := (now() at time zone 'Asia/Tokyo')::date;
+begin
+  select id, agent_id into v_o, v_agent from public.orders where contact_email = 'tm-test-case39@treemerce.test';
+  select id into v_sx from public.order_shipments where order_id = v_o and producer_id = current_setting('tm.prod_x')::uuid;
+  select id into v_sy from public.order_shipments where order_id = v_o and producer_id = current_setting('tm.prod_y')::uuid;
+  select id into v_sp from public.order_shipments
+  where order_id = v_o and producer_id = '00000000-0000-4000-8000-000000000001'::uuid;
+
+  select count(*) into v_cnt from public.order_shipments where order_id = v_o and status = 'awaiting_payment';
+  if v_cnt <> 3 or v_sx is null or v_sy is null or v_sp is null then
+    raise exception 'CASE39 FAILED: 生産者ごとの発送記録 (3件・入金待ち) が作られていない (%)', v_cnt;
+  end if;
+
+  v_detail := public.treemerce_admin_get_order(v_o);
+  if exists (select 1 from jsonb_array_elements(v_detail -> 'items') e where e ->> 'producer_id' is null)
+     or jsonb_array_length(v_detail -> 'shipments') <> 3 then
+    raise exception 'CASE39 FAILED: 明細に生産者のスナップショットが無い / 注文詳細に発送記録が無い';
+  end if;
+
+  -- 入金確認前は依頼書を作れない
+  v_ok := false;
+  begin perform public.treemerce_admin_shipment_request(v_sx);
+  exception when invalid_parameter_value then v_ok := true; end;
+  if not v_ok then raise exception 'CASE39 FAILED: 入金確認前に発送依頼書が作れた'; end if;
+
+  perform public.treemerce_admin_set_order_status(v_o, 'payment_confirmed', '入金を確認');
+  select count(*) into v_cnt from public.order_shipments where order_id = v_o and status = 'ready';
+  if v_cnt <> 3 then raise exception 'CASE39 FAILED: 入金確認で発送記録が依頼可能にならない (%)', v_cnt; end if;
+
+  -- 実在の生産者が未発送のうちは手動で発送済みにできない
+  v_ok := false;
+  begin perform public.treemerce_admin_set_order_status(v_o, 'shipped', '発送');
+  exception when invalid_parameter_value then v_ok := true; end;
+  if not v_ok then raise exception 'CASE39 FAILED: 生産者が未発送なのに手動で発送済みにできた'; end if;
+
+  -- 依頼書は X の分だけ。代理店・顧客メール・価格は含まない
+  v_req := public.treemerce_admin_shipment_request(v_sx);
+  if jsonb_array_length(v_req -> 'items') <> 1
+     or v_req -> 'items' -> 0 ->> 'product_name' <> 'テスト緑茶'
+     or (v_req -> 'items' -> 0 ->> 'quantity')::int <> 2
+     or v_req -> 'items' -> 0 ->> 'content_volume' <> '100g×2袋'
+     or v_req -> 'ship_to' ->> 'name' <> '直送三郎'
+     or v_req -> 'ship_to' ->> 'postal_code' <> '530-0001'
+     or v_req ->> 'customer_note' <> '置き配希望'
+     or v_req -> 'sender' ->> 'name' <> 'テスト運営株式会社'
+     or v_req -> 'producer' ->> 'notify_email' <> 'order-x2@farm.test' then
+    raise exception 'CASE39 FAILED: 依頼書の内容が不正 (%)', v_req;
+  end if;
+  if v_req::text ~ '(tm-test-case39@|テストチーズ|テスト代理店|unit_price|amount|agent)'
+     or v_req::text like '%' || current_setting('tm.agent_b_public') || '%' then
+    raise exception 'CASE39 FAILED: 依頼書に他の生産者の商品・顧客メール・代理店・価格が含まれる (%)', v_req;
+  end if;
+
+  -- 手動で依頼済みにする
+  v_res := public.treemerce_admin_record_shipment_request(v_sx, 'manual');
+  if v_res ->> 'status' <> 'requested' or (v_res ->> 'request_count')::int <> 1 then
+    raise exception 'CASE39 FAILED: 依頼済みの記録ができない (%)', v_res;
+  end if;
+
+  -- 未来日の発送日は拒否
+  v_ok := false;
+  begin perform public.treemerce_admin_ship_shipment(v_sx, v_today + 1, 'ヤマト運輸', '1234-5678-9012');
+  exception when invalid_parameter_value then v_ok := true; end;
+  if not v_ok then raise exception 'CASE39 FAILED: 未来の発送日で登録できた'; end if;
+
+  v_res := public.treemerce_admin_ship_shipment(v_sx, v_today, 'ヤマト運輸', '1234-5678-9012');
+  perform public.treemerce_admin_ship_shipment(v_sy, v_today, '佐川急便', '9999-0000');
+  if (select status from public.orders where id = v_o) <> 'payment_confirmed' then
+    raise exception 'CASE39 FAILED: 仮の生産者 (運営) の分が未発送なのに注文が発送済みになった';
+  end if;
+
+  -- 残りは仮の生産者 (運営が発送) のみ → 手動で発送済みにでき、運営分も発送済みになる
+  perform public.treemerce_admin_set_order_status(v_o, 'shipped', '運営分を発送');
+  if (select status from public.order_shipments where id = v_sp) <> 'shipped'
+     or (select shipped_on from public.order_shipments where id = v_sp) is null then
+    raise exception 'CASE39 FAILED: 手動の発送済みで運営分の発送記録が発送済みにならない';
+  end if;
+
+  -- 訂正は理由必須・監査ログに残る
+  v_ok := false;
+  begin perform public.treemerce_admin_ship_shipment(v_sx, v_today, 'ヤマト運輸', '1234-5678-0000');
+  exception when invalid_parameter_value then v_ok := true; end;
+  if not v_ok then raise exception 'CASE39 FAILED: 理由なしで発送記録を訂正できた'; end if;
+  perform public.treemerce_admin_ship_shipment(v_sx, v_today, 'ヤマト運輸', '1234-5678-0000', '送り状番号の誤記');
+
+  select count(*) into v_cnt from public.admin_audit_logs
+  where target_table = 'order_shipments' and target_id = v_sx
+    and action in ('shipment.request', 'shipment.ship', 'shipment.correct');
+  if v_cnt <> 3 then raise exception 'CASE39 FAILED: 発送記録の操作が監査ログに残っていない (%)', v_cnt; end if;
+  select count(*) into v_cnt from public.admin_audit_logs
+  where target_table = 'order_shipments'
+    and (coalesce(before_state::text, '') || coalesce(after_state::text, '')) ~ '(直送三郎|大阪府テスト市|090-3939|farm\.test)';
+  if v_cnt <> 0 then raise exception 'CASE39 FAILED: 発送記録の監査ログにお届け先・送り先メールが残った'; end if;
+
+  if (select agent_id from public.orders where id = v_o) is distinct from v_agent
+     or v_agent is distinct from current_setting('tm.agent_b')::uuid then
+    raise exception 'CASE39 FAILED: 発送処理で帰属代理店が変わった';
+  end if;
+
+  raise notice 'CASE39 OK: 生産者ごとの発送記録・入金確認で依頼可能・依頼書は自分の分のみ (代理店/顧客メール/価格なし)・実在生産者の未発送中は手動発送不可・訂正は理由必須・監査ログ・帰属不変';
+end $$;
+
+reset role;
+
+-- 一般 admin は発送登録できない
+select set_config('request.jwt.claims',
+  '{"sub":"00000000-0000-4000-8000-000000000008","role":"authenticated"}', true);
+set local role authenticated;
+do $$
+declare v_ok boolean;
+begin
+  v_ok := false;
+  begin
+    perform public.treemerce_admin_ship_shipment(
+      (select s.id from public.order_shipments s limit 1), (now() at time zone 'Asia/Tokyo')::date);
+  exception when insufficient_privilege then v_ok := true; end;
+  if not v_ok then raise exception 'CASE39 FAILED: 一般 admin が発送登録できた'; end if;
+end $$;
+reset role;
+
+-- ============================================================================
+-- CASE40 : 全生産者の発送登録で注文が自動で「発送済み」になる (履歴・監査ログに理由)。
+--          一部発送済みの注文のキャンセルは p_restock 必須。未発送分の在庫は常に戻り、
+--          発送済み分は指定時のみ戻る。未発送の発送記録はキャンセルになる。
+-- ============================================================================
+
+set local role anon;
+do $$
+begin
+  perform public.treemerce_place_order(current_setting('tm.agent_b_public'),
+    jsonb_build_array(
+      jsonb_build_object('product_id', current_setting('tm.px'), 'quantity', 1),
+      jsonb_build_object('product_id', current_setting('tm.py'), 'quantity', 1)),
+    '自動発送', '福岡県テスト市1-1', 'tm-test-case40a@treemerce.test');
+  perform public.treemerce_place_order(current_setting('tm.agent_b_public'),
+    jsonb_build_array(
+      jsonb_build_object('product_id', current_setting('tm.px'), 'quantity', 2),
+      jsonb_build_object('product_id', current_setting('tm.py'), 'quantity', 3)),
+    '一部発送', '福岡県テスト市1-1', 'tm-test-case40b@treemerce.test');
+end $$;
+reset role;
+
+select set_config('request.jwt.claims',
+  '{"sub":"00000000-0000-4000-8000-000000000007","role":"authenticated"}', true);
+set local role authenticated;
+
+do $$
+declare
+  v_a uuid; v_b uuid; v_ax uuid; v_ay uuid; v_bx uuid; v_by uuid;
+  v_res jsonb; v_ok boolean; v_cnt int;
+  v_px_before int; v_py_before int; v_px_after int; v_py_after int;
+  v_today date := (now() at time zone 'Asia/Tokyo')::date;
+begin
+  select id into v_a from public.orders where contact_email = 'tm-test-case40a@treemerce.test';
+  select id into v_b from public.orders where contact_email = 'tm-test-case40b@treemerce.test';
+  select id into v_ax from public.order_shipments where order_id = v_a and producer_id = current_setting('tm.prod_x')::uuid;
+  select id into v_ay from public.order_shipments where order_id = v_a and producer_id = current_setting('tm.prod_y')::uuid;
+  select id into v_bx from public.order_shipments where order_id = v_b and producer_id = current_setting('tm.prod_x')::uuid;
+  select id into v_by from public.order_shipments where order_id = v_b and producer_id = current_setting('tm.prod_y')::uuid;
+
+  -- (1) 全生産者の発送登録 → 自動で発送済み
+  perform public.treemerce_admin_set_order_status(v_a, 'payment_confirmed', '入金を確認');
+  v_res := public.treemerce_admin_ship_shipment(v_ax, v_today, 'ヤマト運輸', 'A-1');
+  if v_res ->> 'order_status' <> 'payment_confirmed' then
+    raise exception 'CASE40 FAILED: 1 生産者だけの発送で注文が発送済みになった';
+  end if;
+  v_res := public.treemerce_admin_ship_shipment(v_ay, v_today, '佐川急便', 'A-2');
+  if v_res ->> 'order_status' <> 'shipped' or (select status from public.orders where id = v_a) <> 'shipped' then
+    raise exception 'CASE40 FAILED: 全生産者の発送で注文が発送済みにならない (%)', v_res;
+  end if;
+  select count(*) into v_cnt from public.order_status_history
+  where order_id = v_a and to_status = 'shipped' and reason = '全生産者の発送完了';
+  if v_cnt <> 1 then raise exception 'CASE40 FAILED: 自動の発送済みが履歴に残っていない'; end if;
+  select count(*) into v_cnt from public.admin_audit_logs
+  where target_id = v_a and action = 'order.auto_shipped';
+  if v_cnt <> 1 then raise exception 'CASE40 FAILED: 自動の発送済みが監査ログに残っていない'; end if;
+
+  -- (2) 一部発送済みのキャンセル
+  perform public.treemerce_admin_set_order_status(v_b, 'payment_confirmed', '入金を確認');
+  perform public.treemerce_admin_ship_shipment(v_bx, v_today, 'ヤマト運輸', 'B-1');
+
+  v_ok := false;
+  begin perform public.treemerce_admin_set_order_status(v_b, 'cancelled', 'お客様都合');
+  exception when invalid_parameter_value then v_ok := true; end;
+  if not v_ok then raise exception 'CASE40 FAILED: 一部発送済みのキャンセルが p_restock 未指定で通った'; end if;
+
+  select stock into v_px_before from public.products where id = current_setting('tm.px')::uuid;
+  select stock into v_py_before from public.products where id = current_setting('tm.py')::uuid;
+  perform public.treemerce_admin_set_order_status(v_b, 'cancelled', 'お客様都合 (発送済み分は返品なし)', false);
+  select stock into v_px_after from public.products where id = current_setting('tm.px')::uuid;
+  select stock into v_py_after from public.products where id = current_setting('tm.py')::uuid;
+
+  if v_px_after <> v_px_before or v_py_after <> v_py_before + 3 then
+    raise exception 'CASE40 FAILED: 在庫の戻しが不正 (発送済み X: % → %, 未発送 Y: % → %)',
+      v_px_before, v_px_after, v_py_before, v_py_after;
+  end if;
+  if (select status from public.order_shipments where id = v_bx) <> 'shipped'
+     or (select status from public.order_shipments where id = v_by) <> 'cancelled' then
+    raise exception 'CASE40 FAILED: キャンセル後の発送記録の状態が不正';
+  end if;
+  select count(*) into v_cnt from public.admin_audit_logs
+  where target_id = v_b and action = 'order.status_change' and after_state ->> 'status' = 'cancelled'
+    and (after_state ->> 'restocked')::boolean = false
+    and (after_state ->> 'restocked_unshipped')::boolean = true;
+  if v_cnt <> 1 then raise exception 'CASE40 FAILED: 在庫の戻し方が監査ログに残っていない'; end if;
+
+  -- キャンセル済みの発送記録は依頼・発送できない
+  v_ok := false;
+  begin perform public.treemerce_admin_record_shipment_request(v_by, 'manual');
+  exception when invalid_parameter_value then v_ok := true; end;
+  if not v_ok then raise exception 'CASE40 FAILED: キャンセル済みの発送記録に依頼を記録できた'; end if;
+
+  raise notice 'CASE40 OK: 全生産者の発送で自動的に発送済み (履歴・監査ログ)。一部発送済みのキャンセルは p_restock 必須、未発送分は常に在庫復元・発送済み分は指定時のみ';
+end $$;
+
+reset role;
+
 do $$
 begin
   raise notice '==========================================';
-  raise notice '  TREEMERCE: ALL 35 CASES PASSED (+EXTRA)';
+  raise notice '  TREEMERCE: ALL 40 CASES PASSED (+EXTRA)';
   raise notice '==========================================';
 end $$;
 

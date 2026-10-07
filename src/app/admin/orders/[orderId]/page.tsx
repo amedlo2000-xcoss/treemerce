@@ -20,9 +20,10 @@ import {
 } from "@/components/ui";
 import { requireSuperAdminPage } from "@/lib/auth/viewer";
 import { ORDER_STATUS_LABELS, PRODUCT_CATEGORY_LABELS } from "@/lib/domain/enums";
-import type { AdminOrderDetail } from "@/lib/domain/types";
+import type { AdminOrderDetail, ShipmentRequest } from "@/lib/domain/types";
 
 import { OrderStatusForm } from "./OrderStatusForm";
+import { ShipmentsPanel } from "./ShipmentsPanel";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -55,6 +56,31 @@ export default async function AdminOrderDetailPage({
   const { order } = detail;
   const transferred = detail.current_agent && detail.current_agent.id !== order.agent_id;
   const viaOtherLink = order.referral_agent_id && order.referral_agent_id !== order.agent_id;
+
+  // 生産者ごとの発送記録 (旧注文には無い)。依頼書は入金確認後の実在の生産者の分だけ取得する。
+  const shipments = detail.shipments ?? [];
+  const requestTargets = shipments.filter(
+    (s) => !s.is_placeholder && ["ready", "requested", "shipped"].includes(s.status),
+  );
+  const requestResults = await Promise.all(
+    requestTargets.map((s) => supabase.rpc("treemerce_admin_shipment_request", { p_shipment_id: s.id })),
+  );
+  const requests: Record<string, ShipmentRequest> = {};
+  requestTargets.forEach((s, i) => {
+    const data = requestResults[i].data as ShipmentRequest | null;
+    if (data) requests[s.id] = data;
+  });
+  const itemsByProducer: Record<string, AdminOrderDetail["items"]> = {};
+  for (const item of detail.items) {
+    if (!item.producer_id) continue;
+    (itemsByProducer[item.producer_id] ??= []).push(item);
+  }
+  const shippedCount = shipments.filter((s) => s.status === "shipped").length;
+  const activeCount = shipments.filter((s) => s.status !== "cancelled").length;
+  const pendingRealShipments = shipments.filter(
+    (s) => !s.is_placeholder && !["shipped", "cancelled"].includes(s.status),
+  ).length;
+  const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Tokyo" }).format(new Date());
 
   return (
     <>
@@ -133,8 +159,34 @@ export default async function AdminOrderDetailPage({
 
         <div className="space-y-5">
           <Card title="ステータスを変更する" description="この操作は super_admin のみ実行できます。">
-            <OrderStatusForm orderId={order.id} current={order.status} />
+            <OrderStatusForm
+              orderId={order.id}
+              current={order.status}
+              hasShippedShipments={shippedCount > 0}
+              pendingRealShipments={pendingRealShipments}
+            />
           </Card>
+
+          {shipments.length > 0 ? (
+            <Card
+              title={`生産者ごとの発送 (${shippedCount} / ${activeCount} 発送済み)`}
+              description="発送依頼書は生産者ごとに、その生産者の商品だけが記載されます。全生産者の発送登録が終わると注文は自動で「発送済み」になります。"
+            >
+              <ShipmentsPanel
+                shipments={shipments}
+                requests={requests}
+                itemsByProducer={itemsByProducer}
+                orderStatus={order.status}
+                today={today}
+              />
+            </Card>
+          ) : (
+            <Card title="生産者ごとの発送">
+              <p className="text-[13px] text-text-secondary">
+                この注文は生産者機能の導入前に受け付けたため、発送記録はありません。従来どおりステータス変更で管理してください。
+              </p>
+            </Card>
+          )}
 
           <Card title="注文明細">
             <DataTable headers={["商品名", "カテゴリ", "単価", "数量", "金額"]}>
@@ -142,6 +194,9 @@ export default async function AdminOrderDetailPage({
                 <tr key={item.id}>
                   <td className={TD_STRONG}>
                     {item.product_name}
+                    {item.product_content_volume ? (
+                      <div className="text-[12px] font-normal text-text-secondary">{item.product_content_volume}</div>
+                    ) : null}
                     {item.product_sku ? (
                       <div>
                         <Mono>{item.product_sku}</Mono>
