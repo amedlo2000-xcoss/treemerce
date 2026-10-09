@@ -1,4 +1,15 @@
-import { BarChart3, ChevronRight, GitBranch, Lock, Settings, ShoppingBag, UserPlus } from "lucide-react";
+import {
+  BarChart3,
+  Briefcase,
+  ChevronRight,
+  GitBranch,
+  Lock,
+  PackagePlus,
+  Settings,
+  ShoppingBag,
+  TrendingUp,
+  UserPlus,
+} from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import Link from "next/link";
 
@@ -12,11 +23,11 @@ import {
   StatusPill,
   Surface,
 } from "@/components/mobile/primitives";
-import { formatDate } from "@/components/ui";
+import { FormMessage, formatDate } from "@/components/ui";
 import { signOutAction } from "@/app/actions";
 import { requireAgentPage } from "@/lib/auth/viewer";
-import { AGENT_STATUS_LABELS } from "@/lib/domain/enums";
-import type { BankAccountRow } from "@/lib/domain/types";
+import { AGENT_INDUSTRY_LABELS, AGENT_STATUS_LABELS } from "@/lib/domain/enums";
+import type { AgentProfile, BankAccountRow } from "@/lib/domain/types";
 
 import { BankAccountForm } from "./BankAccountForm";
 
@@ -53,9 +64,18 @@ function LinkRow({
 /**
  * MYページ (STEP9): プロフィール・登録経路(閲覧のみ)・各種メニューへの入口をまとめる。
  * 「招待元」は登録経路を示すだけで、担当顧客とは無関係 (絶対原則3)。
+ * 事業プロフィール (0016) は本人用 RPC からのみ取得する (本人と super_admin だけが見られる)。
  */
-export default async function AgentMyPage() {
+export default async function AgentMyPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ profile?: string }>;
+}) {
+  const { profile: profileFlag } = await searchParams;
   const { supabase, agent } = await requireAgentPage("/agent/my");
+
+  const { data: profileData } = await supabase.rpc("treemerce_my_agent_profile");
+  const profile = (profileData as AgentProfile | null) ?? null;
 
   let inviterName: string | null = null;
   if (agent.invited_by) {
@@ -118,6 +138,48 @@ export default async function AgentMyPage() {
           </div>
 
           <div className="space-y-2">
+            <SectionLabel>事業プロフィール</SectionLabel>
+            {profileFlag === "saved" ? (
+              <FormMessage tone="success">事業プロフィールを保存しました。</FormMessage>
+            ) : null}
+            <Surface>
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-brand-soft text-brand">
+                  <Briefcase size={18} />
+                </div>
+                <dl className="min-w-0 flex-1">
+                  <dt className="text-[12px] text-text-secondary">業種</dt>
+                  <dd className="truncate text-[15px] font-semibold text-text-primary">
+                    {profile?.industry
+                      ? (AGENT_INDUSTRY_LABELS[profile.industry] ?? profile.industry)
+                      : "未入力"}
+                  </dd>
+                </dl>
+              </div>
+              {profile?.offerings ? (
+                <p className="mt-3 line-clamp-3 whitespace-pre-wrap text-[13px] leading-5 text-text-secondary">
+                  {profile.offerings}
+                </p>
+              ) : (
+                <p className="mt-3 text-[13px] leading-5 text-text-secondary">
+                  お仕事の内容や売りたい物を入力すると、商品の持込みの相談がスムーズになります。
+                </p>
+              )}
+              <div className="mt-3 flex items-start gap-2.5 rounded-2xl bg-surface-muted px-3 py-2.5">
+                <Lock size={14} className="mt-0.5 shrink-0 text-text-secondary" />
+                <p className="text-[12px] leading-5 text-text-secondary">
+                  あなたと運営だけが見られます。ほかの代理店には表示されません。
+                </p>
+              </div>
+              <div className="mt-3">
+                <PrimaryButton href="/agent/my/profile" variant="secondary">
+                  {profile?.found ? "事業プロフィールを編集" : "事業プロフィールを入力"}
+                </PrimaryButton>
+              </div>
+            </Surface>
+          </div>
+
+          <div className="space-y-2">
             <SectionLabel>アカウント</SectionLabel>
             <Surface className="!py-1">
               <dl className="divide-y divide-border-soft">
@@ -129,6 +191,8 @@ export default async function AgentMyPage() {
 
           <Surface padded={false} className="divide-y divide-border-soft px-3">
             <LinkRow icon={UserPlus} label="招待URL・ショップの紹介リンク" href="/agent/invitations" />
+            <LinkRow icon={PackagePlus} label="商品の持込み申請" href="/agent/submissions" />
+            <LinkRow icon={TrendingUp} label="持込み商品の売れ行き" href="/agent/sourced-sales" />
             <LinkRow icon={ShoppingBag} label="担当顧客の注文" href="/agent/orders" />
             <LinkRow icon={BarChart3} label="客層分析" href="/agent/analytics" />
             <div className="flex items-center gap-3 px-2 py-3.5 opacity-50">

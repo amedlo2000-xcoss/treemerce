@@ -7,6 +7,7 @@ import {
   BarChart3,
   ClipboardList,
   Home,
+  Inbox,
   Network,
   Package,
   Settings,
@@ -34,6 +35,7 @@ const ICONS = {
   "clipboard-list": ClipboardList,
   "shopping-bag": ShoppingBag,
   sprout: Sprout,
+  inbox: Inbox,
   settings: Settings,
 } as const;
 

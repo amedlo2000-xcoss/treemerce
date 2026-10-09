@@ -1,10 +1,10 @@
 -- ============================================================================
--- TREEMERCE 受け入れテスト  CASE1 - CASE35
+-- TREEMERCE 受け入れテスト  CASE1 - CASE45
 -- ----------------------------------------------------------------------------
 -- Supabase SQL Editor にそのまま貼り付けて実行する。
 -- 全体が 1 トランザクションで、最後に ROLLBACK するため本番データは残らない。
 -- 途中で失敗した CASE があれば例外で停止する。全て通れば最後に
--- 「ALL 35 CASES PASSED」が NOTICE として出力される。
+-- 「ALL 45 CASES PASSED」が NOTICE として出力される。
 --
 -- 木構造:
 --            R  (root)
@@ -2777,10 +2777,1114 @@ end $$;
 
 reset role;
 
+-- ============================================================================
+-- CASE41 : 代理店の事業プロフィール (0016)
+--   本人だけが保存・取得でき、傘上 (R)・傘下 (B)・兄弟枝 (S)・admin ロールからは
+--   テーブルも RPC も読めない。super_admin だけが RPC で読める。
+--   監査ログには値を書かない。商流マップ / コミュニティマップは変わらない。
+-- ============================================================================
+
+insert into auth.users (instance_id, id, aud, role, email, encrypted_password,
+                        email_confirmed_at, created_at, updated_at)
+values ('00000000-0000-0000-0000-000000000000', '00000000-0000-4000-8000-000000000041',
+        'authenticated', 'authenticated', 'tm-test-admin41@treemerce.test', '', now(), now(), now());
+insert into public.admin_roles (auth_user_id, role)
+values ('00000000-0000-4000-8000-000000000041', 'admin');
+
+-- (1) 本人 (A) が保存・取得できる。不正な URL・直接書込み・super_admin RPC は拒否
+select set_config('request.jwt.claims',
+  '{"sub":"00000000-0000-4000-8000-000000000002","role":"authenticated"}', true);
+set local role authenticated;
+
+do $$
+declare v_res jsonb; v_ok boolean; v_inviter uuid;
+begin
+  v_res := public.treemerce_update_my_agent_profile(
+    'agriculture', '  有機野菜の生産と直売  ', 'CASE41-取扱商品', 'CASE41-得意な客層',
+    array['福岡県', '佐賀県', '福岡県', ' '],
+    'https://case41.example.com/',
+    array['https://instagram.com/case41', ''],
+    'CASE41-自己紹介テキスト');
+  if (v_res ->> 'changed')::boolean is not true
+     or v_res ->> 'business_description' <> '有機野菜の生産と直売'
+     or v_res -> 'activity_prefectures' <> '["福岡県", "佐賀県"]'::jsonb
+     or v_res -> 'sns_urls' <> '["https://instagram.com/case41"]'::jsonb then
+    raise exception 'CASE41 FAILED: 本人の保存結果が不正 (%)', v_res;
+  end if;
+
+  v_res := public.treemerce_my_agent_profile();
+  if (v_res ->> 'found')::boolean is not true or v_res ->> 'self_introduction' <> 'CASE41-自己紹介テキスト' then
+    raise exception 'CASE41 FAILED: 本人がプロフィールを取得できない (%)', v_res;
+  end if;
+
+  -- 変更なしの保存は監査ログを増やさない (下の super_admin 側で件数を確認)
+  v_res := public.treemerce_update_my_agent_profile(
+    'agriculture', '有機野菜の生産と直売', 'CASE41-取扱商品', 'CASE41-得意な客層',
+    array['福岡県', '佐賀県'], 'https://case41.example.com/',
+    array['https://instagram.com/case41'], 'CASE41-自己紹介テキスト');
+  if (v_res ->> 'changed')::boolean is not false then
+    raise exception 'CASE41 FAILED: 変更なしの保存が変更ありになった';
+  end if;
+
+  v_ok := false;
+  begin perform public.treemerce_update_my_agent_profile(p_website_url => 'javascript:alert(1)');
+  exception when invalid_parameter_value then v_ok := true; end;
+  if not v_ok then raise exception 'CASE41 FAILED: javascript: の URL を保存できた'; end if;
+
+  v_ok := false;
+  begin perform public.treemerce_update_my_agent_profile(
+    p_sns_urls => array['https://a.example', 'https://b.example', 'https://c.example',
+                        'https://d.example', 'https://e.example', 'https://f.example']);
+  exception when invalid_parameter_value then v_ok := true; end;
+  if not v_ok then raise exception 'CASE41 FAILED: SNS の URL を 6 件保存できた'; end if;
+
+  v_ok := false;
+  begin perform public.treemerce_update_my_agent_profile(p_activity_prefectures => array['テスト県']);
+  exception when invalid_parameter_value then v_ok := true; end;
+  if not v_ok then raise exception 'CASE41 FAILED: 存在しない都道府県を保存できた'; end if;
+
+  v_ok := false;
+  begin perform count(*) from public.agent_profiles;
+  exception when insufficient_privilege then v_ok := true; end;
+  if not v_ok then raise exception 'CASE41 FAILED: 本人がテーブルを直接参照できた'; end if;
+
+  v_ok := false;
+  begin update public.agent_profiles set self_introduction = '直接書込み';
+  exception when insufficient_privilege then v_ok := true; end;
+  if not v_ok then raise exception 'CASE41 FAILED: テーブルを直接更新できた'; end if;
+
+  v_ok := false;
+  begin perform public.treemerce_admin_get_agent_profile('10000000-0000-4000-8000-000000000002');
+  exception when insufficient_privilege then v_ok := true; end;
+  if not v_ok then raise exception 'CASE41 FAILED: 代理店が super_admin 用 RPC を実行できた'; end if;
+
+  -- 原則3: 招待経路は変わらない
+  select invited_by into v_inviter from public.agents where id = '10000000-0000-4000-8000-000000000002';
+  if v_inviter is distinct from '10000000-0000-4000-8000-000000000001'::uuid then
+    raise exception 'CASE41 FAILED: プロフィール保存で招待経路が変わった';
+  end if;
+end $$;
+
+reset role;
+
+-- (2) 傘上 R・傘下 B・兄弟枝 S は A のプロフィールを読めない
+do $$
+declare
+  v_sub text; v_self uuid; v_res jsonb; v_ok boolean;
+  v_pairs text[][] := array[
+    array['00000000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-000000000001'],
+    array['00000000-0000-4000-8000-000000000003', current_setting('tm.agent_b')],
+    array['00000000-0000-4000-8000-000000000006', '10000000-0000-4000-8000-000000000006']];
+  i int;
+begin
+  for i in 1 .. array_length(v_pairs, 1) loop
+    v_sub  := v_pairs[i][1];
+    v_self := v_pairs[i][2]::uuid;
+    perform set_config('request.jwt.claims',
+      jsonb_build_object('sub', v_sub, 'role', 'authenticated')::text, true);
+    set local role authenticated;
+
+    v_ok := false;
+    begin perform count(*) from public.agent_profiles;
+    exception when insufficient_privilege then v_ok := true; end;
+    if not v_ok then raise exception 'CASE41 FAILED: 他代理店 (%) がテーブルを直接参照できた', v_sub; end if;
+
+    v_res := public.treemerce_my_agent_profile();
+    if (v_res ->> 'agent_id')::uuid <> v_self or (v_res ->> 'found')::boolean then
+      raise exception 'CASE41 FAILED: 他代理店 (%) の取得結果が自分以外を返した (%)', v_sub, v_res;
+    end if;
+
+    v_ok := false;
+    begin perform public.treemerce_admin_get_agent_profile('10000000-0000-4000-8000-000000000002');
+    exception when insufficient_privilege then v_ok := true; end;
+    if not v_ok then raise exception 'CASE41 FAILED: 他代理店 (%) が super_admin 用 RPC で読めた', v_sub; end if;
+
+    -- 派生: コミュニティマップ / 商流マップにプロフィールの値が出ない
+    if public.treemerce_community_map(null)::text like '%CASE41-%'
+       or public.treemerce_commerce_map(null)::text like '%CASE41-%' then
+      raise exception 'CASE41 FAILED: マップにプロフィールの値が含まれた (%)', v_sub;
+    end if;
+
+    reset role;
+  end loop;
+end $$;
+
+-- (3) admin ロール (super_admin ではない) も読めない
+select set_config('request.jwt.claims',
+  '{"sub":"00000000-0000-4000-8000-000000000041","role":"authenticated"}', true);
+set local role authenticated;
+
+do $$
+declare v_ok boolean;
+begin
+  v_ok := false;
+  begin perform count(*) from public.agent_profiles;
+  exception when insufficient_privilege then v_ok := true; end;
+  if not v_ok then raise exception 'CASE41 FAILED: admin ロールがテーブルを直接参照できた'; end if;
+
+  v_ok := false;
+  begin perform public.treemerce_admin_get_agent_profile('10000000-0000-4000-8000-000000000002');
+  exception when insufficient_privilege then v_ok := true; end;
+  if not v_ok then raise exception 'CASE41 FAILED: admin ロールが super_admin 用 RPC で読めた'; end if;
+
+  -- 監査ログ (admin ロールも閲覧可) にプロフィールの値が出ない
+  if exists (select 1 from public.admin_audit_logs
+             where target_table = 'agent_profiles'
+               and (coalesce(before_state::text, '') || coalesce(after_state::text, '')
+                    ~ '(CASE41-|case41\.example|有機野菜|instagram)')) then
+    raise exception 'CASE41 FAILED: 監査ログにプロフィールの値が含まれた';
+  end if;
+end $$;
+
+reset role;
+
+-- (4) super_admin は読める。監査ログは作成 1 件のみ (変更なしの保存は記録しない)
+select set_config('request.jwt.claims',
+  '{"sub":"00000000-0000-4000-8000-000000000007","role":"authenticated"}', true);
+set local role authenticated;
+
+do $$
+declare v_res jsonb; v_cnt int;
+begin
+  v_res := public.treemerce_admin_get_agent_profile('10000000-0000-4000-8000-000000000002');
+  if (v_res ->> 'found')::boolean is not true
+     or v_res ->> 'industry' <> 'agriculture'
+     or v_res ->> 'website_url' <> 'https://case41.example.com/' then
+    raise exception 'CASE41 FAILED: super_admin がプロフィールを読めない (%)', v_res;
+  end if;
+
+  v_res := public.treemerce_admin_get_agent_profile('10000000-0000-4000-8000-000000000006');
+  if (v_res ->> 'found')::boolean is not false then
+    raise exception 'CASE41 FAILED: 未入力の代理店で found = true';
+  end if;
+
+  select count(*) into v_cnt from public.admin_audit_logs
+  where target_table = 'agent_profiles'
+    and target_id = '10000000-0000-4000-8000-000000000002'
+    and action = 'agent_profile.create' and actor_role = 'agent'
+    and after_state -> 'changed_fields' ? 'self_introduction';
+  if v_cnt <> 1 then raise exception 'CASE41 FAILED: 作成の監査ログが 1 件でない (%)', v_cnt; end if;
+
+  select count(*) into v_cnt from public.admin_audit_logs
+  where target_table = 'agent_profiles' and action = 'agent_profile.update';
+  if v_cnt <> 0 then raise exception 'CASE41 FAILED: 変更なしの保存が監査ログに残った'; end if;
+
+  raise notice 'CASE41 OK: 事業プロフィールは本人と super_admin だけが読める (傘上・傘下・兄弟枝・admin ロールは不可)。不正な URL は拒否、監査ログに値を書かない、マップ・招待経路は不変';
+end $$;
+
+reset role;
+
+-- ============================================================================
+-- CASE42 : 持込み申請のスキーマ・ガード (0017)
+--   RPC (0018) が張るコンテキスト (app.submission_ctx) を postgres として直接再現し、
+--   DB 層だけで次が守られることを確認する。
+--   * 4 テーブルは代理店から直接読めない
+--   * 状態遷移 (代理店は承認できない / 差し戻し・却下は理由必須 / 申請中は編集不可 / 削除不可)
+--   * 画像は 5 枚まで・保存先は申請と一致
+--   * 持込み元は承認済みの申請・非公開の商品にのみ記録でき、変更・削除不可
+--   * 持込み商品の公開は super_admin のみ・仮の生産者では不可・公開は監査ログに残る
+--   * 招待経路・顧客の担当は変わらない
+-- ============================================================================
+
+select set_config('request.jwt.claims',
+  '{"sub":"00000000-0000-4000-8000-000000000002","role":"authenticated"}', true);
+set local role authenticated;
+
+do $$
+declare v_ok boolean; v_tbl text;
+begin
+  foreach v_tbl in array array['product_submissions', 'product_submission_events',
+                               'product_submission_images', 'product_sources'] loop
+    v_ok := false;
+    begin execute format('select count(*) from public.%I', v_tbl);
+    exception when insufficient_privilege then v_ok := true; end;
+    if not v_ok then raise exception 'CASE42 FAILED: 代理店が % を直接参照できた', v_tbl; end if;
+  end loop;
+
+  v_ok := false;
+  begin
+    insert into public.product_submissions (agent_id, name)
+    values ('10000000-0000-4000-8000-000000000002', '直接作成');
+  exception when insufficient_privilege then v_ok := true; end;
+  if not v_ok then raise exception 'CASE42 FAILED: 代理店が申請を直接作成できた'; end if;
+end $$;
+
+reset role;
+select set_config('request.jwt.claims', '', true);
+
+do $$
+declare
+  v_a        constant uuid := '10000000-0000-4000-8000-000000000002';
+  v_prod_ph  constant uuid := '00000000-0000-4000-8000-000000000001';
+  v_producer uuid; v_product uuid; v_s1 uuid; v_s2 uuid;
+  v_ok boolean; v_cnt int; v_inviter uuid; v_assign int; v_assign_after int;
+  i int;
+begin
+  select invited_by into v_inviter from public.agents where id = v_a;
+  select count(*) into v_assign from public.customer_assignments where status = 'active';
+
+  insert into public.producers (name, origin, ship_from_prefecture, ship_lead_time)
+  values ('CASE42 生産者', '福岡県 八女市', '福岡県', '入金確認後3営業日以内')
+  returning id into v_producer;
+  insert into public.products (name, price, stock, is_published, producer_id)
+  values ('CASE42 持込み商品', 1200, 10, false, v_producer)
+  returning id into v_product;
+
+  -- (1) 作成は下書きのみ。本人のコンテキストで作成
+  perform set_config('app.submission_ctx', 'submission_agent', true);
+  v_ok := false;
+  begin
+    insert into public.product_submissions (agent_id, name, status) values (v_a, '申請中で作成', 'submitted');
+  exception when insufficient_privilege then v_ok := true; end;
+  if not v_ok then raise exception 'CASE42 FAILED: 申請中の状態で作成できた'; end if;
+
+  insert into public.product_submissions (agent_id, name) values (v_a, 'CASE42 深蒸し煎茶')
+  returning id into v_s1;
+  if (select submission_no from public.product_submissions where id = v_s1) !~ '^PS-\d{8}-\d{6}$' then
+    raise exception 'CASE42 FAILED: 申請番号の形式が不正';
+  end if;
+
+  -- (2) 必須項目が揃わないと申請できない
+  v_ok := false;
+  begin
+    update public.product_submissions set status = 'submitted', submitted_at = now(), revision = 1
+    where id = v_s1;
+  exception when check_violation then v_ok := true; end;
+  if not v_ok then raise exception 'CASE42 FAILED: 必須項目が空のまま申請できた'; end if;
+
+  update public.product_submissions
+  set description = '香りの強い深蒸し煎茶', desired_price = 1500, content_volume = '100g',
+      producer_name = 'CASE42 茶園', producer_origin = '静岡県 牧之原市',
+      producer_ship_from_prefecture = '静岡県', producer_ship_lead_time = '入金確認後3営業日以内',
+      producer_contact_phone = '000-0000-0000',
+      status = 'submitted', submitted_at = now(), revision = 1
+  where id = v_s1;
+
+  -- (3) 本人は承認できない・申請中は編集できない
+  v_ok := false;
+  begin update public.product_submissions set status = 'approved' where id = v_s1;
+  exception when invalid_parameter_value or insufficient_privilege then v_ok := true; end;
+  if not v_ok then raise exception 'CASE42 FAILED: 本人のコンテキストで承認できた'; end if;
+
+  v_ok := false;
+  begin update public.product_submissions set desired_price = 1 where id = v_s1;
+  exception when insufficient_privilege then v_ok := true; end;
+  if not v_ok then raise exception 'CASE42 FAILED: 申請中の内容を編集できた'; end if;
+
+  -- (4) 差し戻しは理由必須。差し戻し後は本人が修正して再申請できる
+  perform set_config('app.submission_ctx', 'submission_review', true);
+  v_ok := false;
+  begin update public.product_submissions set status = 'returned', reviewed_at = now() where id = v_s1;
+  exception when check_violation then v_ok := true; end;
+  if not v_ok then raise exception 'CASE42 FAILED: 理由なしで差し戻せた'; end if;
+
+  v_ok := false;
+  begin update public.product_submissions set desired_price = 1 where id = v_s1;
+  exception when insufficient_privilege then v_ok := true; end;
+  if not v_ok then raise exception 'CASE42 FAILED: 審査のコンテキストで申請内容を変更できた'; end if;
+
+  update public.product_submissions
+  set status = 'returned', review_reason = '原材料を記入してください', reviewed_at = now()
+  where id = v_s1;
+
+  perform set_config('app.submission_ctx', 'submission_agent', true);
+  update public.product_submissions
+  set ingredients = '緑茶 (静岡県産)', status = 'submitted', submitted_at = now(), revision = 2
+  where id = v_s1;
+
+  -- (5) DB 管理者の直接操作でも状態の変更・削除はできない
+  perform set_config('app.submission_ctx', '', true);
+  v_ok := false;
+  begin update public.product_submissions set status = 'withdrawn' where id = v_s1;
+  exception when insufficient_privilege then v_ok := true; end;
+  if not v_ok then raise exception 'CASE42 FAILED: postgres が申請の状態を直接変更できた'; end if;
+
+  v_ok := false;
+  begin delete from public.product_submissions where id = v_s1;
+  exception when insufficient_privilege then v_ok := true; end;
+  if not v_ok then raise exception 'CASE42 FAILED: 申請を削除できた'; end if;
+
+  -- (6) 画像: 申請中は追加不可。下書きでは 5 枚まで・保存先は申請と一致
+  perform set_config('app.submission_ctx', 'submission_agent', true);
+  v_ok := false;
+  begin
+    insert into public.product_submission_images (submission_id, storage_path, content_type)
+    values (v_s1, v_a || '/' || v_s1 || '/' || gen_random_uuid() || '.jpg', 'image/jpeg');
+  exception when insufficient_privilege then v_ok := true; end;
+  if not v_ok then raise exception 'CASE42 FAILED: 申請中の申請に画像を追加できた'; end if;
+
+  insert into public.product_submissions (agent_id, name) values (v_a, 'CASE42 画像テスト')
+  returning id into v_s2;
+  for i in 0 .. 4 loop
+    insert into public.product_submission_images (submission_id, storage_path, content_type, sort_order)
+    values (v_s2, v_a || '/' || v_s2 || '/' || gen_random_uuid() || '.png', 'image/png', i);
+  end loop;
+
+  v_ok := false;
+  begin
+    insert into public.product_submission_images (submission_id, storage_path, content_type)
+    values (v_s2, v_a || '/' || v_s2 || '/' || gen_random_uuid() || '.png', 'image/png');
+  exception when invalid_parameter_value then v_ok := true; end;
+  if not v_ok then raise exception 'CASE42 FAILED: 6 枚目の画像を追加できた'; end if;
+
+  delete from public.product_submission_images
+  where id = (select id from public.product_submission_images where submission_id = v_s2 limit 1);
+  v_ok := false;
+  begin
+    insert into public.product_submission_images (submission_id, storage_path, content_type)
+    values (v_s2, current_setting('tm.agent_b') || '/' || v_s2 || '/' || gen_random_uuid() || '.png', 'image/png');
+  exception when invalid_parameter_value then v_ok := true; end;
+  if not v_ok then raise exception 'CASE42 FAILED: 他人のフォルダを保存先にした画像を登録できた'; end if;
+
+  -- 取り下げは本人のコンテキストで可能。取り下げ後は変更できない
+  update public.product_submissions set status = 'withdrawn' where id = v_s2;
+  v_ok := false;
+  begin update public.product_submissions set name = '取り下げ後の変更' where id = v_s2;
+  exception when insufficient_privilege then v_ok := true; end;
+  if not v_ok then raise exception 'CASE42 FAILED: 取り下げた申請を変更できた'; end if;
+
+  -- (7) 持込み元: 承認前は記録できない
+  perform set_config('app.submission_ctx', 'submission_review', true);
+  v_ok := false;
+  begin
+    insert into public.product_sources (product_id, sourced_by_agent_id, submission_id)
+    values (v_product, v_a, v_s1);
+  exception when insufficient_privilege then v_ok := true; end;
+  if not v_ok then raise exception 'CASE42 FAILED: 申請中の申請で持込み元を記録できた'; end if;
+
+  update public.product_submissions
+  set status = 'approved', reviewed_at = now(),
+      approved_product_id = v_product, approved_producer_id = v_producer
+  where id = v_s1;
+
+  v_ok := false;
+  begin
+    insert into public.product_sources (product_id, sourced_by_agent_id, submission_id)
+    values (v_product, current_setting('tm.agent_b')::uuid, v_s1);
+  exception when insufficient_privilege then v_ok := true; end;
+  if not v_ok then raise exception 'CASE42 FAILED: 申請者と異なる代理店を持込み元にできた'; end if;
+
+  perform set_config('app.submission_ctx', '', true);
+  v_ok := false;
+  begin
+    insert into public.product_sources (product_id, sourced_by_agent_id, submission_id)
+    values (v_product, v_a, v_s1);
+  exception when insufficient_privilege then v_ok := true; end;
+  if not v_ok then raise exception 'CASE42 FAILED: 承認処理の外で持込み元を記録できた'; end if;
+
+  perform set_config('app.submission_ctx', 'submission_review', true);
+  insert into public.product_sources (product_id, sourced_by_agent_id, submission_id)
+  values (v_product, v_a, v_s1);
+  perform set_config('app.submission_ctx', '', true);
+
+  -- 持込み元は変更・削除できない (postgres でも)
+  v_ok := false;
+  begin update public.product_sources set sourced_by_agent_id = current_setting('tm.agent_b')::uuid
+        where product_id = v_product;
+  exception when insufficient_privilege then v_ok := true; end;
+  if not v_ok then raise exception 'CASE42 FAILED: 持込み元を変更できた'; end if;
+
+  v_ok := false;
+  begin delete from public.product_sources where product_id = v_product;
+  exception when insufficient_privilege then v_ok := true; end;
+  if not v_ok then raise exception 'CASE42 FAILED: 持込み元を削除できた'; end if;
+
+  -- 承認済みの申請は変更できない
+  v_ok := false;
+  begin update public.product_submissions set name = '承認後の変更' where id = v_s1;
+  exception when insufficient_privilege then v_ok := true; end;
+  if not v_ok then raise exception 'CASE42 FAILED: 承認済みの申請を変更できた'; end if;
+
+  -- (8) 公開: super_admin 以外 (postgres の直接操作を含む) は不可
+  v_ok := false;
+  begin update public.products set is_published = true where id = v_product;
+  exception when insufficient_privilege then v_ok := true; end;
+  if not v_ok then raise exception 'CASE42 FAILED: super_admin 以外が持込み商品を公開できた'; end if;
+
+  perform set_config('request.jwt.claims',
+    '{"sub":"00000000-0000-4000-8000-000000000041","role":"authenticated"}', true);
+  v_ok := false;
+  begin update public.products set is_published = true where id = v_product;
+  exception when insufficient_privilege then v_ok := true; end;
+  if not v_ok then raise exception 'CASE42 FAILED: admin ロールが持込み商品を公開できた'; end if;
+
+  -- super_admin でも仮の生産者のままでは公開できない
+  perform set_config('request.jwt.claims',
+    '{"sub":"00000000-0000-4000-8000-000000000007","role":"authenticated"}', true);
+  update public.products set producer_id = v_prod_ph where id = v_product;
+  v_ok := false;
+  begin update public.products set is_published = true where id = v_product;
+  exception when invalid_parameter_value then v_ok := true; end;
+  if not v_ok then raise exception 'CASE42 FAILED: 仮の生産者のまま持込み商品を公開できた'; end if;
+  update public.products set producer_id = v_producer where id = v_product;
+
+  update public.products set is_published = true where id = v_product;
+  perform set_config('request.jwt.claims', '', true);
+
+  select count(*) into v_cnt from public.admin_audit_logs
+  where target_id = v_product and action = 'product.publish' and actor_role = 'super_admin'
+    and (after_state ->> 'sourced')::boolean
+    and after_state ->> 'submission_no' = (select submission_no from public.product_submissions where id = v_s1);
+  if v_cnt <> 1 then raise exception 'CASE42 FAILED: 持込み商品の公開が監査ログに残っていない (%)', v_cnt; end if;
+
+  -- 公開済みの商品には持込み元を後から記録できない
+  perform set_config('app.submission_ctx', 'submission_agent', true);
+  insert into public.product_submissions (agent_id, name) values (v_a, 'CASE42 公開済みへのひも付け')
+  returning id into v_s2;
+  perform set_config('app.submission_ctx', 'submission_review', true);
+  v_ok := false;
+  begin
+    insert into public.product_sources (product_id, sourced_by_agent_id, submission_id)
+    values (v_product, v_a, v_s2);
+  exception when insufficient_privilege or unique_violation then v_ok := true; end;
+  if not v_ok then raise exception 'CASE42 FAILED: 公開済みの商品に別の申請をひも付けられた'; end if;
+  perform set_config('app.submission_ctx', '', true);
+
+  -- (9) 履歴は追記専用
+  perform set_config('app.submission_ctx', 'submission_agent', true);
+  insert into public.product_submission_events (submission_id, revision, from_status, to_status, actor_role)
+  values (v_s1, 1, 'draft', 'submitted', 'agent');
+  perform set_config('app.submission_ctx', '', true);
+  v_ok := false;
+  begin update public.product_submission_events set reason = '改ざん' where submission_id = v_s1;
+  exception when insufficient_privilege then v_ok := true; end;
+  if not v_ok then raise exception 'CASE42 FAILED: 申請の履歴を変更できた'; end if;
+
+  -- 原則3: 招待経路・顧客の担当は変わらない
+  select count(*) into v_assign_after from public.customer_assignments where status = 'active';
+  if (select invited_by from public.agents where id = v_a) is distinct from v_inviter
+     or v_assign_after <> v_assign then
+    raise exception 'CASE42 FAILED: 持込みの記録で招待経路または顧客の担当が変わった';
+  end if;
+
+  raise notice 'CASE42 OK: 申請テーブルは代理店から直接読めない。代理店は承認できず、差し戻し・却下は理由必須、申請中・確定後は編集不可、削除不可。画像は 5 枚まで。持込み元は承認済み・非公開の商品にのみ記録でき変更不可。持込み商品の公開は super_admin のみ (仮の生産者は不可) で監査ログに残る。招待経路・担当は不変';
+end $$;
+
+-- ============================================================================
+-- CASE43 : 持込み申請 — 代理店の操作 (0018)
+--   本人だけが作成・保存・申請・取り下げ・画像の枠確保/削除ができ、申請中は編集できない。
+--   傘上 (R)・傘下 (B)・admin ロールからは申請が見えない (存在も開示しない)。
+--   代理店は審査 RPC を実行できない。監査ログに生産者の連絡先の値が残らない。
+-- ============================================================================
+
+select set_config('request.jwt.claims',
+  '{"sub":"00000000-0000-4000-8000-000000000002","role":"authenticated"}', true);
+set local role authenticated;
+
+do $$
+declare
+  v_res jsonb; v_id uuid; v_w uuid; v_ok boolean; v_img jsonb; v_path text; i int;
+begin
+  -- 下書きは商品名だけで作れる。必須項目が足りないと申請できない
+  v_res := public.treemerce_save_my_submission(p_name => 'CASE43 有機ほうじ茶');
+  v_id := (v_res ->> 'id')::uuid;
+  perform set_config('tm.sub43', v_id::text, false);
+  if v_res ->> 'status' <> 'draft' then raise exception 'CASE43 FAILED: 下書きで作成されない'; end if;
+
+  v_ok := false;
+  begin perform public.treemerce_submit_my_submission(v_id);
+  exception when invalid_parameter_value then v_ok := true; end;
+  if not v_ok then raise exception 'CASE43 FAILED: 必須項目が空のまま申請できた'; end if;
+
+  v_ok := false;
+  begin perform public.treemerce_save_my_submission(p_name => '   ');
+  exception when invalid_parameter_value then v_ok := true; end;
+  if not v_ok then raise exception 'CASE43 FAILED: 商品名が空の下書きを作れた'; end if;
+
+  v_res := public.treemerce_save_my_submission(
+    p_submission_id => v_id, p_name => 'CASE43 有機ほうじ茶', p_category => 'food',
+    p_description => '香ばしい有機ほうじ茶', p_desired_price => 1800, p_expected_wholesale_price => 1100,
+    p_content_volume => '80g', p_ingredients => '茶 (静岡県産)',
+    p_producer_name => 'CASE43 茶工房', p_producer_origin => '静岡県 島田市',
+    p_producer_ship_from_prefecture => '静岡県', p_producer_ship_lead_time => '入金確認後5営業日以内',
+    p_producer_contact_name => 'CASE43連絡先', p_producer_contact_phone => '090-4343-4343',
+    p_producer_contact_email => 'Case43-Contact@Example.com');
+  if v_res ->> 'producer_contact_email' <> 'case43-contact@example.com' then
+    raise exception 'CASE43 FAILED: 保存結果が不正 (%)', v_res;
+  end if;
+
+  -- 画像: 5 枚まで。保存先は本人のフォルダ / 申請 ID
+  for i in 1 .. 5 loop
+    v_img := public.treemerce_reserve_submission_image(v_id, 'image/png');
+  end loop;
+  if v_img ->> 'storage_path' not like '10000000-0000-4000-8000-000000000002/' || v_id || '/%.png' then
+    raise exception 'CASE43 FAILED: 画像の保存先が不正 (%)', v_img;
+  end if;
+  v_ok := false;
+  begin perform public.treemerce_reserve_submission_image(v_id, 'image/png');
+  exception when invalid_parameter_value then v_ok := true; end;
+  if not v_ok then raise exception 'CASE43 FAILED: 6 枚目の枠を確保できた'; end if;
+  v_ok := false;
+  begin perform public.treemerce_reserve_submission_image(v_id, 'image/gif');
+  exception when invalid_parameter_value then v_ok := true; end;
+  if not v_ok then raise exception 'CASE43 FAILED: GIF の枠を確保できた'; end if;
+
+  v_path := public.treemerce_remove_submission_image((v_img ->> 'image_id')::uuid) ->> 'storage_path';
+  if v_path is distinct from v_img ->> 'storage_path' then
+    raise exception 'CASE43 FAILED: 画像の削除で保存先が返らない';
+  end if;
+  v_img := public.treemerce_reserve_submission_image(v_id, 'image/webp');
+  if (v_img ->> 'sort_order')::int <> 4 then
+    raise exception 'CASE43 FAILED: 空いた枠が再利用されない (%)', v_img;
+  end if;
+
+  -- 申請。申請中は編集・取り下げ・画像の追加ができない
+  v_res := public.treemerce_submit_my_submission(v_id);
+  if v_res ->> 'status' <> 'submitted' or (v_res ->> 'revision')::int <> 1 then
+    raise exception 'CASE43 FAILED: 申請できない (%)', v_res;
+  end if;
+
+  v_ok := false;
+  begin perform public.treemerce_save_my_submission(p_submission_id => v_id, p_name => '申請中の編集');
+  exception when invalid_parameter_value then v_ok := true; end;
+  if not v_ok then raise exception 'CASE43 FAILED: 申請中に編集できた'; end if;
+  v_ok := false;
+  begin perform public.treemerce_withdraw_my_submission(v_id);
+  exception when invalid_parameter_value then v_ok := true; end;
+  if not v_ok then raise exception 'CASE43 FAILED: 申請中に取り下げできた'; end if;
+  v_ok := false;
+  begin perform public.treemerce_reserve_submission_image(v_id, 'image/png');
+  exception when invalid_parameter_value then v_ok := true; end;
+  if not v_ok then raise exception 'CASE43 FAILED: 申請中に画像を追加できた'; end if;
+
+  -- 本人の一覧・詳細 (詳細は連絡先を含む)
+  if not exists (select 1 from jsonb_array_elements(public.treemerce_my_submissions()) e
+                 where (e ->> 'id')::uuid = v_id) then
+    raise exception 'CASE43 FAILED: 自分の申請一覧に出ない';
+  end if;
+  v_res := public.treemerce_my_submission(v_id);
+  if v_res ->> 'producer_contact_phone' <> '090-4343-4343' or jsonb_array_length(v_res -> 'images') <> 5
+     or (v_res ->> 'editable')::boolean then
+    raise exception 'CASE43 FAILED: 自分の申請詳細が不正 (%)', v_res;
+  end if;
+
+  -- 下書きの取り下げ (削除ではなく取り下げとして残る)
+  v_w := (public.treemerce_save_my_submission(p_name => 'CASE43 取り下げ用') ->> 'id')::uuid;
+  v_res := public.treemerce_withdraw_my_submission(v_w, '別の商品に切り替えるため');
+  if v_res ->> 'status' <> 'withdrawn' then raise exception 'CASE43 FAILED: 取り下げできない'; end if;
+
+  -- 代理店は審査・ADMIN の RPC を実行できない
+  v_ok := false;
+  begin perform public.treemerce_admin_approve_submission(v_id);
+  exception when insufficient_privilege then v_ok := true; end;
+  if not v_ok then raise exception 'CASE43 FAILED: 代理店が承認 RPC を実行できた'; end if;
+  v_ok := false;
+  begin perform public.treemerce_admin_return_submission(v_id, '自分で差し戻し');
+  exception when insufficient_privilege then v_ok := true; end;
+  if not v_ok then raise exception 'CASE43 FAILED: 代理店が差し戻し RPC を実行できた'; end if;
+  v_ok := false;
+  begin perform public.treemerce_admin_list_submissions();
+  exception when insufficient_privilege then v_ok := true; end;
+  if not v_ok then raise exception 'CASE43 FAILED: 代理店が申請一覧 (ADMIN) を取得できた'; end if;
+end $$;
+
+reset role;
+
+-- 傘上 R・傘下 B は A の申請を読めない・操作できない (存在も開示しない)
+do $$
+declare
+  v_id uuid := current_setting('tm.sub43')::uuid;
+  v_img uuid; v_sub text; v_ok boolean;
+begin
+  select id into v_img from public.product_submission_images where submission_id = v_id limit 1;
+
+  foreach v_sub in array array['00000000-0000-4000-8000-000000000001',
+                               '00000000-0000-4000-8000-000000000003'] loop
+    perform set_config('request.jwt.claims',
+      jsonb_build_object('sub', v_sub, 'role', 'authenticated')::text, true);
+    set local role authenticated;
+
+    if exists (select 1 from jsonb_array_elements(public.treemerce_my_submissions()) e
+               where (e ->> 'id')::uuid = v_id) then
+      raise exception 'CASE43 FAILED: 他代理店 (%) の一覧に A の申請が出た', v_sub;
+    end if;
+
+    v_ok := false;
+    begin perform public.treemerce_my_submission(v_id);
+    exception when invalid_parameter_value then v_ok := true; end;
+    if not v_ok then raise exception 'CASE43 FAILED: 他代理店 (%) が A の申請詳細を取得できた', v_sub; end if;
+
+    v_ok := false;
+    begin perform public.treemerce_save_my_submission(p_submission_id => v_id, p_name => '乗っ取り');
+    exception when invalid_parameter_value then v_ok := true; end;
+    if not v_ok then raise exception 'CASE43 FAILED: 他代理店 (%) が A の申請を編集できた', v_sub; end if;
+
+    v_ok := false;
+    begin perform public.treemerce_remove_submission_image(v_img);
+    exception when invalid_parameter_value then v_ok := true; end;
+    if not v_ok then raise exception 'CASE43 FAILED: 他代理店 (%) が A の申請画像を削除できた', v_sub; end if;
+
+    reset role;
+  end loop;
+
+  -- admin ロール (super_admin ではない) も申請を読めない
+  perform set_config('request.jwt.claims',
+    '{"sub":"00000000-0000-4000-8000-000000000041","role":"authenticated"}', true);
+  set local role authenticated;
+  v_ok := false;
+  begin perform public.treemerce_admin_get_submission(v_id);
+  exception when insufficient_privilege then v_ok := true; end;
+  if not v_ok then raise exception 'CASE43 FAILED: admin ロールが申請詳細を取得できた'; end if;
+  reset role;
+  perform set_config('request.jwt.claims', '', true);
+
+  -- 監査ログには生産者の連絡先の値が残らない
+  if exists (select 1 from public.admin_audit_logs
+             where coalesce(before_state::text, '') || coalesce(after_state::text, '')
+                   ~* '(090-4343-4343|CASE43連絡先|case43-contact)') then
+    raise exception 'CASE43 FAILED: 監査ログに生産者の連絡先が含まれた';
+  end if;
+  if (select count(*) from public.admin_audit_logs
+      where target_id = v_id and actor_role = 'agent'
+        and action in ('submission.create', 'submission.update', 'submission.image_add',
+                       'submission.image_remove', 'submission.submit')) < 5 then
+    raise exception 'CASE43 FAILED: 代理店の操作が監査ログに残っていない';
+  end if;
+
+  raise notice 'CASE43 OK: 申請の作成・保存・申請・取り下げ・画像の枠 (5 枚まで) は本人のみ。申請中は編集不可。傘上・傘下・admin ロールには見えず操作もできない。代理店は審査不可。監査ログに連絡先の値なし';
+end $$;
+
+-- ============================================================================
+-- CASE44 : 持込み申請 — 審査・承認・公開 (0018)
+--   super_admin だけが一覧・詳細 (連絡先含む) を見られ、差し戻し・却下は理由必須。
+--   差し戻し後は本人が修正して再申請できる。承認すると生産者と商品が非公開・在庫 0 で作られ、
+--   持込み元が記録される。公開は super_admin のみで監査ログに残る。
+--   ショップに持込み元は出ない。招待経路・顧客の担当・注文の帰属は変わらない。
+-- ============================================================================
+
+do $$
+begin
+  perform set_config('tm.case44_inviter',
+    (select coalesce(invited_by::text, '') from public.agents where id = '10000000-0000-4000-8000-000000000002'),
+    false);
+  perform set_config('tm.case44_assign',
+    (select count(*)::text from public.customer_assignments where status = 'active'), false);
+  perform set_config('tm.case44_orders',
+    (select string_agg(id || ':' || agent_id, ',' order by id) from public.orders), false);
+end $$;
+
+select set_config('request.jwt.claims',
+  '{"sub":"00000000-0000-4000-8000-000000000007","role":"authenticated"}', true);
+set local role authenticated;
+
+do $$
+declare v_id uuid := current_setting('tm.sub43')::uuid; v_res jsonb; v_row jsonb; v_ok boolean;
+begin
+  select e into v_row from jsonb_array_elements(public.treemerce_admin_list_submissions()) e
+  where (e ->> 'id')::uuid = v_id;
+  if v_row is null or v_row ? 'producer_contact_phone' or v_row ->> 'agent_public_id' <> 'TM-TEST-A' then
+    raise exception 'CASE44 FAILED: ADMIN の申請一覧が不正 (%)', v_row;
+  end if;
+
+  v_res := public.treemerce_admin_get_submission(v_id);
+  if v_res ->> 'producer_contact_phone' <> '090-4343-4343'
+     or v_res -> 'events' -> 0 -> 'content_snapshot' ->> 'name' <> 'CASE43 有機ほうじ茶' then
+    raise exception 'CASE44 FAILED: ADMIN の申請詳細が不正 (%)', v_res;
+  end if;
+
+  v_ok := false;
+  begin perform public.treemerce_admin_return_submission(v_id, '  ');
+  exception when invalid_parameter_value then v_ok := true; end;
+  if not v_ok then raise exception 'CASE44 FAILED: 理由なしで差し戻せた'; end if;
+  v_ok := false;
+  begin perform public.treemerce_admin_reject_submission(v_id, null);
+  exception when invalid_parameter_value then v_ok := true; end;
+  if not v_ok then raise exception 'CASE44 FAILED: 理由なしで却下できた'; end if;
+
+  v_res := public.treemerce_admin_return_submission(v_id, '期限の目安を記入してください');
+  if v_res ->> 'status' <> 'returned' then raise exception 'CASE44 FAILED: 差し戻せない'; end if;
+end $$;
+
+reset role;
+
+-- 本人が差し戻し理由を確認し、修正して再申請する
+select set_config('request.jwt.claims',
+  '{"sub":"00000000-0000-4000-8000-000000000002","role":"authenticated"}', true);
+set local role authenticated;
+
+do $$
+declare v_id uuid := current_setting('tm.sub43')::uuid; v_res jsonb; v_other uuid;
+begin
+  v_res := public.treemerce_my_submission(v_id);
+  if v_res ->> 'status' <> 'returned' or v_res ->> 'review_reason' <> '期限の目安を記入してください'
+     or not (v_res ->> 'editable')::boolean then
+    raise exception 'CASE44 FAILED: 本人に差し戻し理由が見えない (%)', v_res;
+  end if;
+
+  perform public.treemerce_save_my_submission(
+    p_submission_id => v_id, p_name => 'CASE43 有機ほうじ茶', p_category => 'food',
+    p_description => '香ばしい有機ほうじ茶', p_desired_price => 1800, p_expected_wholesale_price => 1100,
+    p_content_volume => '80g', p_ingredients => '茶 (静岡県産)', p_best_before_note => '製造から12か月',
+    p_producer_name => 'CASE43 茶工房', p_producer_origin => '静岡県 島田市',
+    p_producer_ship_from_prefecture => '静岡県', p_producer_ship_lead_time => '入金確認後5営業日以内',
+    p_producer_contact_name => 'CASE43連絡先', p_producer_contact_phone => '090-4343-4343',
+    p_producer_contact_email => 'case43-contact@example.com');
+  v_res := public.treemerce_submit_my_submission(v_id);
+  if v_res ->> 'status' <> 'submitted' or (v_res ->> 'revision')::int <> 2 then
+    raise exception 'CASE44 FAILED: 再申請できない (%)', v_res;
+  end if;
+
+  -- 却下用の 2 件目
+  v_other := (public.treemerce_save_my_submission(
+    p_name => 'CASE44 却下用', p_description => '説明', p_desired_price => 500, p_content_volume => '1個',
+    p_producer_name => 'CASE44 生産者', p_producer_origin => '福岡県', p_producer_ship_from_prefecture => '福岡県',
+    p_producer_ship_lead_time => '7日', p_producer_contact_email => 'case44@example.com') ->> 'id')::uuid;
+  perform public.treemerce_submit_my_submission(v_other);
+  perform set_config('tm.sub44_other', v_other::text, false);
+end $$;
+
+reset role;
+
+select set_config('request.jwt.claims',
+  '{"sub":"00000000-0000-4000-8000-000000000007","role":"authenticated"}', true);
+set local role authenticated;
+
+do $$
+declare
+  v_id uuid := current_setting('tm.sub43')::uuid;
+  v_other uuid := current_setting('tm.sub44_other')::uuid;
+  v_res jsonb; v_product uuid; v_producer uuid; v_ok boolean;
+begin
+  -- 承認: 生産者を新規作成し、商品を非公開・在庫 0 で作る
+  v_res := public.treemerce_admin_approve_submission(v_id, p_reason => '内容を確認しました');
+  v_product  := (v_res ->> 'product_id')::uuid;
+  v_producer := (v_res ->> 'producer_id')::uuid;
+  perform set_config('tm.case44_product', v_product::text, false);
+  if v_res ->> 'status' <> 'approved' or not (v_res ->> 'producer_created')::boolean then
+    raise exception 'CASE44 FAILED: 承認結果が不正 (%)', v_res;
+  end if;
+  if (select is_published from public.products where id = v_product)
+     or (select stock from public.products where id = v_product) <> 0
+     or (select price from public.products where id = v_product) <> 1800
+     or (select producer_id from public.products where id = v_product) <> v_producer then
+    raise exception 'CASE44 FAILED: 承認で作られた商品が非公開・在庫 0 の下書きでない';
+  end if;
+
+  -- 承認後は再審査できない
+  v_ok := false;
+  begin perform public.treemerce_admin_reject_submission(v_id, '承認後の却下');
+  exception when invalid_parameter_value then v_ok := true; end;
+  if not v_ok then raise exception 'CASE44 FAILED: 承認済みの申請を却下できた'; end if;
+  v_ok := false;
+  begin perform public.treemerce_admin_approve_submission(v_id);
+  exception when invalid_parameter_value then v_ok := true; end;
+  if not v_ok then raise exception 'CASE44 FAILED: 同じ申請を二重に承認できた'; end if;
+
+  -- 却下 (理由あり)。商品は作られない
+  v_res := public.treemerce_admin_reject_submission(v_other, '取扱い方針に合わないため');
+  if v_res ->> 'status' <> 'rejected' then raise exception 'CASE44 FAILED: 却下できない'; end if;
+
+  -- 価格・在庫を確定して公開 (既存の商品 RPC。公開ガードを通る)
+  perform public.treemerce_admin_upsert_product(
+    'CASE43 有機ほうじ茶', 1980, 30, true, 'food', '香ばしい有機ほうじ茶', null, null, 0, v_product,
+    '価格・在庫を確定して公開', v_producer, null, null, null);
+  if not (select is_published from public.products where id = v_product) then
+    raise exception 'CASE44 FAILED: super_admin が承認済みの持込み商品を公開できない';
+  end if;
+end $$;
+
+reset role;
+select set_config('request.jwt.claims', '', true);
+
+do $$
+declare
+  v_id uuid := current_setting('tm.sub43')::uuid;
+  v_other uuid := current_setting('tm.sub44_other')::uuid;
+  v_product uuid := current_setting('tm.case44_product')::uuid;
+  v_shop text;
+begin
+  -- 持込み元・生産者の連絡先・履歴
+  if not exists (select 1 from public.product_sources
+                 where product_id = v_product and submission_id = v_id
+                   and sourced_by_agent_id = '10000000-0000-4000-8000-000000000002') then
+    raise exception 'CASE44 FAILED: 持込み元が記録されていない';
+  end if;
+  if (select contact_phone from public.producers
+      where id = (select approved_producer_id from public.product_submissions where id = v_id))
+     is distinct from '090-4343-4343' then
+    raise exception 'CASE44 FAILED: 生産者の連絡先が super_admin 専用列に引き継がれていない';
+  end if;
+  if (select approved_product_id from public.product_submissions where id = v_other) is not null then
+    raise exception 'CASE44 FAILED: 却下した申請に商品がひも付いた';
+  end if;
+  if (select array_agg(to_status::text order by changed_at) from public.product_submission_events
+      where submission_id = v_id) <> array['submitted', 'returned', 'submitted', 'approved'] then
+    raise exception 'CASE44 FAILED: 申請の履歴が不正';
+  end if;
+  if (select count(*) from public.admin_audit_logs
+      where target_id = v_product and action = 'product.publish' and actor_role = 'super_admin'
+        and (after_state ->> 'sourced')::boolean) <> 1
+     or not exists (select 1 from public.admin_audit_logs where target_id = v_id and action = 'submission.approve')
+     or not exists (select 1 from public.admin_audit_logs where target_id = v_id and action = 'submission.return'
+                      and reason = '期限の目安を記入してください')
+     or not exists (select 1 from public.admin_audit_logs where target_id = v_id and action = 'submission.resubmit')
+     or not exists (select 1 from public.admin_audit_logs where target_id = v_other and action = 'submission.reject') then
+    raise exception 'CASE44 FAILED: 審査・公開の操作が監査ログに残っていない';
+  end if;
+  if exists (select 1 from public.admin_audit_logs
+             where coalesce(before_state::text, '') || coalesce(after_state::text, '')
+                   ~* '(090-4343-4343|CASE43連絡先|case43-contact|case44@example)') then
+    raise exception 'CASE44 FAILED: 監査ログに生産者の連絡先が含まれた';
+  end if;
+
+  -- ショップに持込み元 (代理店) は出ない
+  v_shop := public.treemerce_shop_products('TM-TEST-S', v_product)::text;
+  if v_shop not like '%CASE43 有機ほうじ茶%' then
+    raise exception 'CASE44 FAILED: 公開した持込み商品がショップに出ない (%)', v_shop;
+  end if;
+  if v_shop ~ '(sourced|10000000-0000-4000-8000-000000000002|TM-TEST-A|テスト代理店A|PS-)' then
+    raise exception 'CASE44 FAILED: ショップに持込み元の情報が含まれた';
+  end if;
+
+  -- 原則3: 招待経路・顧客の担当・注文の帰属は変わらない
+  if coalesce((select invited_by::text from public.agents where id = '10000000-0000-4000-8000-000000000002'), '')
+       <> current_setting('tm.case44_inviter')
+     or (select count(*)::text from public.customer_assignments where status = 'active')
+       <> current_setting('tm.case44_assign')
+     or coalesce((select string_agg(id || ':' || agent_id, ',' order by id) from public.orders), '')
+       <> coalesce(current_setting('tm.case44_orders'), '') then
+    raise exception 'CASE44 FAILED: 承認・公開で招待経路・顧客の担当・注文の帰属が変わった';
+  end if;
+end $$;
+
+-- 本人の一覧に公開状態が出る (持ち込んだ商品のみ)
+select set_config('request.jwt.claims',
+  '{"sub":"00000000-0000-4000-8000-000000000002","role":"authenticated"}', true);
+set local role authenticated;
+
+do $$
+declare v_row jsonb;
+begin
+  select e into v_row from jsonb_array_elements(public.treemerce_my_submissions()) e
+  where (e ->> 'id')::uuid = current_setting('tm.sub43')::uuid;
+  if v_row ->> 'status' <> 'approved' or not (v_row ->> 'product_is_published')::boolean
+     or v_row ? 'reviewed_by' then
+    raise exception 'CASE44 FAILED: 本人の一覧の承認・公開状態が不正 (%)', v_row;
+  end if;
+  select e into v_row from jsonb_array_elements(public.treemerce_my_submissions()) e
+  where (e ->> 'id')::uuid = current_setting('tm.sub44_other')::uuid;
+  if v_row ->> 'review_reason' <> '取扱い方針に合わないため' then
+    raise exception 'CASE44 FAILED: 本人に却下理由が見えない';
+  end if;
+
+  raise notice 'CASE44 OK: 一覧・詳細 (連絡先) は super_admin のみ。差し戻し・却下は理由必須、差し戻し後は本人が再申請可。承認で生産者・商品を非公開・在庫 0 で作成し持込み元を記録、二重承認不可。公開は super_admin で監査ログに残り、ショップに持込み元は出ない。招待経路・担当・注文の帰属は不変';
+end $$;
+
+reset role;
+
+-- ============================================================================
+-- CASE45 : 持込み商品の売れ行き (0019)
+--   持込み代理店 A は自分が持ち込んだ商品の件数・数量・金額だけを見られる (入金確認済み以降)。
+--   件数 1〜4 件、または A が把握できない注文 (他の代理店の担当顧客) が 1〜4 件のときは丸める。
+--   購入者・販売した代理店の情報は返さない。他の代理店には A の持込み商品は出ない。STABLE。
+-- ============================================================================
+
+-- 注文を作り (anon)、入金確認する (super_admin) ための手順
+do $$
+begin
+  perform set_config('tm.case45_pending', '', false);
+end $$;
+
+-- (1) A のショップから 5 件 (購入者は A の担当になる)
+select set_config('request.jwt.claims', '', true);
+set local role anon;
+do $$
+declare i int;
+begin
+  for i in 1 .. 5 loop
+    perform public.treemerce_place_order('TM-TEST-A',
+      jsonb_build_array(jsonb_build_object('product_id', current_setting('tm.case44_product'), 'quantity', 1)),
+      'CASE45 購入者A' || i, '福岡県テスト市1-1', 'tm-test-case45-a' || i || '@treemerce.test');
+  end loop;
+end $$;
+reset role;
+
+select set_config('request.jwt.claims',
+  '{"sub":"00000000-0000-4000-8000-000000000007","role":"authenticated"}', true);
+set local role authenticated;
+do $$
+declare r record;
+begin
+  for r in select id from public.orders
+           where contact_email like 'tm-test-case45-%' and status = 'received'
+             and contact_email <> 'tm-test-case45-unpaid@treemerce.test' loop
+    perform public.treemerce_admin_set_order_status(r.id, 'payment_confirmed', '入金を確認');
+  end loop;
+end $$;
+reset role;
+
+select set_config('request.jwt.claims',
+  '{"sub":"00000000-0000-4000-8000-000000000002","role":"authenticated"}', true);
+set local role authenticated;
+do $$
+declare v_res jsonb; v_row jsonb;
+begin
+  v_res := public.treemerce_my_sourced_product_sales('all');
+  select e into v_row from jsonb_array_elements(v_res -> 'products') e
+  where e ->> 'product_id' = current_setting('tm.case44_product');
+  if v_row is null or (v_row ->> 'suppressed')::boolean or (v_row ->> 'order_count')::int <> 5 then
+    raise exception 'CASE45 FAILED: 自分の担当の注文 5 件が表示されない (%)', v_row;
+  end if;
+end $$;
+reset role;
+
+-- (2) 兄弟枝 S のショップから 1 件 → A が把握できない注文が 1 件なので丸める
+select set_config('request.jwt.claims', '', true);
+set local role anon;
+do $$
+begin
+  perform public.treemerce_place_order('TM-TEST-S',
+    jsonb_build_array(jsonb_build_object('product_id', current_setting('tm.case44_product'), 'quantity', 1)),
+    'CASE45 購入者S1', '福岡県テスト市2-2', 'tm-test-case45-s1@treemerce.test');
+end $$;
+reset role;
+
+select set_config('request.jwt.claims',
+  '{"sub":"00000000-0000-4000-8000-000000000007","role":"authenticated"}', true);
+set local role authenticated;
+do $$
+declare r record;
+begin
+  for r in select id from public.orders
+           where contact_email like 'tm-test-case45-%' and status = 'received'
+             and contact_email <> 'tm-test-case45-unpaid@treemerce.test' loop
+    perform public.treemerce_admin_set_order_status(r.id, 'payment_confirmed', '入金を確認');
+  end loop;
+end $$;
+reset role;
+
+select set_config('request.jwt.claims',
+  '{"sub":"00000000-0000-4000-8000-000000000002","role":"authenticated"}', true);
+set local role authenticated;
+do $$
+declare v_res jsonb; v_row jsonb;
+begin
+  v_res := public.treemerce_my_sourced_product_sales('all');
+  select e into v_row from jsonb_array_elements(v_res -> 'products') e
+  where e ->> 'product_id' = current_setting('tm.case44_product');
+  if not (v_row ->> 'suppressed')::boolean or v_row ->> 'order_count' is not null
+     or v_row ->> 'amount' is not null or v_row ->> 'label' <> '該当データ少数' then
+    raise exception 'CASE45 FAILED: 他の代理店の注文が 1 件のとき丸められない (%)', v_row;
+  end if;
+  if (v_res -> 'visible_total' ->> 'order_count')::int <> 0
+     or (v_res ->> 'suppressed_product_count')::int <> 1 then
+    raise exception 'CASE45 FAILED: 丸めた商品が合計に含まれた (%)', v_res -> 'visible_total';
+  end if;
+end $$;
+reset role;
+
+-- (3) S のショップから さらに 4 件 (入金確認) + 1 件 (未入金) → 他の代理店分が 5 件になり表示
+select set_config('request.jwt.claims', '', true);
+set local role anon;
+do $$
+declare i int;
+begin
+  for i in 2 .. 5 loop
+    perform public.treemerce_place_order('TM-TEST-S',
+      jsonb_build_array(jsonb_build_object('product_id', current_setting('tm.case44_product'), 'quantity', 2)),
+      'CASE45 購入者S' || i, '福岡県テスト市2-2', 'tm-test-case45-s' || i || '@treemerce.test');
+  end loop;
+  perform public.treemerce_place_order('TM-TEST-S',
+    jsonb_build_array(jsonb_build_object('product_id', current_setting('tm.case44_product'), 'quantity', 1)),
+    'CASE45 未入金', '福岡県テスト市2-2', 'tm-test-case45-unpaid@treemerce.test');
+end $$;
+reset role;
+
+select set_config('request.jwt.claims',
+  '{"sub":"00000000-0000-4000-8000-000000000007","role":"authenticated"}', true);
+set local role authenticated;
+do $$
+declare r record;
+begin
+  for r in select id from public.orders
+           where contact_email like 'tm-test-case45-%' and status = 'received'
+             and contact_email <> 'tm-test-case45-unpaid@treemerce.test' loop
+    perform public.treemerce_admin_set_order_status(r.id, 'payment_confirmed', '入金を確認');
+  end loop;
+end $$;
+reset role;
+
+select set_config('request.jwt.claims',
+  '{"sub":"00000000-0000-4000-8000-000000000002","role":"authenticated"}', true);
+set local role authenticated;
+do $$
+declare v_res jsonb; v_row jsonb; v_price numeric;
+begin
+  select price into v_price from public.products where id = current_setting('tm.case44_product')::uuid;
+  v_res := public.treemerce_my_sourced_product_sales('all');
+  select e into v_row from jsonb_array_elements(v_res -> 'products') e
+  where e ->> 'product_id' = current_setting('tm.case44_product');
+  -- A の 5 件 (各 1 個) + S の 5 件 (1 個 + 2 個 × 4) = 10 件・14 個。未入金の 1 件は含めない
+  if (v_row ->> 'suppressed')::boolean or (v_row ->> 'order_count')::int <> 10
+     or (v_row ->> 'quantity')::int <> 14 or (v_row ->> 'amount')::numeric <> v_price * 14 then
+    raise exception 'CASE45 FAILED: 売れ行きの件数・数量・金額が不正 (%)', v_row;
+  end if;
+  if (v_res -> 'visible_total' ->> 'order_count')::int <> 10 then
+    raise exception 'CASE45 FAILED: 表示中の商品の合計が不正 (%)', v_res -> 'visible_total';
+  end if;
+  if (select (e ->> 'order_count')::int
+      from jsonb_array_elements(public.treemerce_my_sourced_product_sales('3m') -> 'products') e
+      where e ->> 'product_id' = current_setting('tm.case44_product')) is distinct from 10 then
+    raise exception 'CASE45 FAILED: 期間 3m の集計が不正';
+  end if;
+  -- 売れていない持込み商品 (CASE42 の商品) は 0 件として返る (丸めない)
+  if not exists (select 1 from jsonb_array_elements(v_res -> 'products') e
+                 where e ->> 'product_name' = 'CASE42 持込み商品'
+                   and (e ->> 'order_count')::int = 0 and not (e ->> 'suppressed')::boolean) then
+    raise exception 'CASE45 FAILED: 売れていない持込み商品が 0 件として返らない';
+  end if;
+
+  -- 購入者・販売した代理店の情報を含まない
+  if v_res::text ~ '(CASE45 購入者|tm-test-case45|TM-TEST-S|テスト代理店S|10000000-0000-4000-8000-000000000006|customer|agent)' then
+    raise exception 'CASE45 FAILED: 売れ行きに購入者・代理店の情報が含まれた (%)', v_res;
+  end if;
+end $$;
+reset role;
+
+-- (4) 他の代理店 (S・B) には A の持込み商品は出ない。未ログイン・不正な期間は拒否。STABLE
+do $$
+declare v_sub text; v_res jsonb; v_ok boolean;
+begin
+  foreach v_sub in array array['00000000-0000-4000-8000-000000000006',
+                               '00000000-0000-4000-8000-000000000003'] loop
+    perform set_config('request.jwt.claims',
+      jsonb_build_object('sub', v_sub, 'role', 'authenticated')::text, true);
+    set local role authenticated;
+    v_res := public.treemerce_my_sourced_product_sales('all');
+    if jsonb_array_length(v_res -> 'products') <> 0 then
+      raise exception 'CASE45 FAILED: 他の代理店 (%) に A の持込み商品が出た (%)', v_sub, v_res;
+    end if;
+    reset role;
+  end loop;
+
+  perform set_config('request.jwt.claims',
+    '{"sub":"00000000-0000-4000-8000-000000000002","role":"authenticated"}', true);
+  set local role authenticated;
+  v_ok := false;
+  begin perform public.treemerce_my_sourced_product_sales('2y');
+  exception when invalid_parameter_value then v_ok := true; end;
+  if not v_ok then raise exception 'CASE45 FAILED: 不正な期間を受け付けた'; end if;
+  reset role;
+
+  perform set_config('request.jwt.claims', '', true);
+  set local role anon;
+  v_ok := false;
+  begin perform public.treemerce_my_sourced_product_sales('all');
+  exception when insufficient_privilege then v_ok := true; end;
+  if not v_ok then raise exception 'CASE45 FAILED: 未ログインで売れ行きを取得できた'; end if;
+  reset role;
+
+  if (select provolatile from pg_proc where proname = 'treemerce_my_sourced_product_sales') <> 's' then
+    raise exception 'CASE45 FAILED: 売れ行きの RPC が STABLE ではない';
+  end if;
+
+  raise notice 'CASE45 OK: 持込み代理店は自分の持込み商品の件数・数量・金額のみ (入金確認済み以降) を見られる。件数 1〜4 件・把握できない注文 1〜4 件は丸め、合計は丸めていない商品のみ。購入者・代理店の情報なし。他の代理店には出ない。STABLE';
+end $$;
+
 do $$
 begin
   raise notice '==========================================';
-  raise notice '  TREEMERCE: ALL 40 CASES PASSED (+EXTRA)';
+  raise notice '  TREEMERCE: ALL 45 CASES PASSED (+EXTRA)';
   raise notice '==========================================';
 end $$;
 

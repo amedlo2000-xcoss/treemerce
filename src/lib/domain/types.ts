@@ -494,6 +494,155 @@ type SuppressedAggregate =
   | { suppressed: false; count: number; total: number }
   | { suppressed: true; count: null; total: null; label: string };
 
+/**
+ * 代理店の事業プロフィール (0016)。本人 (treemerce_my_agent_profile) と
+ * super_admin (treemerce_admin_get_agent_profile) にだけ返る。
+ */
+export type AgentProfile = {
+  found: boolean;
+  agent_id: string;
+  industry: string | null;
+  business_description: string | null;
+  offerings: string | null;
+  target_customers: string | null;
+  activity_prefectures: string[];
+  website_url: string | null;
+  sns_urls: string[];
+  self_introduction: string | null;
+  updated_at: string | null;
+};
+
+/* ------------------------------------------------ 商品の持込み申請 (0018) */
+
+export type SubmissionImage = {
+  id: string;
+  storage_path: string;
+  content_type: string;
+  sort_order: number;
+};
+
+/** 画面表示用に署名付き URL を付けた画像 (URL はサーバーで短時間だけ有効なものを発行) */
+export type SubmissionImageView = SubmissionImage & { url: string | null };
+
+export type SubmissionEvent = {
+  revision: number;
+  from_status: string | null;
+  to_status: string;
+  reason: string | null;
+  actor_role: string;
+  changed_at: string;
+  /** super_admin 用の詳細でのみ返る (申請・再申請時点の内容) */
+  content_snapshot?: Record<string, unknown> | null;
+};
+
+/** 申請の内容 (本人 / super_admin にのみ返る。連絡先を含む) */
+export type SubmissionContent = {
+  id: string;
+  submission_no: string;
+  status: string;
+  revision: number;
+  name: string;
+  category: string;
+  description: string | null;
+  desired_price: number | null;
+  expected_wholesale_price: number | null;
+  content_volume: string | null;
+  ingredients: string | null;
+  best_before_note: string | null;
+  producer_name: string | null;
+  producer_origin: string | null;
+  producer_ship_from_prefecture: string | null;
+  producer_ship_lead_time: string | null;
+  producer_contact_name: string | null;
+  producer_contact_phone: string | null;
+  producer_contact_email: string | null;
+  submitted_at: string | null;
+  reviewed_at: string | null;
+  review_reason: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+/** treemerce_my_submissions の 1 件 */
+export type MySubmissionListItem = {
+  id: string;
+  submission_no: string;
+  status: string;
+  revision: number;
+  name: string;
+  category: string;
+  desired_price: number | null;
+  submitted_at: string | null;
+  reviewed_at: string | null;
+  review_reason: string | null;
+  image_count: number;
+  product_is_published: boolean | null;
+  updated_at: string;
+};
+
+/** treemerce_my_submission */
+export type MySubmissionDetail = SubmissionContent & {
+  editable: boolean;
+  images: SubmissionImage[];
+  events: SubmissionEvent[];
+  product_is_published: boolean | null;
+};
+
+/** treemerce_admin_list_submissions の 1 件 (連絡先は含まない) */
+export type AdminSubmissionListItem = {
+  id: string;
+  submission_no: string;
+  status: string;
+  revision: number;
+  name: string;
+  category: string;
+  desired_price: number | null;
+  producer_name: string | null;
+  agent_id: string;
+  agent_public_id: string;
+  agent_display_name: string;
+  image_count: number;
+  submitted_at: string | null;
+  reviewed_at: string | null;
+  approved_product_id: string | null;
+  updated_at: string;
+};
+
+/** treemerce_admin_get_submission */
+export type AdminSubmissionDetail = SubmissionContent & {
+  agent: { id: string; public_id: string; display_name: string; status: string };
+  images: SubmissionImage[];
+  events: SubmissionEvent[];
+  approved_product_id: string | null;
+  approved_producer_id: string | null;
+  product_is_published: boolean | null;
+};
+
+/**
+ * treemerce_my_sourced_product_sales (0019)。持込み代理店本人の持込み商品の売れ行き。
+ * 件数・数量・金額のみ。丸めた商品は値が null。合計は丸めていない商品だけの合計。
+ */
+export type SourcedProductSalesRow = {
+  product_id: string;
+  product_name: string;
+  submission_no: string;
+  is_published: boolean;
+  suppressed: boolean;
+  label: string | null;
+  order_count: number | null;
+  quantity: number | null;
+  amount: number | null;
+};
+
+export type SourcedProductSales = {
+  period: string;
+  k_threshold: number;
+  products: SourcedProductSalesRow[];
+  visible_total: { product_count: number; order_count: number; quantity: number; amount: number };
+  suppressed_product_count: number;
+  generated_at: string;
+};
+
 /** treemerce_agent_order_summary (傘下は匿名の件数・金額のみ、n<5 は丸め) */
 export type AgentOrderSummary = {
   period: string;

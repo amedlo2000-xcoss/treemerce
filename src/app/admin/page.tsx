@@ -3,6 +3,7 @@ import {
   BarChart3,
   ChevronRight,
   ClipboardList,
+  Inbox,
   Link2,
   Package,
   Settings,
@@ -25,6 +26,7 @@ const QUICK_LINKS: { href: string; title: string; description: string; icon: Luc
   { href: "/admin/assignments", title: "顧客担当管理", description: "担当代理店の確認・変更", icon: ArrowRightLeft },
   { href: "/admin/orders", title: "注文管理", description: "入金確認・発送・キャンセル", icon: ShoppingBag },
   { href: "/admin/products", title: "商品管理", description: "商品の登録・価格・在庫・公開", icon: Package },
+  { href: "/admin/submissions", title: "持込み申請", description: "代理店からの商品持込みの審査", icon: Inbox },
   { href: "/admin/analytics", title: "客層分析", description: "全体・部分木の匿名集計", icon: BarChart3 },
   { href: "/admin/audit-logs", title: "監査ログ", description: "管理者操作の記録", icon: ClipboardList },
   { href: "/admin/settings", title: "ショップ設定", description: "振込先・特商法表記・注文受付", icon: Settings },
@@ -36,7 +38,14 @@ export default async function AdminDashboard({
   searchParams: Promise<{ error?: string }>;
 }) {
   const { error } = await searchParams;
-  const { supabase } = await requireAdminPage("/admin");
+  const { supabase, viewer } = await requireAdminPage("/admin");
+
+  // 持込み申請は super_admin のみ参照できる (RPC 側でも判定)。それ以外のロールには件数も出さない。
+  let pendingSubmissions: number | null = null;
+  if (viewer.adminRole === "super_admin") {
+    const { data } = await supabase.rpc("treemerce_admin_list_submissions", { p_status: "submitted" });
+    pendingSubmissions = Array.isArray(data) ? data.length : 0;
+  }
 
   const [agents, customers, assignments, { data: recentLogs }, awaitingPayment, awaitingShipment] = await Promise.all([
     supabase.from("agents").select("id", { count: "exact", head: true }),
@@ -87,7 +96,17 @@ export default async function AdminDashboard({
         />
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2 md:gap-4">
+      <div className={`grid gap-3 md:gap-4 ${pendingSubmissions !== null ? "sm:grid-cols-3" : "sm:grid-cols-2"}`}>
+        {pendingSubmissions !== null ? (
+          <Link href="/admin/submissions?status=submitted" className="block transition-opacity hover:opacity-90">
+            <Stat
+              label="審査待ちの持込み申請"
+              value={pendingSubmissions}
+              hint="代理店からの商品の持込み"
+              icon={<Inbox size={18} />}
+            />
+          </Link>
+        ) : null}
         <Link href="/admin/orders?status=received" className="block transition-opacity hover:opacity-90">
           <Stat
             label="入金待ちの注文"

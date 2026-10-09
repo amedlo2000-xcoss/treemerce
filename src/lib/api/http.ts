@@ -106,7 +106,30 @@ const ERROR_MAP: Record<string, { status: number; message: string }> = {
     status: 409,
     message: "未発送の生産者があります。生産者ごとの発送登録を完了してください。",
   },
+
+  // 代理店の事業プロフィール・持込み申請 (0016〜0018)
+  // 他の代理店の申請は「見つかりません」で返す (存在も開示しない)
+  TREEMERCE_PROFILE_WRITE_DENIED: { status: 403, message: "プロフィールへの直接書込みはできません。" },
+  TREEMERCE_SUBMISSION_NOT_FOUND: { status: 404, message: "申請が見つかりません。" },
+  TREEMERCE_SUBMISSION_NOT_EDITABLE: {
+    status: 409,
+    message: "申請中・確定済みの申請は変更できません。",
+  },
+  TREEMERCE_SUBMISSION_FINALIZED: { status: 409, message: "この申請は確定済みのため変更できません。" },
+  TREEMERCE_SUBMISSION_NOT_APPROVED: {
+    status: 409,
+    message: "持込み申請が承認されていない商品は公開できません。",
+  },
+  TREEMERCE_SUBMISSION_WRITE_DENIED: { status: 403, message: "申請への直接書込みはできません。" },
+  TREEMERCE_PRODUCT_SOURCE_IMMUTABLE: { status: 403, message: "商品の持込み元は変更できません。" },
 };
+
+/** DB 側の具体的な理由 (「商品名は必須です」等) をそのまま画面に返すコード */
+const DETAIL_CODES = new Set([
+  "TREEMERCE_INVALID_INPUT",
+  "TREEMERCE_REASON_REQUIRED",
+  "TREEMERCE_SUBMISSION_NOT_EDITABLE",
+]);
 
 /**
  * DB 側で自前に raise した "TREEMERCE_XXX: 理由" (1 行のみ) から理由部分だけを取り出す。
@@ -123,8 +146,8 @@ export function failFromPostgrest(error: PostgrestError) {
 
   for (const [code, mapped] of Object.entries(ERROR_MAP)) {
     if (raw.includes(code)) {
-      // TREEMERCE_INVALID_INPUT は DB 側の具体的な理由 (「産地は必須です」等) をそのまま返す
-      const detail = code === "TREEMERCE_INVALID_INPUT" ? detailMessage(error.message, code) : null;
+      // DETAIL_CODES は DB 側の具体的な理由 (「産地は必須です」等) をそのまま返す
+      const detail = DETAIL_CODES.has(code) ? detailMessage(error.message, code) : null;
       return fail(code, detail ?? mapped.message, mapped.status);
     }
   }

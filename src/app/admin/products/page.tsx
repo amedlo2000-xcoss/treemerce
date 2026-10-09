@@ -17,7 +17,7 @@ import {
 } from "@/components/ui";
 import { requireSuperAdminPage } from "@/lib/auth/viewer";
 import { PRODUCT_CATEGORY_LABELS } from "@/lib/domain/enums";
-import type { ProducerPublicRow, ProductRow } from "@/lib/domain/types";
+import type { AdminSubmissionListItem, ProducerPublicRow, ProductRow } from "@/lib/domain/types";
 import { productImageUrl } from "@/lib/storage";
 
 /** 商品管理 (super_admin 専用)。非公開の商品も含めて全件を表示する。 */
@@ -33,6 +33,12 @@ export default async function AdminProductsPage() {
     producer: Pick<ProducerPublicRow, "id" | "name" | "is_active" | "is_placeholder"> | null;
   })[];
   const unsetPublished = products.filter((p) => p.is_published && p.producer?.is_placeholder).length;
+
+  // 持込み商品 (0017)。持込み元は super_admin 用の申請一覧 RPC からのみ引ける。
+  const { data: approvedData } = await supabase.rpc("treemerce_admin_list_submissions", { p_status: "approved" });
+  const sourcedIds = new Set(
+    ((approvedData ?? []) as AdminSubmissionListItem[]).map((s) => s.approved_product_id).filter(Boolean),
+  );
 
   return (
     <>
@@ -81,6 +87,11 @@ export default async function AdminProductsPage() {
                   {p.sku ? (
                     <div>
                       <Mono>{p.sku}</Mono>
+                    </div>
+                  ) : null}
+                  {sourcedIds.has(p.id) ? (
+                    <div className="mt-1">
+                      <Badge tone="blue">持込み</Badge>
                     </div>
                   ) : null}
                   {p.is_published && !p.content_volume ? (

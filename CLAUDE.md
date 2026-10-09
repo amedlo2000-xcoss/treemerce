@@ -69,5 +69,14 @@
 | 発送登録・訂正 | `public.treemerce_admin_ship_shipment()` (super_admin、全発送で注文を自動で発送済み) |
 | 発送依頼書 | `public.treemerce_admin_shipment_request()` (super_admin) |
 | 発送依頼の記録 | `public.treemerce_admin_record_shipment_request()` (super_admin) |
+| 事業プロフィール (本人) | `public.treemerce_my_agent_profile()` / `public.treemerce_update_my_agent_profile()` (0016) |
+| 事業プロフィール (ADMIN) | `public.treemerce_admin_get_agent_profile()` (super_admin、0016) |
+| 持込み申請 (本人) | `public.treemerce_save_my_submission()` / `treemerce_submit_my_submission()` / `treemerce_withdraw_my_submission()` / `treemerce_my_submissions()` / `treemerce_my_submission()` (0018) |
+| 持込み申請の画像 (本人) | `public.treemerce_reserve_submission_image()` / `treemerce_remove_submission_image()` (0018、非公開バケット `product-submission-images`) |
+| 持込み申請の審査 | `public.treemerce_admin_list_submissions()` / `treemerce_admin_get_submission()` / `treemerce_admin_approve_submission()` / `treemerce_admin_return_submission()` / `treemerce_admin_reject_submission()` (super_admin、0018) |
+| 持込み商品の売れ行き | `public.treemerce_my_sourced_product_sales()` (本人、STABLE、0019) |
+
+持込み元 (`product_sources`) は承認処理でのみ作られ、変更・削除できない。持込み元のある商品は、申請が承認済みで
+super_admin が実行した場合にだけ公開でき (0017 の公開ガード)、公開・非公開は経路を問わず監査ログに残る。
 
 テーブルへの直接書込みは行わない。受け入れテストは `supabase/tests/acceptance_cases.sql`。

@@ -128,6 +128,70 @@ export const ANALYTICS_PERIODS = [
 ] as const;
 export type AnalyticsPeriod = (typeof ANALYTICS_PERIODS)[number]["value"];
 
+/* --------------------------------------------- 代理店の事業プロフィール (0016) */
+
+export const AGENT_INDUSTRIES = [
+  "agriculture",
+  "food_manufacturing",
+  "retail",
+  "restaurant",
+  "beauty_health",
+  "service",
+  "other",
+] as const;
+export type AgentIndustry = (typeof AGENT_INDUSTRIES)[number];
+
+export const AGENT_INDUSTRY_LABELS: Record<string, string> = {
+  agriculture: "農業・漁業",
+  food_manufacturing: "食品製造・加工",
+  retail: "小売・卸売",
+  restaurant: "飲食",
+  beauty_health: "美容・健康",
+  service: "サービス",
+  other: "その他",
+};
+
+/* -------------------------------------------------- 商品の持込み申請 (0017) */
+
+export const SUBMISSION_STATUSES = [
+  "draft",
+  "submitted",
+  "returned",
+  "approved",
+  "rejected",
+  "withdrawn",
+] as const;
+export type SubmissionStatus = (typeof SUBMISSION_STATUSES)[number];
+
+export const SUBMISSION_STATUS_LABELS: Record<string, string> = {
+  draft: "下書き",
+  submitted: "申請中",
+  returned: "差し戻し",
+  approved: "承認",
+  rejected: "却下",
+  withdrawn: "取り下げ",
+};
+
+/** 管理画面の Badge の色 */
+export const SUBMISSION_STATUS_BADGE: Record<string, "neutral" | "amber" | "blue" | "green" | "red"> = {
+  draft: "neutral",
+  submitted: "blue",
+  returned: "amber",
+  approved: "green",
+  rejected: "red",
+  withdrawn: "neutral",
+};
+
+/** 代理店画面の StatusPill の色 */
+export const SUBMISSION_STATUS_PILL: Record<string, "neutral" | "warning" | "brand" | "success" | "danger"> = {
+  draft: "neutral",
+  submitted: "brand",
+  returned: "warning",
+  approved: "success",
+  rejected: "danger",
+  withdrawn: "neutral",
+};
+
 export const PREFECTURES = [
   "北海道", "青森県", "岩手県", "宮城県", "秋田県", "山形県", "福島県",
   "茨城県", "栃木県", "群馬県", "埼玉県", "千葉県", "東京都", "神奈川県",
