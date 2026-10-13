@@ -1,23 +1,27 @@
+import { PackagePlus, Pencil } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import {
   AGENT_STATUS_TONE,
+  BUTTON_CLASS,
   BackLink,
   Badge,
   Card,
   DetailList,
   DetailRow,
   EmptyState,
+  FormMessage,
   Mono,
   formatDate,
+  formatDateTime,
 } from "@/components/ui";
 import { ProfileHero, StatTile } from "@/components/mobile/primitives";
 import { AgentProfileDetails } from "@/components/AgentProfileDetails";
 import { CommerceMapTree } from "@/components/CommerceMapTree";
 import { requireSuperAdminPage } from "@/lib/auth/viewer";
-import { AGENT_STATUS_LABELS } from "@/lib/domain/enums";
-import type { AgentProfile, AgentRow, CommerceMap } from "@/lib/domain/types";
+import { AGENT_STATUS_LABELS, SUBMISSION_STATUS_BADGE, SUBMISSION_STATUS_LABELS } from "@/lib/domain/enums";
+import type { AdminSubmissionListItem, AgentProfile, AgentRow, CommerceMap } from "@/lib/domain/types";
 
 import { AgentStatusForm } from "./AgentStatusForm";
 
@@ -29,10 +33,13 @@ import { AgentStatusForm } from "./AgentStatusForm";
  */
 export default async function AdminAgentDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ agentId: string }>;
+  searchParams: Promise<{ profile?: string }>;
 }) {
   const { agentId } = await params;
+  const { profile: profileFlag } = await searchParams;
   const { supabase } = await requireSuperAdminPage(`/admin/agents/${agentId}`);
 
   const { data: agentData } = await supabase
@@ -44,7 +51,7 @@ export default async function AdminAgentDetailPage({
   const agent = agentData as AgentRow | null;
   if (!agent) notFound();
 
-  const [{ data: mapData }, { data: inviterData }, { data: profileData }] = await Promise.all([
+  const [{ data: mapData }, { data: inviterData }, { data: profileData }, { data: submissionData }] = await Promise.all([
     supabase.rpc("treemerce_commerce_map", { p_root_agent_id: agentId }),
     agent.invited_by
       ? supabase
@@ -55,10 +62,13 @@ export default async function AdminAgentDetailPage({
       : Promise.resolve({ data: null }),
     // 0016: 事業プロフィールは super_admin 用 RPC でのみ取得できる
     supabase.rpc("treemerce_admin_get_agent_profile", { p_agent_id: agentId }),
+    // 0021: この代理店の持込み申請 (本人の下書きは含まない・代行の下書きは含む)
+    supabase.rpc("treemerce_admin_list_submissions", { p_agent_id: agentId }),
   ]);
 
   const map = mapData as CommerceMap;
   const profile = (profileData as AgentProfile | null) ?? null;
+  const submissions = (submissionData ?? []) as AdminSubmissionListItem[];
   const inviter = inviterData as {
     id: string;
     public_id: string;
@@ -104,12 +114,14 @@ export default async function AdminAgentDetailPage({
             </DetailList>
           </Card>
 
+          {profileFlag === "saved" ? <FormMessage tone="success">事業プロフィールを保存しました。</FormMessage> : null}
+
           <Card
             title="事業プロフィール"
             description={
               profile?.updated_at
-                ? `代理店本人が入力した内容です (最終更新 ${formatDate(profile.updated_at)})。super_admin のみ閲覧できます。`
-                : "代理店本人が入力する項目です。super_admin のみ閲覧できます。"
+                ? `最終更新 ${formatDateTime(profile.updated_at)} (${profile.updated_by_role === "super_admin" ? "運営が入力" : "代理店本人が入力"})。super_admin のみ閲覧できます。`
+                : "代理店本人または運営が入力する項目です。super_admin のみ閲覧できます。"
             }
           >
             {!profile ? (
@@ -119,12 +131,65 @@ export default async function AdminAgentDetailPage({
             ) : (
               <p className="text-[13px] text-text-secondary">まだ入力されていません。</p>
             )}
-            <Link
-              href={`/admin/submissions?agent=${agent.id}`}
-              className="mt-3 inline-block text-[13px] font-semibold text-brand hover:underline"
-            >
-              この代理店の持込み申請を見る
-            </Link>
+            {agent.status !== "withdrawn" ? (
+              <Link
+                href={`/admin/agents/${agent.id}/profile`}
+                className={`${BUTTON_CLASS} mt-3 w-full justify-center`}
+              >
+                <Pencil size={15} />
+                {profile?.found ? "プロフィールを編集" : "プロフィールを入力"}
+              </Link>
+            ) : null}
+          </Card>
+
+          <Card
+            title="持込み申請"
+            description="運営が代行作成した申請は「代行」と表示されます。代理店本人の下書きは表示されません。"
+          >
+            {submissions.length === 0 ? (
+              <p className="text-[13px] text-text-secondary">まだ申請はありません。</p>
+            ) : (
+              <ul className="divide-y divide-border-soft rounded-xl border border-border-soft">
+                {submissions.map((s) => (
+                  <li key={s.id}>
+                    <Link
+                      href={`/admin/submissions/${s.id}`}
+                      className="flex items-center gap-2 px-3 py-2.5 text-[14px] transition-colors hover:bg-surface-muted"
+                    >
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate font-medium text-text-primary">{s.name}</span>
+                        <span className="block text-[12px] text-text-secondary">
+                          <span className="font-mono">{s.submission_no}</span>・更新 {formatDate(s.updated_at)}
+                        </span>
+                      </span>
+                      {s.created_via === "admin_proxy" ? <Badge tone="blue">代行</Badge> : null}
+                      <Badge tone={SUBMISSION_STATUS_BADGE[s.status] ?? "neutral"}>
+                        {SUBMISSION_STATUS_LABELS[s.status] ?? s.status}
+                      </Badge>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <div className="mt-3 flex flex-wrap items-center gap-3">
+              {agent.status === "active" ? (
+                <Link
+                  href={`/admin/agents/${agent.id}/submissions/new`}
+                  className={`${BUTTON_CLASS} w-full justify-center`}
+                >
+                  <PackagePlus size={15} />
+                  代行して申請を作成
+                </Link>
+              ) : (
+                <p className="text-[12px] text-text-secondary">稼働中の代理店のみ申請を代行できます。</p>
+              )}
+              <Link
+                href={`/admin/submissions?agent=${agent.id}`}
+                className="text-[13px] font-semibold text-brand hover:underline"
+              >
+                申請一覧で見る
+              </Link>
+            </div>
           </Card>
 
           <Card

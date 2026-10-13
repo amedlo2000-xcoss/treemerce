@@ -48,6 +48,16 @@ const LABELS: Record<keyof typeof SUBMISSION_LIMITS, string> = {
   producer_contact_phone: "生産者の電話番号",
 };
 
+/**
+ * 運営の操作理由 (代行の作成・取り下げ・プロフィールの変更)。前後の空白を除き、空なら null。
+ * 監査ログに残るため、生産者の連絡先などの個人情報は書かないよう画面で案内する。
+ */
+export function parseReason(value: unknown): { value: string | null } | { error: string } {
+  const reason = typeof value === "string" && value.trim() ? value.trim() : null;
+  if (reason && reason.length > 500) return { error: "理由は 500 文字以内で入力してください。" };
+  return { value: reason };
+}
+
 /** 空なら null。0 以上 1 億円未満の整数 (円) でなければエラー文言を返す。 */
 export function parseYen(value: unknown, label: string): { value: number | null } | { error: string } {
   if (value == null || (typeof value === "string" && value.trim() === "")) return { value: null };

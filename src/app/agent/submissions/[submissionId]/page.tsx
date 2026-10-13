@@ -27,9 +27,15 @@ const STATUS_MESSAGES: Record<string, string> = {
   withdrawn: "この申請は取り下げ済みです。",
 };
 
+const PROXY_STATUS_MESSAGES: Record<string, string> = {
+  draft: "運営が、あなたから伺った内容で申請を準備しています。",
+  returned: "運営が内容を見直しています。",
+};
+
 /**
  * 持込み申請の詳細 (本人のみ)。他の代理店の申請 ID は DB 側で「見つかりません」になる。
  * 下書き・差し戻しのときだけ編集・画像の追加削除・申請・取り下げができる。
+ * 運営が代行作成した申請 (0021) は閲覧のみ (editable = false。DB 側でも本人の変更を拒否する)。
  */
 export default async function AgentSubmissionDetailPage({
   params,
@@ -47,6 +53,8 @@ export default async function AgentSubmissionDetailPage({
   if (error || !data) notFound();
   const submission = data as MySubmissionDetail;
   const images = await withSignedUrls(supabase, submission.images);
+  const proxy = submission.created_via === "admin_proxy";
+  const statusMessage = (proxy && PROXY_STATUS_MESSAGES[submission.status]) || STATUS_MESSAGES[submission.status];
 
   return (
     <>
@@ -66,8 +74,15 @@ export default async function AgentSubmissionDetailPage({
               {submission.product_is_published ? "販売中" : "販売準備中"}
             </StatusPill>
           ) : null}
+          {proxy ? <StatusPill tone="brand">運営が代行作成</StatusPill> : null}
         </div>
-        <p className="mt-2 text-[14px] leading-6 text-text-primary">{STATUS_MESSAGES[submission.status]}</p>
+        <p className="mt-2 text-[14px] leading-6 text-text-primary">{statusMessage}</p>
+        {proxy ? (
+          <p className="mt-2 rounded-2xl bg-surface-muted px-3.5 py-2.5 text-[13px] leading-5 text-text-secondary">
+            この申請は、運営があなたから伺った内容をもとに、あなたの名義で作成したものです。持込み元はあなたとして記録されます。
+            内容はこの画面では変更できません。修正が必要な場合は運営にご連絡ください。
+          </p>
+        ) : null}
         {submission.submitted_at ? (
           <p className="mt-1 text-[12px] text-text-secondary">
             最終申請 {formatDateTime(submission.submitted_at)}

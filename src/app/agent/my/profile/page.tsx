@@ -1,7 +1,7 @@
 import { Lock } from "lucide-react";
 
 import { MobilePageHeader, Surface } from "@/components/mobile/primitives";
-import { BackLink } from "@/components/ui";
+import { BackLink, formatDateTime } from "@/components/ui";
 import { requireAgentPage } from "@/lib/auth/viewer";
 import type { AgentProfile } from "@/lib/domain/types";
 
@@ -17,6 +17,7 @@ export default async function AgentProfileEditPage() {
 
   const { data, error } = await supabase.rpc("treemerce_my_agent_profile");
   if (error) throw new Error("プロフィールを読み込めませんでした。");
+  const profile = data as AgentProfile;
 
   return (
     <>
@@ -33,8 +34,15 @@ export default async function AgentProfileEditPage() {
         </p>
       </div>
 
+      {profile.updated_by_role === "super_admin" ? (
+        <p className="rounded-2xl bg-brand-soft px-3.5 py-3 text-[13px] leading-5 text-text-primary">
+          {formatDateTime(profile.updated_at)} に、あなたから伺った内容をもとに運営が更新しました。
+          内容に違いがあれば、このページで直して保存してください。
+        </p>
+      ) : null}
+
       <Surface>
-        <AgentProfileForm profile={data as AgentProfile} />
+        <AgentProfileForm profile={profile} />
       </Surface>
     </>
   );

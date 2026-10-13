@@ -61,14 +61,25 @@ function Label({ text, required, hint }: { text: string; required?: boolean; hin
 }
 
 /**
- * 持込み申請の入力フォーム (本人の下書き・差し戻しのみ)。
+ * 持込み申請の入力フォーム (下書き・差し戻しのみ)。
  *   新規     : 「下書き保存」→ 詳細ページへ (画像は下書き保存後に追加)
  *   既存     : 「下書き保存」/「保存して申請する」(保存してから申請 RPC を呼ぶ)
  * 必須項目は申請時に DB 側で確認する。入力値は API と DB でも再検証される。
+ *
+ * proxy を渡すと、運営 (super_admin) が代理店の名義で代行する (0021)。
+ *   保存先は /api/admin/... 。作成時は理由 (ヒアリングの日付・経緯) が必須。
+ *   申請の前に、名義の代理店を確認ダイアログで示す (承認後は持込み元を変更できないため)。
  */
-export function SubmissionForm({ submission }: { submission?: SubmissionContent }) {
+export function SubmissionForm({
+  submission,
+  proxy,
+}: {
+  submission?: SubmissionContent;
+  proxy?: { agentId: string; agentLabel: string };
+}) {
   const router = useRouter();
   const [form, setForm] = useState<FormState>(() => initialState(submission));
+  const [reason, setReason] = useState("");
   const [pending, setPending] = useState<"save" | "submit" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<string | null>(null);
@@ -76,15 +87,22 @@ export function SubmissionForm({ submission }: { submission?: SubmissionContent 
   const set = <K extends keyof FormState>(key: K, value: FormState[K]) =>
     setForm((prev) => ({ ...prev, [key]: value }));
 
+  const detailHref = (id: string) => (proxy ? `/admin/submissions/${id}` : `/agent/submissions/${id}`);
+  const reasonRequired = Boolean(proxy && !submission);
+
   async function save(): Promise<{ id: string } | null> {
-    const response = await fetch(
-      submission ? `/api/agent/submissions/${submission.id}` : "/api/agent/submissions",
-      {
-        method: submission ? "PUT" : "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(form),
-      },
-    );
+    const url = proxy
+      ? submission
+        ? `/api/admin/submissions/${submission.id}`
+        : `/api/admin/agents/${proxy.agentId}/submissions`
+      : submission
+        ? `/api/agent/submissions/${submission.id}`
+        : "/api/agent/submissions";
+    const response = await fetch(url, {
+      method: submission ? "PUT" : "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(proxy ? { ...form, agent_id: proxy.agentId, reason: reason || null } : form),
+    });
     const body = await response.json().catch(() => null);
     if (!response.ok) {
       setError(body?.error?.message ?? "保存に失敗しました。");
@@ -95,6 +113,10 @@ export function SubmissionForm({ submission }: { submission?: SubmissionContent 
 
   async function handleSave(event: React.FormEvent) {
     event.preventDefault();
+    if (reasonRequired && !reason.trim()) {
+      setError("代行で作成する理由 (ヒアリングの日付・経緯など) を入力してください。");
+      return;
+    }
     setPending("save");
     setError(null);
     setDone(null);
@@ -102,16 +124,20 @@ export function SubmissionForm({ submission }: { submission?: SubmissionContent 
     setPending(null);
     if (!saved) return;
     if (!submission) {
-      router.push(`/agent/submissions/${saved.id}?created=1`);
+      router.push(`${detailHref(saved.id)}?created=1`);
       return;
     }
+    setReason("");
     setDone("下書きを保存しました。");
     router.refresh();
   }
 
   async function handleSubmit() {
     if (!submission) return;
-    if (!window.confirm("この内容で申請します。申請中は内容を編集できません。よろしいですか？")) return;
+    const message = proxy
+      ? `「${proxy.agentLabel}」の名義で申請します。承認すると持込み元はこの代理店になり、あとから変更できません。申請中は内容を編集できません。よろしいですか？`
+      : "この内容で申請します。申請中は内容を編集できません。よろしいですか？";
+    if (!window.confirm(message)) return;
     setPending("submit");
     setError(null);
     setDone(null);
@@ -120,7 +146,10 @@ export function SubmissionForm({ submission }: { submission?: SubmissionContent 
       setPending(null);
       return;
     }
-    const response = await fetch(`/api/agent/submissions/${submission.id}/submit`, { method: "POST" });
+    const response = await fetch(
+      proxy ? `/api/admin/submissions/${submission.id}/submit` : `/api/agent/submissions/${submission.id}/submit`,
+      { method: "POST" },
+    );
     const body = await response.json().catch(() => null);
     setPending(null);
     if (!response.ok) {
@@ -128,7 +157,7 @@ export function SubmissionForm({ submission }: { submission?: SubmissionContent 
       router.refresh();
       return;
     }
-    router.push(`/agent/submissions/${submission.id}?submitted=1`);
+    router.push(`${detailHref(submission.id)}?submitted=1`);
     router.refresh();
   }
 
@@ -247,7 +276,9 @@ export function SubmissionForm({ submission }: { submission?: SubmissionContent 
         <div className="flex items-start gap-2.5 rounded-2xl bg-surface-muted px-3 py-2.5">
           <Lock size={14} className="mt-0.5 shrink-0 text-text-secondary" />
           <p className="text-[12px] leading-5 text-text-secondary">
-            連絡先は、あなたと運営 (super_admin) だけが見られます。ほかの代理店や商品ページには表示されません。
+            {proxy
+              ? "連絡先は、名義の代理店本人と運営 (super_admin) だけが見られます。監査ログには値を記録しません。"
+              : "連絡先は、あなたと運営 (super_admin) だけが見られます。ほかの代理店や商品ページには表示されません。"}
             電話番号かメールのどちらかが申請時に必須です。
           </p>
         </div>
@@ -272,6 +303,25 @@ export function SubmissionForm({ submission }: { submission?: SubmissionContent 
           />
         </label>
       </fieldset>
+
+      {proxy ? (
+        <label className="block space-y-1.5 rounded-2xl border border-border-soft bg-surface-muted p-3.5">
+          <Label
+            text={reasonRequired ? "代行で作成する理由 (必須)" : "変更のメモ (任意)"}
+            hint="例: 2026-10-13 電話ヒアリング"
+          />
+          <input
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            maxLength={500}
+            required={reasonRequired}
+            className={INPUT}
+          />
+          <span className="block text-[12px] leading-5 text-text-secondary">
+            監査ログに残ります。生産者の連絡先などの個人情報は書かないでください。
+          </span>
+        </label>
+      ) : null}
 
       {error ? <p role="alert" className="rounded-2xl bg-danger-soft px-3.5 py-2.5 text-[13px] text-danger">{error}</p> : null}
       {done ? <p role="status" className="rounded-2xl bg-success-soft px-3.5 py-2.5 text-[13px] text-success">{done}</p> : null}

@@ -510,9 +510,23 @@ export type AgentProfile = {
   sns_urls: string[];
   self_introduction: string | null;
   updated_at: string | null;
+  /** 最後に更新したのが本人か運営か (0020)。未入力なら null */
+  updated_by_role: "agent" | "super_admin" | null;
+};
+
+/** treemerce_admin_list_agent_overview の 1 件 (0021)。件数のみで、値・顧客の情報は含まない */
+export type AgentOverviewRow = {
+  agent_id: string;
+  profile_filled_count: number;
+  profile_updated_at: string | null;
+  profile_updated_by_role: "agent" | "super_admin" | null;
+  submission_counts: { proxy_draft: number; submitted: number; returned: number; approved: number };
 };
 
 /* ------------------------------------------------ 商品の持込み申請 (0018) */
+
+/** 申請の作成経路 (0021)。admin_proxy は運営が代理店の名義で代行作成した申請 (本人には閲覧のみ) */
+export type SubmissionCreatedVia = "agent" | "admin_proxy";
 
 export type SubmissionImage = {
   id: string;
@@ -541,6 +555,7 @@ export type SubmissionContent = {
   submission_no: string;
   status: string;
   revision: number;
+  created_via: SubmissionCreatedVia;
   name: string;
   category: string;
   description: string | null;
@@ -569,6 +584,7 @@ export type MySubmissionListItem = {
   submission_no: string;
   status: string;
   revision: number;
+  created_via: SubmissionCreatedVia;
   name: string;
   category: string;
   desired_price: number | null;
@@ -594,6 +610,7 @@ export type AdminSubmissionListItem = {
   submission_no: string;
   status: string;
   revision: number;
+  created_via: SubmissionCreatedVia;
   name: string;
   category: string;
   desired_price: number | null;
@@ -611,6 +628,10 @@ export type AdminSubmissionListItem = {
 /** treemerce_admin_get_submission */
 export type AdminSubmissionDetail = SubmissionContent & {
   agent: { id: string; public_id: string; display_name: string; status: string };
+  /** 代行の申請で、運営が編集できる状態 (下書き・差し戻し) か */
+  admin_editable: boolean;
+  /** ログイン中の super_admin が作成した申請か */
+  created_by_me: boolean;
   images: SubmissionImage[];
   events: SubmissionEvent[];
   approved_product_id: string | null;

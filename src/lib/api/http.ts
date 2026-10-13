@@ -122,6 +122,21 @@ const ERROR_MAP: Record<string, { status: number; message: string }> = {
   },
   TREEMERCE_SUBMISSION_WRITE_DENIED: { status: 403, message: "申請への直接書込みはできません。" },
   TREEMERCE_PRODUCT_SOURCE_IMMUTABLE: { status: 403, message: "商品の持込み元は変更できません。" },
+
+  // 運営によるプロフィール入力・申請の代行 (0020〜0021)
+  TREEMERCE_PROFILE_CONFLICT: {
+    status: 409,
+    message: "画面を開いた後にプロフィールが更新されています。開き直してから編集してください。",
+  },
+  TREEMERCE_AGENT_WITHDRAWN: { status: 409, message: "退会済みの代理店は編集できません。" },
+  TREEMERCE_SUBMISSION_NOT_PROXY: {
+    status: 403,
+    message: "代理店本人が作成した申請は運営が編集できません。",
+  },
+  TREEMERCE_SUBMISSION_AGENT_MISMATCH: {
+    status: 409,
+    message: "申請の代理店と指定の代理店が一致しません。画面を開き直してください。",
+  },
 };
 
 /** DB 側の具体的な理由 (「商品名は必須です」等) をそのまま画面に返すコード */

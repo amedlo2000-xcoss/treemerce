@@ -1,4 +1,4 @@
-import { ChevronRight, Search } from "lucide-react";
+import { ChevronRight, PackagePlus, Pencil, Search } from "lucide-react";
 import Link from "next/link";
 
 import {
@@ -20,7 +20,10 @@ import {
 } from "@/components/ui";
 import { requireSuperAdminPage } from "@/lib/auth/viewer";
 import { AGENT_STATUSES, AGENT_STATUS_LABELS, PREFECTURES } from "@/lib/domain/enums";
-import type { AgentRow } from "@/lib/domain/types";
+import type { AgentOverviewRow, AgentRow } from "@/lib/domain/types";
+
+/** 事業プロフィールの項目数 (0016 の app.agent_profile_filled_fields と同じ 8 項目) */
+const PROFILE_FIELD_COUNT = 8;
 
 /**
  * STEP8 + 統括管理: 代理店の横断一覧・検索。
@@ -57,16 +60,21 @@ export default async function AdminAgentsPage({
     query = query.eq("prefecture", prefecture);
   }
 
-  const { data } = await query;
+  // 0021: プロフィールの入力済み項目数と持込み申請の件数 (件数のみ・値は含まない)
+  const [{ data }, { data: overviewData }] = await Promise.all([
+    query,
+    supabase.rpc("treemerce_admin_list_agent_overview"),
+  ]);
 
   const agents = (data ?? []) as AgentRow[];
   const byId = new Map(agents.map((a) => [a.id, a]));
+  const overview = new Map(((overviewData ?? []) as AgentOverviewRow[]).map((o) => [o.agent_id, o]));
 
   return (
     <>
       <PageHeader
         title="代理店管理"
-        description="全代理店を横断して検索し、登録経路 (招待元) と利用開始状態を確認します。"
+        description="全代理店を横断して検索し、登録経路 (招待元) と利用開始状態を確認します。各行から詳細・プロフィール編集・持込み申請の代行へ移動できます。"
       />
 
       <Notice tone="warning">
@@ -131,10 +139,12 @@ export default async function AdminAgentsPage({
         <EmptyState title="該当する代理店がありません" />
       ) : (
         <DataTable
-          headers={["代理店ID", "代理店名", "連絡先", "招待元 (登録経路)", "状態", "登録日", ""]}
+          headers={["代理店ID", "代理店名", "連絡先", "招待元 (登録経路)", "プロフィール", "持込み", "状態", "登録日", "操作"]}
         >
           {agents.map((agent) => {
             const inviter = agent.invited_by ? byId.get(agent.invited_by) : null;
+            const o = overview.get(agent.id);
+            const counts = o?.submission_counts;
             return (
               <tr key={agent.id}>
                 <td className={TD}>
@@ -160,20 +170,66 @@ export default async function AdminAgentsPage({
                     <span className="text-text-secondary">直接登録 (招待元なし)</span>
                   )}
                 </td>
+                <td className={`${TD} whitespace-nowrap`}>
+                  {o && o.profile_filled_count > 0 ? (
+                    <>
+                      <span className="tabular-nums text-text-primary">
+                        {o.profile_filled_count} / {PROFILE_FIELD_COUNT} 項目
+                      </span>
+                      <div className="text-[12px]">
+                        {o.profile_updated_by_role === "super_admin" ? "運営が更新" : "本人が更新"}
+                      </div>
+                    </>
+                  ) : (
+                    "未入力"
+                  )}
+                </td>
+                <td className={`${TD} whitespace-nowrap tabular-nums`}>
+                  {counts && counts.submitted + counts.returned + counts.approved + counts.proxy_draft > 0 ? (
+                    <>
+                      {counts.submitted > 0 ? <div className="font-medium text-warning">申請中 {counts.submitted}</div> : null}
+                      {counts.returned > 0 ? <div>差し戻し {counts.returned}</div> : null}
+                      {counts.proxy_draft > 0 ? <div>代行の下書き {counts.proxy_draft}</div> : null}
+                      <div>承認 {counts.approved}</div>
+                    </>
+                  ) : (
+                    "—"
+                  )}
+                </td>
                 <td className={TD}>
                   <Badge tone={AGENT_STATUS_TONE[agent.status] ?? "neutral"}>
                     {AGENT_STATUS_LABELS[agent.status] ?? agent.status}
                   </Badge>
                 </td>
                 <td className={TD}>{formatDate(agent.registered_at)}</td>
-                <td className={`${TD} text-right`}>
-                  <Link
-                    href={`/admin/agents/${agent.id}`}
-                    className="inline-flex items-center gap-0.5 whitespace-nowrap text-[13px] font-semibold text-brand hover:underline"
-                  >
-                    詳細
-                    <ChevronRight size={14} />
-                  </Link>
+                <td className={TD}>
+                  <div className="flex flex-col items-start gap-1.5">
+                    <Link
+                      href={`/admin/agents/${agent.id}`}
+                      className="inline-flex items-center gap-0.5 whitespace-nowrap text-[13px] font-semibold text-brand hover:underline"
+                    >
+                      詳細
+                      <ChevronRight size={14} />
+                    </Link>
+                    {agent.status !== "withdrawn" ? (
+                      <Link
+                        href={`/admin/agents/${agent.id}/profile`}
+                        className="inline-flex items-center gap-1 whitespace-nowrap text-[13px] font-medium text-brand hover:underline"
+                      >
+                        <Pencil size={13} />
+                        プロフィール編集
+                      </Link>
+                    ) : null}
+                    {agent.status === "active" ? (
+                      <Link
+                        href={`/admin/agents/${agent.id}/submissions/new`}
+                        className="inline-flex items-center gap-1 whitespace-nowrap text-[13px] font-medium text-brand hover:underline"
+                      >
+                        <PackagePlus size={13} />
+                        持込み代行
+                      </Link>
+                    ) : null}
+                  </div>
                 </td>
               </tr>
             );

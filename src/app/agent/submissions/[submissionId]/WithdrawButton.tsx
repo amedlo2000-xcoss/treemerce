@@ -8,8 +8,11 @@ import { PrimaryButton } from "@/components/mobile/primitives";
 const INPUT =
   "w-full rounded-2xl border border-border-soft bg-surface px-3.5 py-2.5 text-[15px] text-text-primary outline-none focus:border-brand";
 
-/** 取り下げ (本人の下書き・差し戻しのみ)。申請は削除されず「取り下げ」として残る。 */
-export function WithdrawButton({ submissionId }: { submissionId: string }) {
+/**
+ * 取り下げ (下書き・差し戻しのみ)。申請は削除されず「取り下げ」として残る。
+ * proxy = true は運営による代行の申請の取り下げ (0021、理由必須)。
+ */
+export function WithdrawButton({ submissionId, proxy = false }: { submissionId: string; proxy?: boolean }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [reason, setReason] = useState("");
@@ -17,13 +20,20 @@ export function WithdrawButton({ submissionId }: { submissionId: string }) {
   const [error, setError] = useState<string | null>(null);
 
   async function handleWithdraw() {
+    if (proxy && !reason.trim()) {
+      setError("取り下げの理由を入力してください。");
+      return;
+    }
     setPending(true);
     setError(null);
-    const response = await fetch(`/api/agent/submissions/${submissionId}/withdraw`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ reason: reason || null }),
-    });
+    const response = await fetch(
+      proxy ? `/api/admin/submissions/${submissionId}/withdraw` : `/api/agent/submissions/${submissionId}/withdraw`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ reason: reason || null }),
+      },
+    );
     const body = await response.json().catch(() => null);
     setPending(false);
     if (!response.ok) {
@@ -47,7 +57,7 @@ export function WithdrawButton({ submissionId }: { submissionId: string }) {
         取り下げると、この申請は編集・再申請できなくなります (記録は残ります)。
       </p>
       <label className="block space-y-1.5">
-        <span className="text-[13px] font-medium text-text-secondary">理由 (任意)</span>
+        <span className="text-[13px] font-medium text-text-secondary">理由 ({proxy ? "必須" : "任意"})</span>
         <input value={reason} onChange={(e) => setReason(e.target.value)} maxLength={500} className={INPUT} />
       </label>
       {error ? <p role="alert" className="text-[13px] text-danger">{error}</p> : null}

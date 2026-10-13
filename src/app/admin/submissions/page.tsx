@@ -25,7 +25,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
  * 持込み申請の一覧 (super_admin 専用)。連絡先は一覧に含めない (詳細でのみ表示)。
- * 既定では下書き以外を表示し、申請中を先頭に並べる。
+ * 既定では代理店本人の下書き以外を表示し (運営が代行作成した下書きは表示する)、申請中を先頭に並べる。
  */
 export default async function AdminSubmissionsPage({
   searchParams,
@@ -40,10 +40,13 @@ export default async function AdminSubmissionsPage({
     : null;
   const agentFilter = agent && UUID.test(agent) ? agent : null;
 
-  const { data, error } = await supabase.rpc("treemerce_admin_list_submissions", { p_status: statusFilter });
+  // 0021: 代理店の絞り込みは RPC 側で行う
+  const { data, error } = await supabase.rpc("treemerce_admin_list_submissions", {
+    p_status: statusFilter,
+    p_agent_id: agentFilter,
+  });
   if (error) throw new Error("申請を読み込めませんでした。");
-  const all = (data ?? []) as AdminSubmissionListItem[];
-  const submissions = agentFilter ? all.filter((s) => s.agent_id === agentFilter) : all;
+  const submissions = (data ?? []) as AdminSubmissionListItem[];
   const agentName = agentFilter ? submissions[0]?.agent_display_name : null;
 
   const link = (next: string | null) => {
@@ -72,7 +75,7 @@ export default async function AdminSubmissionsPage({
                 active ? "border-brand bg-brand-soft text-brand" : "border-border-soft text-text-secondary hover:bg-surface-muted"
               }`}
             >
-              {s ? SUBMISSION_STATUS_LABELS[s] : "すべて (下書き以外)"}
+              {s ? SUBMISSION_STATUS_LABELS[s] : "すべて (本人の下書き以外)"}
             </Link>
           );
         })}
@@ -102,6 +105,11 @@ export default async function AdminSubmissionsPage({
                   {s.name}
                 </Link>
                 {s.revision > 1 ? <div className="text-[12px] font-normal text-text-secondary">{s.revision} 回目の申請</div> : null}
+                {s.created_via === "admin_proxy" ? (
+                  <div className="mt-1">
+                    <Badge tone="blue">運営が代行作成</Badge>
+                  </div>
+                ) : null}
               </td>
               <td className={TD}>
                 <Mono>{s.agent_public_id}</Mono>

@@ -14,24 +14,33 @@ import {
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 
 /**
- * 申請画像の追加・削除 (本人の下書き・差し戻しのみ)。
+ * 申請画像の追加・削除 (下書き・差し戻しのみ)。
  *   1. API で枠を確保 (RPC が所有者・状態・5 枚の上限を確認し、保存先パスを返す)
  *   2. そのパスへブラウザから非公開バケットにアップロード (Storage の権限が枠の有無を確認)
  *   3. アップロードに失敗したら枠を削除して戻す
+ * proxy = true は運営 (super_admin) による代行の申請 (0021)。API は /api/admin/... を使う。
  */
 export function SubmissionImagesEditor({
   submissionId,
   images,
+  proxy = false,
 }: {
   submissionId: string;
   images: SubmissionImageView[];
+  proxy?: boolean;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  const reserveUrl = proxy
+    ? `/api/admin/submissions/${submissionId}/images`
+    : `/api/agent/submissions/${submissionId}/images`;
+  const removeUrl = (imageId: string) =>
+    proxy ? `/api/admin/submission-images/${imageId}` : `/api/agent/submission-images/${imageId}`;
+
   async function releaseSlot(imageId: string) {
-    await fetch(`/api/agent/submission-images/${imageId}`, { method: "DELETE" }).catch(() => null);
+    await fetch(removeUrl(imageId), { method: "DELETE" }).catch(() => null);
   }
 
   async function handleAdd(file: File | undefined) {
@@ -47,7 +56,7 @@ export function SubmissionImagesEditor({
     }
 
     setBusy("add");
-    const response = await fetch(`/api/agent/submissions/${submissionId}/images`, {
+    const response = await fetch(reserveUrl, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ content_type: file.type }),
@@ -78,7 +87,7 @@ export function SubmissionImagesEditor({
     if (!window.confirm("この画像を削除しますか？")) return;
     setError(null);
     setBusy(imageId);
-    const response = await fetch(`/api/agent/submission-images/${imageId}`, { method: "DELETE" });
+    const response = await fetch(removeUrl(imageId), { method: "DELETE" });
     const body = await response.json().catch(() => null);
     setBusy(null);
     if (!response.ok) {
@@ -143,7 +152,7 @@ export function SubmissionImagesEditor({
       </ul>
       <p className="text-[12px] text-text-secondary">
         {images.length} / {SUBMISSION_IMAGE_MAX_COUNT} 枚・JPEG / PNG / WebP、1 枚 5MB まで。
-        画像はあなたと運営だけが見られます。
+        {proxy ? "画像は名義の代理店本人と運営だけが見られます。" : "画像はあなたと運営だけが見られます。"}
       </p>
       {error ? <p role="alert" className="text-[13px] text-danger">{error}</p> : null}
     </div>

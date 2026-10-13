@@ -9,6 +9,7 @@ import type { MySubmissionListItem } from "@/lib/domain/types";
 
 /**
  * 商品の持込み申請 (一覧)。表示されるのは自分の申請だけ (treemerce_my_submissions)。
+ * 運営が自分の名義で代行作成した申請 (0021) も自分の申請として表示する (閲覧のみ)。
  */
 export default async function AgentSubmissionsPage() {
   const { supabase } = await requireAgentPage("/agent/submissions");
@@ -59,6 +60,7 @@ export default async function AgentSubmissionsPage() {
                           {s.product_is_published ? "販売中" : "販売準備中"}
                         </StatusPill>
                       ) : null}
+                      {s.created_via === "admin_proxy" ? <StatusPill tone="brand">運営が代行作成</StatusPill> : null}
                     </div>
                     <p className="mt-2 truncate text-[16px] font-semibold text-text-primary">{s.name}</p>
                     <p className="mt-0.5 text-[12px] text-text-secondary">

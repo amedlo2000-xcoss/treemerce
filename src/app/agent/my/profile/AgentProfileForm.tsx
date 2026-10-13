@@ -31,11 +31,23 @@ function Label({ text, hint, count }: { text: string; hint?: string; count?: [nu
 }
 
 /**
- * 事業プロフィールの編集フォーム (本人のみ)。保存は /api/agent/profile 経由で
- * treemerce_update_my_agent_profile を呼ぶ。入力値の検証は API と DB でも再度行う。
+ * 事業プロフィールの編集フォーム。入力値の検証は API と DB でも再度行う。
+ *   本人   : /api/agent/profile → treemerce_update_my_agent_profile
+ *   運営   : admin を渡すと /api/admin/agents/{id}/profile → treemerce_admin_update_agent_profile (0020)。
+ *            入力済みのプロフィールの変更は理由必須。開いた時点の更新日時を送り、
+ *            その後に本人などが保存していたら上書きせずにエラーになる。
  */
-export function AgentProfileForm({ profile }: { profile: AgentProfile }) {
+export function AgentProfileForm({
+  profile,
+  admin,
+}: {
+  profile: AgentProfile;
+  admin?: { agentId: string };
+}) {
   const router = useRouter();
+  const [reason, setReason] = useState("");
+  const reasonRequired = Boolean(admin && profile.found);
+  const backHref = admin ? `/admin/agents/${admin.agentId}` : "/agent/my";
   const [form, setForm] = useState({
     industry: profile.industry ?? "",
     business_description: profile.business_description ?? "",
@@ -63,13 +75,20 @@ export function AgentProfileForm({ profile }: { profile: AgentProfile }) {
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
+    if (reasonRequired && !reason.trim()) {
+      setError("入力済みのプロフィールを変更する理由を入力してください。");
+      return;
+    }
     setPending(true);
     setError(null);
 
-    const response = await fetch("/api/agent/profile", {
+    const payload = { ...form, industry: form.industry || null, sns_urls: sns };
+    const response = await fetch(admin ? `/api/admin/agents/${admin.agentId}/profile` : "/api/agent/profile", {
       method: "PUT",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ ...form, industry: form.industry || null, sns_urls: sns }),
+      body: JSON.stringify(
+        admin ? { ...payload, reason: reason || null, expected_updated_at: profile.updated_at } : payload,
+      ),
     });
     const body = await response.json().catch(() => null);
     setPending(false);
@@ -78,7 +97,7 @@ export function AgentProfileForm({ profile }: { profile: AgentProfile }) {
       setError(body?.error?.message ?? "保存に失敗しました。");
       return;
     }
-    router.push("/agent/my?profile=saved");
+    router.push(admin ? `/admin/agents/${admin.agentId}?profile=saved` : "/agent/my?profile=saved");
     router.refresh();
   }
 
@@ -208,13 +227,33 @@ export function AgentProfileForm({ profile }: { profile: AgentProfile }) {
         />
       </label>
 
+      {admin ? (
+        <label className="block space-y-1.5 rounded-2xl border border-border-soft bg-surface-muted p-3.5">
+          <Label
+            text={reasonRequired ? "変更の理由 (必須)" : "入力の経緯 (任意)"}
+            hint="例: 2026-10-13 電話ヒアリング"
+            count={[reason.trim().length, 500]}
+          />
+          <input
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            maxLength={500}
+            required={reasonRequired}
+            className={INPUT}
+          />
+          <span className="block text-[12px] leading-5 text-text-secondary">
+            理由は監査ログに残ります (プロフィールの値は残りません)。連絡先などの個人情報は書かないでください。
+          </span>
+        </label>
+      ) : null}
+
       {error ? <p role="alert" className="text-[13px] text-danger">{error}</p> : null}
 
       <div className="flex gap-2">
         <PrimaryButton type="submit" disabled={pending}>
           {pending ? "保存中…" : "保存する"}
         </PrimaryButton>
-        <PrimaryButton type="button" variant="secondary" onClick={() => router.push("/agent/my")}>
+        <PrimaryButton type="button" variant="secondary" onClick={() => router.push(backHref)}>
           キャンセル
         </PrimaryButton>
       </div>

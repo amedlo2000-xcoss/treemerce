@@ -1,10 +1,10 @@
 -- ============================================================================
--- TREEMERCE 受け入れテスト  CASE1 - CASE45
+-- TREEMERCE 受け入れテスト  CASE1 - CASE48
 -- ----------------------------------------------------------------------------
 -- Supabase SQL Editor にそのまま貼り付けて実行する。
 -- 全体が 1 トランザクションで、最後に ROLLBACK するため本番データは残らない。
 -- 途中で失敗した CASE があれば例外で停止する。全て通れば最後に
--- 「ALL 45 CASES PASSED」が NOTICE として出力される。
+-- 「ALL 48 CASES PASSED」が NOTICE として出力される。
 --
 -- 木構造:
 --            R  (root)
@@ -3881,10 +3881,666 @@ begin
   raise notice 'CASE45 OK: 持込み代理店は自分の持込み商品の件数・数量・金額のみ (入金確認済み以降) を見られる。件数 1〜4 件・把握できない注文 1〜4 件は丸め、合計は丸めていない商品のみ。購入者・代理店の情報なし。他の代理店には出ない。STABLE';
 end $$;
 
+-- ============================================================================
+-- CASE46 : 事業プロフィールの運営入力 (0020)
+--   super_admin だけが代理店のプロフィールを入力・編集できる。初回の入力は理由任意、
+--   入力済みの変更は理由必須。画面を開いた後の更新は上書きしない。更新者 (本人/運営) が残る。
+--   監査ログは項目名と理由のみ (値なし)。招待経路・顧客の担当は変わらない。
+-- ============================================================================
+
+do $$
+begin
+  perform set_config('tm.case46_inviter',
+    (select coalesce(invited_by::text, '') from public.agents where id = '10000000-0000-4000-8000-000000000006'),
+    false);
+  perform set_config('tm.case46_assign',
+    (select string_agg(customer_id || ':' || assigned_agent_id || ':' || status, ',' order by customer_id, assigned_agent_id, status)
+     from public.customer_assignments), false);
+end $$;
+
+-- (1) 一般代理店・admin ロールは運営用 RPC を実行できない
+do $$
+declare v_sub text; v_ok boolean;
+begin
+  foreach v_sub in array array['00000000-0000-4000-8000-000000000002', '00000000-0000-4000-8000-000000000041'] loop
+    perform set_config('request.jwt.claims',
+      jsonb_build_object('sub', v_sub, 'role', 'authenticated')::text, true);
+    set local role authenticated;
+    v_ok := false;
+    begin perform public.treemerce_admin_update_agent_profile(
+      '10000000-0000-4000-8000-000000000006', p_self_introduction => 'CASE46-不正');
+    exception when insufficient_privilege then v_ok := true; end;
+    if not v_ok then raise exception 'CASE46 FAILED: super_admin 以外 (%) が運営用の保存を実行できた', v_sub; end if;
+    reset role;
+  end loop;
+end $$;
+
+-- (2) super_admin の入力・編集
+select set_config('request.jwt.claims',
+  '{"sub":"00000000-0000-4000-8000-000000000007","role":"authenticated"}', true);
+set local role authenticated;
+
+do $$
+declare
+  v_s constant uuid := '10000000-0000-4000-8000-000000000006';
+  v_a constant uuid := '10000000-0000-4000-8000-000000000002';
+  v_res jsonb; v_at timestamptz; v_ok boolean;
+begin
+  -- 未入力の代理店 S: 初回の入力は理由なしで保存できる
+  v_res := public.treemerce_admin_update_agent_profile(
+    v_s, 'retail', 'CASE46-事業内容', null, null, array['熊本県'], 'https://case46.example.com/',
+    null, 'CASE46-自己紹介', null, null);
+  if (v_res ->> 'changed')::boolean is not true or v_res ->> 'updated_by_role' <> 'super_admin'
+     or v_res ->> 'business_description' <> 'CASE46-事業内容' then
+    raise exception 'CASE46 FAILED: 初回の入力結果が不正 (%)', v_res;
+  end if;
+  v_at := (v_res ->> 'updated_at')::timestamptz;
+
+  -- 入力済みの変更は理由必須
+  v_ok := false;
+  begin perform public.treemerce_admin_update_agent_profile(
+    v_s, 'retail', 'CASE46-事業内容 (変更)', null, null, array['熊本県'], 'https://case46.example.com/',
+    null, 'CASE46-自己紹介', '  ', v_at);
+  exception when invalid_parameter_value then v_ok := true; end;
+  if not v_ok then raise exception 'CASE46 FAILED: 理由なしで入力済みのプロフィールを変更できた'; end if;
+
+  -- 画面を開いた時点の更新日時が違えば上書きしない
+  v_ok := false;
+  begin perform public.treemerce_admin_update_agent_profile(
+    v_s, 'retail', 'CASE46-事業内容 (変更)', null, null, array['熊本県'], 'https://case46.example.com/',
+    null, 'CASE46-自己紹介', '電話ヒアリング', null);
+  exception when invalid_parameter_value then v_ok := true; end;
+  if not v_ok then raise exception 'CASE46 FAILED: 開いた後の更新を検出できなかった (NULL)'; end if;
+  v_ok := false;
+  begin perform public.treemerce_admin_update_agent_profile(
+    v_s, 'retail', 'CASE46-事業内容 (変更)', null, null, array['熊本県'], 'https://case46.example.com/',
+    null, 'CASE46-自己紹介', '電話ヒアリング', v_at - interval '1 second');
+  exception when invalid_parameter_value then v_ok := true; end;
+  if not v_ok then raise exception 'CASE46 FAILED: 開いた後の更新を検出できなかった (古い日時)'; end if;
+
+  -- 理由と更新日時が揃えば変更できる
+  v_res := public.treemerce_admin_update_agent_profile(
+    v_s, 'retail', 'CASE46-事業内容 (変更)', null, null, array['熊本県', '大分県'], 'https://case46.example.com/',
+    null, 'CASE46-自己紹介', '電話ヒアリング', v_at);
+  if (v_res ->> 'changed')::boolean is not true
+     or v_res -> 'activity_prefectures' <> '["熊本県", "大分県"]'::jsonb then
+    raise exception 'CASE46 FAILED: 理由付きの変更ができない (%)', v_res;
+  end if;
+
+  -- 変更なしの保存は理由がなくても通り、記録もしない
+  v_res := public.treemerce_admin_update_agent_profile(
+    v_s, 'retail', 'CASE46-事業内容 (変更)', null, null, array['熊本県', '大分県'], 'https://case46.example.com/',
+    null, 'CASE46-自己紹介', null, (v_res ->> 'updated_at')::timestamptz);
+  if (v_res ->> 'changed')::boolean is not false then
+    raise exception 'CASE46 FAILED: 変更なしの保存が変更ありになった';
+  end if;
+
+  -- 本人が入力済みの A も、理由付きで編集できる。入力値の検証は本人と同じ
+  v_at := (public.treemerce_admin_get_agent_profile(v_a) ->> 'updated_at')::timestamptz;
+  v_ok := false;
+  begin perform public.treemerce_admin_update_agent_profile(
+    v_a, p_website_url => 'javascript:alert(1)', p_reason => 'URL 修正', p_expected_updated_at => v_at);
+  exception when invalid_parameter_value then v_ok := true; end;
+  if not v_ok then raise exception 'CASE46 FAILED: 運営の保存で javascript: の URL を保存できた'; end if;
+
+  v_res := public.treemerce_admin_update_agent_profile(
+    v_a, 'agriculture', '有機野菜の生産と直売', 'CASE41-取扱商品', 'CASE46-得意な客層 (運営修正)',
+    array['福岡県', '佐賀県'], 'https://case41.example.com/', array['https://instagram.com/case41'],
+    'CASE41-自己紹介テキスト', '面談で客層を確認', v_at);
+  if v_res ->> 'updated_by_role' <> 'super_admin' then
+    raise exception 'CASE46 FAILED: 本人入力済みのプロフィールを運営が編集できない (%)', v_res;
+  end if;
+
+  -- 存在しない代理店
+  v_ok := false;
+  begin perform public.treemerce_admin_update_agent_profile('10000000-0000-4000-8000-0000000000ff');
+  exception when invalid_parameter_value then v_ok := true; end;
+  if not v_ok then raise exception 'CASE46 FAILED: 存在しない代理店のプロフィールを保存できた'; end if;
+end $$;
+
+reset role;
+
+-- (3) 本人には「運営が更新」が見え、本人が保存すると更新者が本人に戻る
+select set_config('request.jwt.claims',
+  '{"sub":"00000000-0000-4000-8000-000000000006","role":"authenticated"}', true);
+set local role authenticated;
+
+do $$
+declare v_res jsonb;
+begin
+  v_res := public.treemerce_my_agent_profile();
+  if v_res ->> 'updated_by_role' <> 'super_admin' or v_res ->> 'business_description' <> 'CASE46-事業内容 (変更)' then
+    raise exception 'CASE46 FAILED: 本人に運営の入力内容・更新者が見えない (%)', v_res;
+  end if;
+  v_res := public.treemerce_update_my_agent_profile(
+    'retail', 'CASE46-事業内容 (本人修正)', null, null, array['熊本県'], 'https://case46.example.com/',
+    null, 'CASE46-自己紹介');
+  if v_res ->> 'updated_by_role' <> 'agent' then
+    raise exception 'CASE46 FAILED: 本人の保存で更新者が本人にならない (%)', v_res;
+  end if;
+end $$;
+
+reset role;
+select set_config('request.jwt.claims', '', true);
+
+-- (4) DB 層: コンテキストと更新者の組合せ・監査ログ・招待経路
+do $$
+declare v_ok boolean; v_cnt int;
+begin
+  -- 運営のコンテキストでも super_admin でなければ書けない
+  perform set_config('app.agent_ctx', 'agent_profile_admin', true);
+  v_ok := false;
+  begin update public.agent_profiles set self_introduction = '直接', updated_by_role = 'super_admin'
+        where agent_id = '10000000-0000-4000-8000-000000000006';
+  exception when insufficient_privilege then v_ok := true; end;
+  if not v_ok then raise exception 'CASE46 FAILED: super_admin でないのに運営のコンテキストで書けた'; end if;
+
+  -- 本人のコンテキストで更新者を運営にできない
+  perform set_config('app.agent_ctx', 'agent_profile', true);
+  v_ok := false;
+  begin update public.agent_profiles set updated_by_role = 'super_admin'
+        where agent_id = '10000000-0000-4000-8000-000000000006';
+  exception when insufficient_privilege then v_ok := true; end;
+  if not v_ok then raise exception 'CASE46 FAILED: 本人のコンテキストで更新者を運営にできた'; end if;
+  perform set_config('app.agent_ctx', '', true);
+
+  -- 監査ログ: 運営の作成 1 件 (理由なし)・変更 2 件 (理由・変更項目のみ)。値は書かない
+  select count(*) into v_cnt from public.admin_audit_logs
+  where action = 'agent_profile.admin_create' and target_id = '10000000-0000-4000-8000-000000000006'
+    and actor_user_id = '00000000-0000-4000-8000-000000000007' and reason is null;
+  if v_cnt <> 1 then raise exception 'CASE46 FAILED: 運営の作成の監査ログが 1 件でない (%)', v_cnt; end if;
+
+  select count(*) into v_cnt from public.admin_audit_logs
+  where action = 'agent_profile.admin_update'
+    and actor_user_id = '00000000-0000-4000-8000-000000000007'
+    and reason in ('電話ヒアリング', '面談で客層を確認')
+    and jsonb_typeof(after_state -> 'changed_fields') = 'array';
+  if v_cnt <> 2 then raise exception 'CASE46 FAILED: 運営の変更の監査ログが 2 件でない (%)', v_cnt; end if;
+
+  if not exists (select 1 from public.admin_audit_logs
+                 where action = 'agent_profile.admin_update' and reason = '電話ヒアリング'
+                   and after_state -> 'changed_fields' = '["business_description", "activity_prefectures"]'::jsonb) then
+    raise exception 'CASE46 FAILED: 変更した項目名が記録されていない';
+  end if;
+
+  if exists (select 1 from public.admin_audit_logs
+             where target_table = 'agent_profiles'
+               and (coalesce(before_state::text, '') || coalesce(after_state::text, '')
+                    ~ '(CASE46-|case46\.example|熊本県|運営修正)')) then
+    raise exception 'CASE46 FAILED: 監査ログにプロフィールの値が含まれた';
+  end if;
+
+  -- 原則3・4: 招待経路・顧客の担当は変わらない
+  if (select coalesce(invited_by::text, '') from public.agents where id = '10000000-0000-4000-8000-000000000006')
+     <> current_setting('tm.case46_inviter')
+     or (select string_agg(customer_id || ':' || assigned_agent_id || ':' || status, ',' order by customer_id, assigned_agent_id, status)
+         from public.customer_assignments) is distinct from current_setting('tm.case46_assign') then
+    raise exception 'CASE46 FAILED: プロフィールの運営入力で招待経路・担当が変わった';
+  end if;
+
+  raise notice 'CASE46 OK: プロフィールの運営入力は super_admin のみ。初回は理由任意・入力済みの変更は理由必須・開いた後の更新は上書きしない。更新者 (本人/運営) が残り本人にも見える。監査ログは項目名と理由のみ。招待経路・担当は不変';
+end $$;
+
+-- ============================================================================
+-- CASE47 : 持込み申請の代行 — 作成・申請・承認と本人の閲覧 (0021)
+--   super_admin が代理店 A の名義で申請を作成 (理由必須)・画像の枠の確保・申請・承認でき、
+--   持込み元は A になる。作成者本人の承認は監査ログで追える。A には自分の申請として見えるが
+--   閲覧のみ。監査ログに生産者の連絡先の値は出ない。招待経路・担当・注文の帰属は不変。
+-- ============================================================================
+
+do $$
+begin
+  perform set_config('tm.case47_inviter',
+    (select coalesce(invited_by::text, '') from public.agents where id = '10000000-0000-4000-8000-000000000002'),
+    false);
+  perform set_config('tm.case47_assign',
+    (select string_agg(customer_id || ':' || assigned_agent_id || ':' || status, ',' order by customer_id, assigned_agent_id, status)
+     from public.customer_assignments), false);
+  perform set_config('tm.case47_orders',
+    (select string_agg(id || ':' || agent_id, ',' order by id) from public.orders), false);
+end $$;
+
+select set_config('request.jwt.claims',
+  '{"sub":"00000000-0000-4000-8000-000000000007","role":"authenticated"}', true);
+set local role authenticated;
+
+do $$
+declare
+  v_a constant uuid := '10000000-0000-4000-8000-000000000002';
+  v_res jsonb; v_id uuid; v_id2 uuid; v_img jsonb; v_ok boolean; v_row jsonb;
+begin
+  -- 作成は理由必須
+  v_ok := false;
+  begin perform public.treemerce_admin_save_proxy_submission(p_agent_id => v_a, p_name => 'CASE47 理由なし');
+  exception when invalid_parameter_value then v_ok := true; end;
+  if not v_ok then raise exception 'CASE47 FAILED: 理由なしで代行の申請を作成できた'; end if;
+
+  v_res := public.treemerce_admin_save_proxy_submission(
+    p_agent_id => v_a, p_name => 'CASE47 柚子こしょう', p_category => 'food',
+    p_reason => '2026-10-13 電話ヒアリング');
+  v_id := (v_res ->> 'id')::uuid;
+  perform set_config('tm.sub47', v_id::text, false);
+  if v_res ->> 'status' <> 'draft' or v_res ->> 'created_via' <> 'admin_proxy' then
+    raise exception 'CASE47 FAILED: 代行の下書きの作成結果が不正 (%)', v_res;
+  end if;
+
+  -- 画像の枠は対象代理店のフォルダに確保される
+  v_img := public.treemerce_admin_reserve_proxy_submission_image(v_id, 'image/jpeg');
+  if v_img ->> 'storage_path' not like v_a || '/' || v_id || '/%.jpg' then
+    raise exception 'CASE47 FAILED: 画像の保存先が不正 (%)', v_img;
+  end if;
+  perform set_config('tm.img47', v_img ->> 'storage_path', false);
+  if not app.can_upload_submission_image(v_img ->> 'storage_path') then
+    raise exception 'CASE47 FAILED: super_admin が代行の申請の枠にアップロードできない';
+  end if;
+
+  -- 一覧 (状態指定なし) には代行の下書きが出る。代理店で絞り込める
+  select e into v_row from jsonb_array_elements(public.treemerce_admin_list_submissions(p_agent_id => v_a)) e
+  where (e ->> 'id')::uuid = v_id;
+  if v_row is null or v_row ->> 'created_via' <> 'admin_proxy' then
+    raise exception 'CASE47 FAILED: 一覧に代行の下書きが出ない (%)', v_row;
+  end if;
+  if exists (select 1 from jsonb_array_elements(public.treemerce_admin_list_submissions(p_agent_id => v_a)) e
+             where e ->> 'agent_id' <> v_a::text
+                or (e ->> 'status' = 'draft' and e ->> 'created_via' <> 'admin_proxy')) then
+    raise exception 'CASE47 FAILED: 一覧に他の代理店の申請・本人の下書きが出た';
+  end if;
+
+  -- 必須項目が揃わないと申請できない
+  v_ok := false;
+  begin perform public.treemerce_admin_submit_proxy_submission(v_id);
+  exception when invalid_parameter_value then v_ok := true; end;
+  if not v_ok then raise exception 'CASE47 FAILED: 必須項目が空のまま代行で申請できた'; end if;
+
+  perform public.treemerce_admin_save_proxy_submission(
+    p_agent_id => v_a, p_submission_id => v_id,
+    p_name => 'CASE47 柚子こしょう', p_category => 'food',
+    p_description => '青柚子の香りが強い柚子こしょう', p_desired_price => 900, p_expected_wholesale_price => 550,
+    p_content_volume => '50g', p_ingredients => '青唐辛子・柚子皮・食塩', p_best_before_note => '製造から6か月',
+    p_producer_name => 'CASE47 柚子農園', p_producer_origin => '大分県 日田市',
+    p_producer_ship_from_prefecture => '大分県', p_producer_ship_lead_time => '入金確認後4営業日以内',
+    p_producer_contact_name => 'CASE47連絡先', p_producer_contact_phone => '090-4747-4747',
+    p_producer_contact_email => 'case47-contact@example.com');
+
+  v_res := public.treemerce_admin_submit_proxy_submission(v_id);
+  if v_res ->> 'status' <> 'submitted' or (v_res ->> 'revision')::int <> 1 then
+    raise exception 'CASE47 FAILED: 代行で申請できない (%)', v_res;
+  end if;
+
+  -- 申請中は代行でも編集・画像の追加はできない
+  v_ok := false;
+  begin perform public.treemerce_admin_save_proxy_submission(p_submission_id => v_id, p_name => '申請中の変更');
+  exception when invalid_parameter_value then v_ok := true; end;
+  if not v_ok then raise exception 'CASE47 FAILED: 申請中の代行の申請を編集できた'; end if;
+  v_ok := false;
+  begin perform public.treemerce_admin_reserve_proxy_submission_image(v_id, 'image/png');
+  exception when invalid_parameter_value then v_ok := true; end;
+  if not v_ok then raise exception 'CASE47 FAILED: 申請中の代行の申請に画像を追加できた'; end if;
+
+  v_res := public.treemerce_admin_get_submission(v_id);
+  if v_res ->> 'created_via' <> 'admin_proxy' or (v_res ->> 'admin_editable')::boolean
+     or not (v_res ->> 'created_by_me')::boolean
+     or v_res -> 'events' -> 0 ->> 'actor_role' <> 'super_admin' then
+    raise exception 'CASE47 FAILED: 代行の申請の詳細が不正 (%)', v_res;
+  end if;
+
+  -- 作成者本人がそのまま承認できる
+  v_res := public.treemerce_admin_approve_submission(v_id, p_reason => 'ヒアリング内容で承認');
+  if v_res ->> 'status' <> 'approved' then
+    raise exception 'CASE47 FAILED: 代行の申請を承認できない (%)', v_res;
+  end if;
+  perform set_config('tm.case47_product', v_res ->> 'product_id', false);
+
+  -- 閲覧のみの確認用に、代行の下書きをもう 1 件作る
+  v_id2 := (public.treemerce_admin_save_proxy_submission(
+    p_agent_id => v_a, p_name => 'CASE47 下書き', p_reason => '店頭で聞き取り') ->> 'id')::uuid;
+  perform set_config('tm.sub47_draft', v_id2::text, false);
+  v_img := public.treemerce_admin_reserve_proxy_submission_image(v_id2, 'image/png');
+  perform set_config('tm.img47_draft', v_img ->> 'storage_path', false);
+end $$;
+
+reset role;
+
+-- 本人 (A) には自分の申請として見えるが、閲覧のみ
+select set_config('request.jwt.claims',
+  '{"sub":"00000000-0000-4000-8000-000000000002","role":"authenticated"}', true);
+set local role authenticated;
+
+do $$
+declare
+  v_id  uuid := current_setting('tm.sub47')::uuid;
+  v_id2 uuid := current_setting('tm.sub47_draft')::uuid;
+  v_res jsonb; v_row jsonb; v_ok boolean; v_img uuid;
+begin
+  select e into v_row from jsonb_array_elements(public.treemerce_my_submissions()) e
+  where (e ->> 'id')::uuid = v_id;
+  if v_row is null or v_row ->> 'created_via' <> 'admin_proxy' or v_row ->> 'status' <> 'approved' then
+    raise exception 'CASE47 FAILED: 本人の一覧に代行の申請が出ない (%)', v_row;
+  end if;
+
+  v_res := public.treemerce_my_submission(v_id2);
+  if (v_res ->> 'editable')::boolean or v_res ->> 'created_via' <> 'admin_proxy'
+     or jsonb_array_length(v_res -> 'images') <> 1 then
+    raise exception 'CASE47 FAILED: 本人の詳細で代行の下書きが閲覧のみになっていない (%)', v_res;
+  end if;
+  if not app.can_view_submission_image(current_setting('tm.img47_draft')) then
+    raise exception 'CASE47 FAILED: 本人が代行の申請の画像を閲覧できない';
+  end if;
+
+  v_ok := false;
+  begin perform public.treemerce_save_my_submission(p_submission_id => v_id2, p_name => '本人の変更');
+  exception when invalid_parameter_value then v_ok := true; end;
+  if not v_ok then raise exception 'CASE47 FAILED: 本人が代行の申請を編集できた'; end if;
+  v_ok := false;
+  begin perform public.treemerce_submit_my_submission(v_id2);
+  exception when invalid_parameter_value then v_ok := true; end;
+  if not v_ok then raise exception 'CASE47 FAILED: 本人が代行の申請を申請できた'; end if;
+  v_ok := false;
+  begin perform public.treemerce_withdraw_my_submission(v_id2, '本人の取り下げ');
+  exception when invalid_parameter_value then v_ok := true; end;
+  if not v_ok then raise exception 'CASE47 FAILED: 本人が代行の申請を取り下げできた'; end if;
+  v_ok := false;
+  begin perform public.treemerce_reserve_submission_image(v_id2, 'image/png');
+  exception when invalid_parameter_value then v_ok := true; end;
+  if not v_ok then raise exception 'CASE47 FAILED: 本人が代行の申請に画像を追加できた'; end if;
+
+  v_img := ((v_res -> 'images' -> 0) ->> 'id')::uuid;
+  v_ok := false;
+  begin perform public.treemerce_remove_submission_image(v_img);
+  exception when invalid_parameter_value then v_ok := true; end;
+  if not v_ok then raise exception 'CASE47 FAILED: 本人が代行の申請の画像を削除できた'; end if;
+
+  if app.can_upload_submission_image(current_setting('tm.img47_draft'))
+     or app.can_delete_submission_image(current_setting('tm.img47_draft')) then
+    raise exception 'CASE47 FAILED: 本人が Storage で代行の申請の画像を追加・削除できる';
+  end if;
+end $$;
+
+reset role;
+
+-- super_admin: 取り下げは理由必須
+select set_config('request.jwt.claims',
+  '{"sub":"00000000-0000-4000-8000-000000000007","role":"authenticated"}', true);
+set local role authenticated;
+
+do $$
+declare v_id2 uuid := current_setting('tm.sub47_draft')::uuid; v_ok boolean; v_res jsonb;
+begin
+  if not app.can_delete_submission_image(current_setting('tm.img47_draft')) then
+    raise exception 'CASE47 FAILED: super_admin が代行の下書きの画像を削除できない';
+  end if;
+  v_ok := false;
+  begin perform public.treemerce_admin_withdraw_proxy_submission(v_id2, ' ');
+  exception when invalid_parameter_value then v_ok := true; end;
+  if not v_ok then raise exception 'CASE47 FAILED: 理由なしで代行の申請を取り下げできた'; end if;
+  v_res := public.treemerce_admin_withdraw_proxy_submission(v_id2, '重複して作成したため');
+  if v_res ->> 'status' <> 'withdrawn' then raise exception 'CASE47 FAILED: 代行の申請を取り下げできない'; end if;
+  if app.can_delete_submission_image(current_setting('tm.img47_draft')) then
+    raise exception 'CASE47 FAILED: 取り下げ後も super_admin が画像を削除できる';
+  end if;
+end $$;
+
+reset role;
+select set_config('request.jwt.claims', '', true);
+
+do $$
+declare v_id uuid := current_setting('tm.sub47')::uuid; v_product uuid := current_setting('tm.case47_product')::uuid;
+begin
+  -- 持込み元は名義の代理店 A
+  if (select sourced_by_agent_id from public.product_sources where product_id = v_product)
+     is distinct from '10000000-0000-4000-8000-000000000002'::uuid then
+    raise exception 'CASE47 FAILED: 代行の申請の持込み元が A になっていない';
+  end if;
+
+  -- 監査ログ: 代行の作成 (理由)・申請・承認 (作成者本人の承認) を追える
+  if not exists (select 1 from public.admin_audit_logs
+                 where action = 'submission.proxy_create' and target_id = v_id
+                   and actor_user_id = '00000000-0000-4000-8000-000000000007'
+                   and reason = '2026-10-13 電話ヒアリング'
+                   and after_state ->> 'created_via' = 'admin_proxy'
+                   and after_state ->> 'agent_id' = '10000000-0000-4000-8000-000000000002') then
+    raise exception 'CASE47 FAILED: 代行の作成の監査ログがない';
+  end if;
+  if not exists (select 1 from public.admin_audit_logs
+                 where action = 'submission.proxy_update' and target_id = v_id
+                   and after_state -> 'changed_fields' ? 'producer_contact') then
+    raise exception 'CASE47 FAILED: 代行の保存の監査ログに変更した項目名がない';
+  end if;
+  if not exists (select 1 from public.admin_audit_logs where action = 'submission.proxy_submit' and target_id = v_id)
+     or not exists (select 1 from public.admin_audit_logs where action = 'submission.proxy_image_add' and target_id = v_id)
+     or not exists (select 1 from public.admin_audit_logs where action = 'submission.proxy_withdraw'
+                    and target_id = current_setting('tm.sub47_draft')::uuid and reason = '重複して作成したため') then
+    raise exception 'CASE47 FAILED: 代行の申請・画像・取り下げの監査ログがない';
+  end if;
+  if not exists (select 1 from public.admin_audit_logs
+                 where action = 'submission.approve' and target_id = v_id
+                   and after_state ->> 'created_via' = 'admin_proxy'
+                   and (after_state ->> 'approved_by_creator')::boolean) then
+    raise exception 'CASE47 FAILED: 作成者本人の承認が監査ログで追えない';
+  end if;
+
+  -- 監査ログに生産者の連絡先の値が出ない
+  if exists (select 1 from public.admin_audit_logs
+             where target_table = 'product_submissions'
+               and (coalesce(before_state::text, '') || coalesce(after_state::text, '') || coalesce(reason, ''))
+                   ~ '(CASE47連絡先|090-4747-4747|case47-contact)') then
+    raise exception 'CASE47 FAILED: 監査ログに生産者の連絡先の値が含まれた';
+  end if;
+
+  -- 原則3・4: 招待経路・顧客の担当・注文の帰属は変わらない
+  if (select coalesce(invited_by::text, '') from public.agents where id = '10000000-0000-4000-8000-000000000002')
+       <> current_setting('tm.case47_inviter')
+     or (select string_agg(customer_id || ':' || assigned_agent_id || ':' || status, ',' order by customer_id, assigned_agent_id, status)
+         from public.customer_assignments) is distinct from current_setting('tm.case47_assign')
+     or (select string_agg(id || ':' || agent_id, ',' order by id) from public.orders)
+         is distinct from current_setting('tm.case47_orders') then
+    raise exception 'CASE47 FAILED: 代行で招待経路・担当・注文の帰属が変わった';
+  end if;
+
+  raise notice 'CASE47 OK: super_admin が代理店の名義で申請を作成 (理由必須)・画像・申請・承認でき、持込み元はその代理店。作成者本人の承認は監査ログで追える。本人には自分の申請として見えるが閲覧のみ (編集・申請・取り下げ・画像・Storage 不可)。取り下げは理由必須。監査ログに連絡先の値なし。招待経路・担当・帰属は不変';
+end $$;
+
+-- ============================================================================
+-- CASE48 : 持込み申請の代行 — 権限・ガード・一覧の概要 (0021)
+--   代行と一覧の概要は super_admin のみ (admin ロール・代理店は不可)。
+--   運営は本人が作成した申請に触れられない。代行のコンテキストでも承認には進めず、
+--   本人のコンテキストでは代行の申請を作れない。作成経路は変更不可。
+--   代理店の取り違え・稼働中でない代理店への代行は拒否。一覧の概要は件数のみで STABLE。
+-- ============================================================================
+
+-- (1) admin ロール・代理店は代行も概要も実行できない
+do $$
+declare v_sub text; v_ok boolean;
+begin
+  foreach v_sub in array array['00000000-0000-4000-8000-000000000002', '00000000-0000-4000-8000-000000000041'] loop
+    perform set_config('request.jwt.claims',
+      jsonb_build_object('sub', v_sub, 'role', 'authenticated')::text, true);
+    set local role authenticated;
+
+    v_ok := false;
+    begin perform public.treemerce_admin_save_proxy_submission(
+      p_agent_id => '10000000-0000-4000-8000-000000000002', p_name => 'CASE48 不正', p_reason => '不正');
+    exception when insufficient_privilege then v_ok := true; end;
+    if not v_ok then raise exception 'CASE48 FAILED: super_admin 以外 (%) が代行で作成できた', v_sub; end if;
+
+    v_ok := false;
+    begin perform public.treemerce_admin_submit_proxy_submission(current_setting('tm.sub47_draft')::uuid);
+    exception when insufficient_privilege then v_ok := true; end;
+    if not v_ok then raise exception 'CASE48 FAILED: super_admin 以外 (%) が代行で申請できた', v_sub; end if;
+
+    v_ok := false;
+    begin perform public.treemerce_admin_list_agent_overview();
+    exception when insufficient_privilege then v_ok := true; end;
+    if not v_ok then raise exception 'CASE48 FAILED: super_admin 以外 (%) が代理店の概要を読めた', v_sub; end if;
+
+    reset role;
+  end loop;
+end $$;
+
+-- 本人 (A) が自分の下書きを作る
+select set_config('request.jwt.claims',
+  '{"sub":"00000000-0000-4000-8000-000000000002","role":"authenticated"}', true);
+set local role authenticated;
+
+do $$
+declare v_res jsonb;
+begin
+  v_res := public.treemerce_save_my_submission(p_name => 'CASE48 本人の下書き');
+  perform set_config('tm.sub48_own', v_res ->> 'id', false);
+  perform set_config('tm.img48_own',
+    public.treemerce_reserve_submission_image((v_res ->> 'id')::uuid, 'image/png') ->> 'storage_path', false);
+end $$;
+
+reset role;
+
+-- (2) super_admin は本人の申請に触れられない・代理店の取り違えは拒否・一覧の概要
+select set_config('request.jwt.claims',
+  '{"sub":"00000000-0000-4000-8000-000000000007","role":"authenticated"}', true);
+set local role authenticated;
+
+do $$
+declare
+  v_own uuid := current_setting('tm.sub48_own')::uuid;
+  v_a   constant uuid := '10000000-0000-4000-8000-000000000002';
+  v_ok boolean; v_res jsonb; v_row jsonb; v_id uuid;
+begin
+  v_ok := false;
+  begin perform public.treemerce_admin_save_proxy_submission(p_submission_id => v_own, p_name => '運営の上書き');
+  exception when insufficient_privilege then v_ok := true; end;
+  if not v_ok then raise exception 'CASE48 FAILED: 運営が本人の申請を編集できた'; end if;
+  v_ok := false;
+  begin perform public.treemerce_admin_submit_proxy_submission(v_own);
+  exception when insufficient_privilege then v_ok := true; end;
+  if not v_ok then raise exception 'CASE48 FAILED: 運営が本人の下書きを申請できた'; end if;
+  v_ok := false;
+  begin perform public.treemerce_admin_withdraw_proxy_submission(v_own, '運営の取り下げ');
+  exception when insufficient_privilege then v_ok := true; end;
+  if not v_ok then raise exception 'CASE48 FAILED: 運営が本人の申請を取り下げできた'; end if;
+  v_ok := false;
+  begin perform public.treemerce_admin_reserve_proxy_submission_image(v_own, 'image/png');
+  exception when insufficient_privilege then v_ok := true; end;
+  if not v_ok then raise exception 'CASE48 FAILED: 運営が本人の申請に画像を追加できた'; end if;
+  v_ok := false;
+  begin perform public.treemerce_admin_remove_proxy_submission_image(
+    (select id from public.product_submission_images where submission_id = v_own limit 1));
+  exception when insufficient_privilege then v_ok := true; end;
+  if not v_ok then raise exception 'CASE48 FAILED: 運営が本人の申請の画像を削除できた'; end if;
+  if app.can_upload_submission_image(current_setting('tm.img48_own'))
+     or app.can_delete_submission_image(current_setting('tm.img48_own')) then
+    raise exception 'CASE48 FAILED: 運営が Storage で本人の申請の画像を追加・削除できる';
+  end if;
+
+  -- 状態指定なしの一覧に本人の下書きは出ない
+  if exists (select 1 from jsonb_array_elements(public.treemerce_admin_list_submissions()) e
+             where (e ->> 'id')::uuid = v_own) then
+    raise exception 'CASE48 FAILED: 一覧に本人の下書きが出た';
+  end if;
+
+  -- 代理店の取り違え (別の代理店の画面から A の申請を保存) は拒否
+  v_id := (public.treemerce_admin_save_proxy_submission(
+    p_agent_id => v_a, p_name => 'CASE48 代行', p_reason => 'CASE48') ->> 'id')::uuid;
+  perform set_config('tm.sub48_proxy', v_id::text, false);
+  v_ok := false;
+  begin perform public.treemerce_admin_save_proxy_submission(
+    p_agent_id => '10000000-0000-4000-8000-000000000006', p_submission_id => v_id, p_name => '取り違え');
+  exception when invalid_parameter_value then v_ok := true; end;
+  if not v_ok then raise exception 'CASE48 FAILED: 別の代理店を指定して代行の申請を保存できた'; end if;
+
+  -- 一覧の概要: 件数のみ (名前・内容・顧客の情報なし)
+  v_res := public.treemerce_admin_list_agent_overview();
+  select e into v_row from jsonb_array_elements(v_res) e where (e ->> 'agent_id')::uuid = v_a;
+  if v_row is null
+     or (v_row ->> 'profile_filled_count')::int < 1
+     or (v_row -> 'submission_counts' ->> 'proxy_draft')::int < 1
+     or (v_row -> 'submission_counts' ->> 'approved')::int < 1 then
+    raise exception 'CASE48 FAILED: 一覧の概要が不正 (%)', v_row;
+  end if;
+  if v_res::text ~ '(CASE4[0-9]|有機|柚子|@|090-)' then
+    raise exception 'CASE48 FAILED: 一覧の概要に件数以外の値が含まれた';
+  end if;
+
+  -- 稼働中でない代理店には代行できない
+  perform public.treemerce_admin_set_agent_status('10000000-0000-4000-8000-000000000006', 'suspended', 'CASE48 確認');
+  v_ok := false;
+  begin perform public.treemerce_admin_save_proxy_submission(
+    p_agent_id => '10000000-0000-4000-8000-000000000006', p_name => 'CASE48 停止中', p_reason => 'CASE48');
+  exception when invalid_parameter_value then v_ok := true; end;
+  if not v_ok then raise exception 'CASE48 FAILED: 停止中の代理店の名義で代行できた'; end if;
+  perform public.treemerce_admin_set_agent_status('10000000-0000-4000-8000-000000000006', 'active', 'CASE48 戻す');
+end $$;
+
+reset role;
+select set_config('request.jwt.claims', '', true);
+
+-- (3) DB 層のガード
+do $$
+declare
+  v_a     constant uuid := '10000000-0000-4000-8000-000000000002';
+  v_proxy uuid := current_setting('tm.sub48_proxy')::uuid;
+  v_own   uuid := current_setting('tm.sub48_own')::uuid;
+  v_ok boolean;
+begin
+  -- 代行のコンテキストでも super_admin でなければ作成できない
+  perform set_config('app.submission_ctx', 'submission_admin_proxy', true);
+  v_ok := false;
+  begin insert into public.product_submissions (agent_id, created_via, name) values (v_a, 'admin_proxy', '直接');
+  exception when insufficient_privilege then v_ok := true; end;
+  if not v_ok then raise exception 'CASE48 FAILED: super_admin でないのに代行のコンテキストで作成できた'; end if;
+
+  -- 本人のコンテキストでは代行の申請を作れず、変更もできない
+  perform set_config('app.submission_ctx', 'submission_agent', true);
+  v_ok := false;
+  begin insert into public.product_submissions (agent_id, created_via, name) values (v_a, 'admin_proxy', '直接');
+  exception when insufficient_privilege then v_ok := true; end;
+  if not v_ok then raise exception 'CASE48 FAILED: 本人のコンテキストで代行の申請を作成できた'; end if;
+  v_ok := false;
+  begin update public.product_submissions set name = '本人の上書き' where id = v_proxy;
+  exception when insufficient_privilege then v_ok := true; end;
+  if not v_ok then raise exception 'CASE48 FAILED: 本人のコンテキストで代行の申請を変更できた'; end if;
+
+  -- super_admin の代行のコンテキスト: 本人の申請には触れず、承認にも進めない
+  perform set_config('request.jwt.claims',
+    '{"sub":"00000000-0000-4000-8000-000000000007","role":"authenticated"}', true);
+  perform set_config('app.submission_ctx', 'submission_admin_proxy', true);
+  v_ok := false;
+  begin update public.product_submissions set name = '運営の上書き' where id = v_own;
+  exception when insufficient_privilege then v_ok := true; end;
+  if not v_ok then raise exception 'CASE48 FAILED: 代行のコンテキストで本人の申請を変更できた'; end if;
+  v_ok := false;
+  begin
+    insert into public.product_submission_images (submission_id, storage_path, content_type)
+    values (v_own, v_a || '/' || v_own || '/' || gen_random_uuid() || '.png', 'image/png');
+  exception when insufficient_privilege then v_ok := true; end;
+  if not v_ok then raise exception 'CASE48 FAILED: 代行のコンテキストで本人の申請に画像を追加できた'; end if;
+  v_ok := false;
+  begin
+    update public.product_submissions
+    set description = '説明', desired_price = 100, content_volume = '1個', producer_name = '生産者',
+        producer_origin = '福岡県', producer_ship_from_prefecture = '福岡県', producer_ship_lead_time = '7日',
+        producer_contact_phone = '000', status = 'approved', submitted_at = now(), revision = 1
+    where id = v_proxy;
+  exception when invalid_parameter_value or insufficient_privilege or check_violation then v_ok := true; end;
+  if not v_ok then raise exception 'CASE48 FAILED: 代行のコンテキストで承認に進めた'; end if;
+
+  -- 作成経路は postgres の直接操作でも変更できない
+  perform set_config('app.submission_ctx', '', true);
+  perform set_config('request.jwt.claims', '', true);
+  v_ok := false;
+  begin update public.product_submissions set created_via = 'agent' where id = v_proxy;
+  exception when insufficient_privilege then v_ok := true; end;
+  if not v_ok then raise exception 'CASE48 FAILED: 作成経路を変更できた'; end if;
+
+  if (select provolatile from pg_proc where proname = 'treemerce_admin_list_agent_overview') <> 's' then
+    raise exception 'CASE48 FAILED: 一覧の概要の RPC が STABLE ではない';
+  end if;
+
+  raise notice 'CASE48 OK: 代行と一覧の概要は super_admin のみ (admin ロール・代理店は不可)。運営は本人の申請に触れられず、代行のコンテキストでも承認に進めない。本人のコンテキストでは代行の申請を作成・変更できない。作成経路は変更不可。代理店の取り違え・停止中の代理店への代行は拒否。一覧の概要は件数のみで STABLE';
+end $$;
+
 do $$
 begin
   raise notice '==========================================';
-  raise notice '  TREEMERCE: ALL 45 CASES PASSED (+EXTRA)';
+  raise notice '  TREEMERCE: ALL 48 CASES PASSED (+EXTRA)';
   raise notice '==========================================';
 end $$;
 
