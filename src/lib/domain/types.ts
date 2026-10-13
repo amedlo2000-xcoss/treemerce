@@ -232,13 +232,43 @@ export const DEMOGRAPHIC_DIMENSIONS = [
 
 /* -------------------------------------------------------------- 商品・注文 */
 
+/** 商品の販売状態 (0023)。準備中は価格未定・注文不可で表示する */
+export type ProductSalesStatus = "unpublished" | "preparing" | "on_sale";
+/** 物品 / サービス (0023)。サービスは発送情報を持たず、公開中 (注文可能) にできない */
+export type ProductItemKind = "goods" | "service";
+
+/** 商品カテゴリ (0022 のマスタ)。公開の一覧 (treemerce_catalog_categories) は有効なものだけ */
+export type CatalogCategory = {
+  id: string;
+  code: string;
+  name: string;
+  sort_order: number;
+};
+
+/** treemerce_admin_list_categories の 1 件 (無効を含む) */
+export type AdminCategoryRow = CatalogCategory & {
+  is_active: boolean;
+  legacy_code: string | null;
+  in_use: boolean;
+  updated_at: string;
+};
+
 export type ProductRow = {
   id: string;
   sku: string | null;
   name: string;
   description: string | null;
+  /** 旧列挙型 (0026 で廃止予定)。表示には category_id を使う */
   category: ProductCategory;
-  price: number;
+  category_id: string;
+  sales_status: ProductSalesStatus;
+  item_kind: ProductItemKind;
+  has_observer_benefit: boolean;
+  product_type_label: string | null;
+  name_kana: string | null;
+  placeholder_key: string | null;
+  /** 公開中は必須。準備中は運営だけが見られる予定価格 (NULL 可) */
+  price: number | null;
   stock: number;
   is_published: boolean;
   image_path: string | null;
@@ -279,30 +309,56 @@ export type ProducerAdminRow = ProducerPublicRow & {
   open_shipments: number;
 };
 
-/** 公開ショップで返る生産者の公開項目 (仮の生産者の場合は null) */
+/**
+ * 公開ショップで返る生産者の公開項目 (仮の生産者の場合は null)。
+ * サービスの商品では発送情報 (発送元・発送目安) は返らない。
+ */
 export type ShopProducer = {
   id: string;
   name: string;
-  origin: string;
-  ship_from_prefecture: string;
-  ship_lead_time: string;
+  origin: string | null;
+  ship_from_prefecture?: string | null;
+  ship_lead_time?: string | null;
 };
 
-/** 公開ショップ RPC (treemerce_shop_products) が返す商品。在庫の正確な数は含まれない。 */
-export type ShopProduct = {
+/**
+ * 公開用の商品 (treemerce_shop_products / treemerce_observer_products, 0023・0025)。
+ * 在庫の正確な数・予定価格・生産者の連絡先は含まれない。準備中は price が null。
+ */
+export type PublicProduct = {
   id: string;
   name: string;
+  name_kana: string | null;
+  product_type_label: string | null;
   description: string | null;
   category: ProductCategory;
-  price: number;
+  category_id: string;
+  category_code: string;
+  category_name: string;
+  sales_status: Exclude<ProductSalesStatus, "unpublished">;
+  orderable: boolean;
+  item_kind: ProductItemKind;
+  has_observer_benefit: boolean;
+  price: number | null;
   image_path: string | null;
-  in_stock: boolean;
-  low_stock: boolean;
-  max_quantity: number;
+  placeholder_key: string | null;
   content_volume: string | null;
   ingredients: string | null;
   best_before_note: string | null;
   producer: ShopProducer | null;
+};
+
+/** 公開ショップ RPC (treemerce_shop_products) が返す商品。在庫の正確な数は含まれない。 */
+export type ShopProduct = PublicProduct & {
+  in_stock: boolean;
+  low_stock: boolean;
+  max_quantity: number;
+};
+
+/** treemerce_observer_products (0025)。代理店とは紐づかない。在庫の情報は含まれない */
+export type ObserverCatalog = {
+  products: PublicProduct[];
+  categories: CatalogCategory[];
 };
 
 export type ShopCatalog =
@@ -350,7 +406,10 @@ export type OrderItemRow = {
   product_id: string;
   product_name: string;
   product_sku: string | null;
-  product_category: ProductCategory;
+  product_category: ProductCategory | null;
+  /** 注文時点のカテゴリ (0023 以降の明細。それより前は NULL で旧列挙型を読み替える) */
+  product_category_id: string | null;
+  product_category_name: string | null;
   unit_price: number;
   quantity: number;
   amount: number;
@@ -557,7 +616,10 @@ export type SubmissionContent = {
   revision: number;
   created_via: SubmissionCreatedVia;
   name: string;
-  category: string;
+  /** 旧列挙型 (確定済みの古い申請の読み替え用)。表示には category_name を使う */
+  category: string | null;
+  category_id: string | null;
+  category_name: string | null;
   description: string | null;
   desired_price: number | null;
   expected_wholesale_price: number | null;
@@ -586,7 +648,9 @@ export type MySubmissionListItem = {
   revision: number;
   created_via: SubmissionCreatedVia;
   name: string;
-  category: string;
+  category: string | null;
+  category_id: string | null;
+  category_name: string | null;
   desired_price: number | null;
   submitted_at: string | null;
   reviewed_at: string | null;
@@ -612,7 +676,9 @@ export type AdminSubmissionListItem = {
   revision: number;
   created_via: SubmissionCreatedVia;
   name: string;
-  category: string;
+  category: string | null;
+  category_id: string | null;
+  category_name: string | null;
   desired_price: number | null;
   producer_name: string | null;
   agent_id: string;

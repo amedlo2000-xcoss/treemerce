@@ -5,8 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { BUTTON_CLASS, FIELD_CLASS, Field, FormMessage } from "@/components/ui";
-import { PRODUCT_CATEGORIES, PRODUCT_CATEGORY_LABELS } from "@/lib/domain/enums";
-import type { ProducerPublicRow, SubmissionImageView } from "@/lib/domain/types";
+import type { CatalogCategory, ProducerPublicRow, SubmissionImageView } from "@/lib/domain/types";
 
 type Candidate = ProducerPublicRow & { similarity: number };
 type Action = "approve" | "return" | "reject";
@@ -35,11 +34,12 @@ export function ReviewPanel({
   candidates,
   otherProducers,
   images,
+  categories,
 }: {
   submission: {
     id: string;
     name: string;
-    category: string;
+    category_id: string | null;
     desired_price: number | null;
     producer_name: string | null;
     producer_origin: string | null;
@@ -49,13 +49,17 @@ export function ReviewPanel({
   candidates: Candidate[];
   otherProducers: ProducerPublicRow[];
   images: SubmissionImageView[];
+  /** 有効なカテゴリ (承認で作る商品のカテゴリの選択肢) */
+  categories: CatalogCategory[];
 }) {
   const router = useRouter();
   const [action, setAction] = useState<Action>("approve");
   const [choice, setChoice] = useState<ProducerChoice>(candidates.length > 0 ? null : { kind: "new" });
   const [otherId, setOtherId] = useState("");
   const [productName, setProductName] = useState(submission.name);
-  const [category, setCategory] = useState(submission.category);
+  const [categoryId, setCategoryId] = useState(
+    categories.some((c) => c.id === submission.category_id) ? (submission.category_id ?? "") : "",
+  );
   const [price, setPrice] = useState(submission.desired_price != null ? String(Number(submission.desired_price)) : "");
   const [imageId, setImageId] = useState<string>("");
   const [reason, setReason] = useState("");
@@ -97,6 +101,10 @@ export function ReviewPanel({
       setError("既存の生産者を選んでください。");
       return;
     }
+    if (!categoryId) {
+      setError("商品のカテゴリを選んでください。");
+      return;
+    }
     if (!window.confirm("この申請を承認します。生産者と商品 (非公開・在庫 0) が作成されます。よろしいですか？")) return;
 
     const data = await post("approve", {
@@ -104,7 +112,7 @@ export function ReviewPanel({
       producer_id: producerId,
       product_name: productName,
       price,
-      category,
+      category_id: categoryId,
       image_id: imageId || null,
       reason: reason || null,
     });
@@ -249,10 +257,11 @@ export function ReviewPanel({
               />
             </Field>
             <Field label="カテゴリ">
-              <select value={category} onChange={(e) => setCategory(e.target.value)} className={FIELD_CLASS}>
-                {PRODUCT_CATEGORIES.map((c) => (
-                  <option key={c} value={c}>
-                    {PRODUCT_CATEGORY_LABELS[c]}
+              <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)} className={FIELD_CLASS}>
+                <option value="">選択してください</option>
+                {categories.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
                   </option>
                 ))}
               </select>

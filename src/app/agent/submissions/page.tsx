@@ -11,12 +11,32 @@ import type { MySubmissionListItem } from "@/lib/domain/types";
  * 商品の持込み申請 (一覧)。表示されるのは自分の申請だけ (treemerce_my_submissions)。
  * 運営が自分の名義で代行作成した申請 (0021) も自分の申請として表示する (閲覧のみ)。
  */
-export default async function AgentSubmissionsPage() {
+export default async function AgentSubmissionsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ category?: string }>;
+}) {
+  const { category } = await searchParams;
   const { supabase } = await requireAgentPage("/agent/submissions");
 
   const { data, error } = await supabase.rpc("treemerce_my_submissions");
   if (error) throw new Error("申請を読み込めませんでした。");
-  const submissions = (data ?? []) as MySubmissionListItem[];
+  const all = (data ?? []) as MySubmissionListItem[];
+
+  // カテゴリで絞り込み (自分の申請にあるカテゴリだけを出す)
+  const categories: { id: string; name: string; count: number }[] = [];
+  for (const s of all) {
+    if (!s.category_id || !s.category_name) continue;
+    const entry = categories.find((c) => c.id === s.category_id);
+    if (entry) entry.count += 1;
+    else categories.push({ id: s.category_id, name: s.category_name, count: 1 });
+  }
+  const active = categories.some((c) => c.id === category) ? category : undefined;
+  const submissions = active ? all.filter((s) => s.category_id === active) : all;
+  const chip = (selected: boolean) =>
+    `inline-flex items-center gap-1.5 rounded-2xl border px-3 py-1.5 text-[13px] font-medium ${
+      selected ? "border-brand bg-brand-soft text-brand" : "border-border-soft bg-surface text-text-primary"
+    }`;
 
   return (
     <>
@@ -31,13 +51,31 @@ export default async function AgentSubmissionsPage() {
           <Plus size={18} />
           新しく申請する
         </PrimaryButton>
-        {submissions.some((s) => s.status === "approved") ? (
+        {all.some((s) => s.status === "approved") ? (
           <PrimaryButton href="/agent/sourced-sales" variant="secondary">
             <BarChart3 size={18} />
             持込み商品の売れ行きを見る
           </PrimaryButton>
         ) : null}
       </div>
+
+      {categories.length > 1 ? (
+        <nav aria-label="カテゴリで絞り込み" className="flex flex-wrap gap-2">
+          <Link href="/agent/submissions" aria-current={!active ? "page" : undefined} className={chip(!active)}>
+            すべて <span className="tabular-nums">{all.length}</span>
+          </Link>
+          {categories.map((c) => (
+            <Link
+              key={c.id}
+              href={`/agent/submissions?category=${c.id}`}
+              aria-current={active === c.id ? "page" : undefined}
+              className={chip(active === c.id)}
+            >
+              {c.name} <span className="tabular-nums">{c.count}</span>
+            </Link>
+          ))}
+        </nav>
+      ) : null}
 
       {submissions.length === 0 ? (
         <EmptyState title="まだ申請はありません" description="「新しく申請する」から下書きを作成できます。" />
@@ -70,6 +108,7 @@ export default async function AgentSubmissionsPage() {
                   <ChevronRight size={18} className="mt-1 shrink-0 text-text-secondary" />
                 </div>
                 <div className="mt-2 flex items-center gap-3 text-[13px] text-text-secondary">
+                  {s.category_name ? <span>{s.category_name}</span> : null}
                   <span>希望価格 {s.desired_price != null ? formatYen(Number(s.desired_price)) : "—"}</span>
                   <span className="inline-flex items-center gap-1">
                     <ImageIcon size={14} />

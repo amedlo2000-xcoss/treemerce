@@ -32,7 +32,10 @@ export function SubmissionProductDetails({ submission }: { submission: Submissio
   return (
     <dl className="divide-y divide-border-soft">
       <Block label="商品名">{submission.name}</Block>
-      <Block label="カテゴリ">{PRODUCT_CATEGORY_LABELS[submission.category] ?? submission.category}</Block>
+      <Block label="カテゴリ">
+        {submission.category_name ??
+          (submission.category ? (PRODUCT_CATEGORY_LABELS[submission.category] ?? submission.category) : EMPTY)}
+      </Block>
       <Block label="説明">{submission.description ?? EMPTY}</Block>
       <Block label="希望販売価格 (税込)">{yenOrEmpty(submission.desired_price)}</Block>
       <Block label="想定卸値 (任意)">{yenOrEmpty(submission.expected_wholesale_price)}</Block>

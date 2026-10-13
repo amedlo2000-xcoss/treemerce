@@ -10,6 +10,7 @@ import {
 import { BackLink, FormMessage, formatDateTime } from "@/components/ui";
 import { UUID } from "@/lib/api/submission-input";
 import { requireAgentPage } from "@/lib/auth/viewer";
+import { loadCatalogCategories } from "@/lib/catalog-categories";
 import { SUBMISSION_STATUS_LABELS, SUBMISSION_STATUS_PILL } from "@/lib/domain/enums";
 import type { MySubmissionDetail } from "@/lib/domain/types";
 import { withSignedUrls } from "@/lib/submission-images";
@@ -52,7 +53,10 @@ export default async function AgentSubmissionDetailPage({
   const { data, error } = await supabase.rpc("treemerce_my_submission", { p_submission_id: submissionId });
   if (error || !data) notFound();
   const submission = data as MySubmissionDetail;
-  const images = await withSignedUrls(supabase, submission.images);
+  const [images, categories] = await Promise.all([
+    withSignedUrls(supabase, submission.images),
+    submission.editable ? loadCatalogCategories(supabase) : Promise.resolve([]),
+  ]);
   const proxy = submission.created_via === "admin_proxy";
   const statusMessage = (proxy && PROXY_STATUS_MESSAGES[submission.status]) || STATUS_MESSAGES[submission.status];
 
@@ -112,7 +116,7 @@ export default async function AgentSubmissionDetailPage({
           <div className="space-y-2">
             <SectionLabel>申請内容</SectionLabel>
             <Surface>
-              <SubmissionForm key={submission.updated_at} submission={submission} />
+              <SubmissionForm key={submission.updated_at} submission={submission} categories={categories} />
             </Surface>
           </div>
           <WithdrawButton submissionId={submission.id} />

@@ -1,9 +1,9 @@
 import type { ReactNode } from "react";
 
 /**
- * サンプル商品の仮イメージ (図形のみの SVG)。プロジェクト内に使える商品写真がないため、
- * 商品ごとに異なるモチーフを描く。実在の神社・寺院の写真や建物は描かない。
- * 五次元結晶は抽象的な結晶の形にする。仮の画像であることを「イメージ」と表示する。
+ * 画像のない商品の仮イメージ (図形のみの SVG)。商品の placeholder_key (0023) でモチーフを選び、
+ * 未指定なら物品 / サービスの汎用のモチーフを描く。仮の画像であることを「イメージ」と表示する。
+ * 実在の神社・寺院の写真や建物は描かない。五次元結晶は抽象的な結晶の形にする。
  */
 
 type Motif = { bg: string; draw: ReactNode };
@@ -258,8 +258,56 @@ const MOTIFS: Record<string, Motif> = {
   },
 };
 
-export function SampleIllustration({ id, className = "" }: { id: string; className?: string }) {
-  const motif = MOTIFS[id];
+// 汎用のモチーフ (placeholder_key が未指定・不明なとき)
+const GENERIC_GOODS: Motif = {
+  bg: "#efeee9",
+  draw: (
+    <>
+      <path d="M100 52 L148 76 L148 132 L100 156 L52 132 L52 76z" fill="#d8d3c6" />
+      <path d="M100 52 L148 76 L100 100 L52 76z" fill="#e6e1d5" />
+      <path d="M100 100 L100 156" stroke="#bdb6a6" strokeWidth="2" />
+    </>
+  ),
+};
+
+const GENERIC_SERVICE: Motif = MOTIFS["sample-12"];
+
+/** 商品管理で選べるイラストの種類 (placeholder_key) と、選択肢の表示名 */
+export const PLACEHOLDER_OPTIONS: { key: string; label: string }[] = [
+  { key: "sample-01", label: "梅の実とはちみつ" },
+  { key: "sample-02", label: "梅としその葉" },
+  { key: "sample-03", label: "緑の茶碗と茶葉" },
+  { key: "sample-04", label: "湯気の立つ茶碗" },
+  { key: "sample-05", label: "蓮の葉と雫" },
+  { key: "sample-06", label: "米袋と米粒" },
+  { key: "sample-07", label: "羊羹と灯り" },
+  { key: "sample-08", label: "色とりどりのかけら" },
+  { key: "sample-09", label: "線香と森" },
+  { key: "sample-10", label: "キャンドル" },
+  { key: "sample-11", label: "抽象的な結晶" },
+  { key: "sample-12", label: "穏やかな波紋" },
+  { key: "sample-13", label: "しずく形の耳飾り" },
+  { key: "sample-14", label: "結び目のある指輪" },
+  { key: "sample-15", label: "勾玉" },
+  { key: "sample-16", label: "筆の円と運筆" },
+  { key: "sample-17", label: "結んだ布包み" },
+  { key: "sample-18", label: "湯のみ" },
+  { key: "sample-19", label: "一輪挿し" },
+  { key: "sample-20", label: "栞のあるノート" },
+];
+
+export function ProductPlaceholder({
+  placeholderKey,
+  itemKind = "goods",
+  className = "",
+}: {
+  placeholderKey: string | null | undefined;
+  itemKind?: "goods" | "service";
+  className?: string;
+}) {
+  const motif =
+    (placeholderKey ? MOTIFS[placeholderKey] : undefined) ??
+    (itemKind === "service" ? GENERIC_SERVICE : GENERIC_GOODS);
   return (
     <div className={`relative overflow-hidden ${className}`} style={{ backgroundColor: motif?.bg ?? "#eeeeee" }}>
       <svg viewBox="0 0 200 200" className="h-full w-full" role="img" aria-label="商品のイメージ図">

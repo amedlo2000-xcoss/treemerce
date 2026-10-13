@@ -1,16 +1,25 @@
 "use client";
 
-import { ImagePlus, Trash2 } from "lucide-react";
+import { Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
+import { PLACEHOLDER_OPTIONS, ProductPlaceholder } from "@/components/ProductPlaceholder";
 import { BUTTON_CLASS, FIELD_CLASS, Field, FormMessage } from "@/components/ui";
+import { PLACEHOLDER_PRODUCER_ID } from "@/lib/domain/enums";
 import {
-  PLACEHOLDER_PRODUCER_ID,
-  PRODUCT_CATEGORIES,
-  PRODUCT_CATEGORY_LABELS,
-} from "@/lib/domain/enums";
-import type { ProducerPublicRow, ProductRow } from "@/lib/domain/types";
+  ITEM_KIND_LABELS,
+  SALES_STATUSES,
+  SALES_STATUS_LABELS,
+  productFieldLabels,
+} from "@/lib/domain/product-labels";
+import type {
+  AdminCategoryRow,
+  ProducerPublicRow,
+  ProductItemKind,
+  ProductRow,
+  ProductSalesStatus,
+} from "@/lib/domain/types";
 import { PRODUCT_IMAGE_BUCKET, productImageUrl } from "@/lib/storage";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 
@@ -21,36 +30,52 @@ const IMAGE_TYPES: Record<string, string> = {
   "image/webp": "webp",
 };
 
+const STATUS_HINTS: Record<ProductSalesStatus, string> = {
+  unpublished: "ショップ・一覧ページに表示しません。",
+  preparing: "価格を「未定」と表示し、注文はできません (ショップ・オブザーバー特典付き製品一覧に表示)。",
+  on_sale: "ショップで注文できます。販売価格が必要です。",
+};
+
 /**
- * 商品の登録・編集フォーム (super_admin 専用ページから使う)。
+ * 商品の登録・編集フォーム (super_admin 専用ページから使う。保存は treemerce_admin_save_product, 0023)。
  * 画像は Storage (product-images) にランダム名で直接アップロードし、パスだけを RPC に渡す。
- * アップロードの可否は Storage の RLS (0012: super_admin のみ) でも判定される。
+ * 画像がない商品は、選んだイラスト (「イメージ」表示付き) をショップ・一覧ページで表示する。
  *
- * 生産者が仮の「未設定（運営）」のまま公開する場合は警告を出す (公開自体は止めない)。
- * 内容量・規格は公開時のみ必須 (商品ページに表示するため)。
+ *   * 販売状態: 非公開 / 準備中 (価格未定・注文不可) / 公開中 (注文可)
+ *   * 準備中の価格は「予定価格」として任意入力 (運営だけが見られ、ショップ・公開ページには出ない)
+ *   * サービスは予約の仕組みができるまで公開中にできない (DB でも拒否)
+ *   * カテゴリは有効なものだけを選べる (無効なカテゴリは現在のカテゴリのままの場合のみ表示)
  */
 export function ProductForm({
   product,
   producers,
+  categories,
 }: {
   product?: ProductRow;
   /** 選択肢。有効な生産者と仮の生産者 (+ 現在の生産者が無効ならそれも) */
   producers: ProducerPublicRow[];
+  /** 全カテゴリ (無効を含む)。選択肢には有効なものと現在のカテゴリだけを出す */
+  categories: AdminCategoryRow[];
 }) {
   const router = useRouter();
   const [form, setForm] = useState({
     name: product?.name ?? "",
+    name_kana: product?.name_kana ?? "",
+    product_type_label: product?.product_type_label ?? "",
     sku: product?.sku ?? "",
-    category: product?.category ?? "other",
-    price: product ? String(product.price) : "",
+    category_id: product?.category_id ?? "",
+    item_kind: (product?.item_kind ?? "goods") as ProductItemKind,
+    sales_status: (product?.sales_status ?? "unpublished") as ProductSalesStatus,
+    has_observer_benefit: product?.has_observer_benefit ?? false,
+    price: product?.price != null ? String(Number(product.price)) : "",
     stock: product ? String(product.stock) : "0",
     sort_order: product ? String(product.sort_order) : "0",
     description: product?.description ?? "",
-    is_published: product?.is_published ?? false,
     producer_id: product?.producer_id ?? PLACEHOLDER_PRODUCER_ID,
     content_volume: product?.content_volume ?? "",
     ingredients: product?.ingredients ?? "",
     best_before_note: product?.best_before_note ?? "",
+    placeholder_key: product?.placeholder_key ?? "",
   });
   const [imagePath, setImagePath] = useState<string | null>(product?.image_path ?? null);
   const [reason, setReason] = useState("");
@@ -61,6 +86,10 @@ export function ProductForm({
 
   const set = <K extends keyof typeof form>(key: K, value: (typeof form)[K]) =>
     setForm((prev) => ({ ...prev, [key]: value }));
+
+  const categoryOptions = categories.filter((c) => c.is_active || c.id === product?.category_id);
+  const labels = productFieldLabels(form.item_kind);
+  const isService = form.item_kind === "service";
 
   async function handleImage(file: File | undefined) {
     if (!file) return;
@@ -92,19 +121,32 @@ export function ProductForm({
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
-    setPending(true);
     setError(null);
     setDone(null);
+    if (!form.category_id) {
+      setError("カテゴリを選択してください。");
+      return;
+    }
+    if (isService && form.sales_status === "on_sale") {
+      setError("サービスは予約の仕組みができるまで公開 (注文可能) にできません。「準備中」にしてください。");
+      return;
+    }
+    if (form.sales_status === "on_sale" && form.price.trim() === "") {
+      setError("公開中にするには販売価格が必要です (価格が未定なら「準備中」にしてください)。");
+      return;
+    }
+    setPending(true);
 
     const response = await fetch(product ? `/api/admin/products/${product.id}` : "/api/admin/products", {
       method: product ? "PATCH" : "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         ...form,
-        price: Number(form.price),
-        stock: Number(form.stock),
+        price: form.price.trim() === "" ? null : Number(form.price),
+        stock: Number(form.stock || 0),
         sort_order: Number(form.sort_order || 0),
         image_path: imagePath,
+        placeholder_key: form.placeholder_key || null,
         reason: reason || null,
       }),
     });
@@ -130,7 +172,7 @@ export function ProductForm({
   }
 
   const preview = productImageUrl(imagePath);
-  const unsetProducerOnPublish = form.is_published && form.producer_id === PLACEHOLDER_PRODUCER_ID;
+  const unsetProducerOnPublish = form.sales_status === "on_sale" && form.producer_id === PLACEHOLDER_PRODUCER_ID;
   const selectedProducer = producers.find((p) => p.id === form.producer_id);
 
   return (
@@ -138,12 +180,16 @@ export function ProductForm({
       <div className="grid gap-5 md:grid-cols-[14rem_minmax(0,1fr)]">
         <div className="space-y-2">
           <span className="block text-[12px] font-semibold text-text-secondary">商品画像</span>
-          <div className="relative flex aspect-square items-center justify-center overflow-hidden rounded-2xl border border-dashed border-border-soft bg-surface-muted">
+          <div className="relative aspect-square overflow-hidden rounded-2xl border border-dashed border-border-soft bg-surface-muted">
             {preview ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img src={preview} alt="" className="h-full w-full object-cover" />
             ) : (
-              <ImagePlus size={32} className="text-text-secondary" />
+              <ProductPlaceholder
+                placeholderKey={form.placeholder_key || null}
+                itemKind={form.item_kind}
+                className="h-full w-full"
+              />
             )}
           </div>
           <div className="flex gap-2">
@@ -169,20 +215,97 @@ export function ProductForm({
             ) : null}
           </div>
           <p className="text-[11px] leading-4 text-text-secondary">JPEG / PNG / WebP、5MB まで</p>
+          <Field label="画像がないときのイラスト">
+            <select
+              value={form.placeholder_key}
+              onChange={(e) => set("placeholder_key", e.target.value)}
+              className={FIELD_CLASS}
+            >
+              <option value="">標準 (物品 / サービスの汎用)</option>
+              {PLACEHOLDER_OPTIONS.map((o) => (
+                <option key={o.key} value={o.key}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          </Field>
         </div>
 
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="商品名" className="sm:col-span-2">
+            <input required value={form.name} onChange={(e) => set("name", e.target.value)} className={FIELD_CLASS} />
+          </Field>
+          <Field label="読み仮名 (任意)">
+            <input value={form.name_kana} onChange={(e) => set("name_kana", e.target.value)} className={FIELD_CLASS} />
+          </Field>
+          <Field label="商品の種類 (任意)">
             <input
-              required
-              value={form.name}
-              onChange={(e) => set("name", e.target.value)}
+              value={form.product_type_label}
+              onChange={(e) => set("product_type_label", e.target.value)}
               className={FIELD_CLASS}
+              placeholder="例: はちみつ梅"
             />
           </Field>
-          <Field label="価格 (円・税込)">
-            <input
+          <Field label="カテゴリ">
+            <select
               required
+              value={form.category_id}
+              onChange={(e) => set("category_id", e.target.value)}
+              className={FIELD_CLASS}
+            >
+              <option value="">選択してください</option>
+              {categoryOptions.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                  {c.is_active ? "" : " (無効)"}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="物品 / サービス">
+            <select
+              value={form.item_kind}
+              onChange={(e) => {
+                const kind = e.target.value as ProductItemKind;
+                set("item_kind", kind);
+                // サービスは公開中にできないため、公開中なら準備中に切り替える
+                if (kind === "service" && form.sales_status === "on_sale") set("sales_status", "preparing");
+              }}
+              className={FIELD_CLASS}
+            >
+              {(Object.keys(ITEM_KIND_LABELS) as ProductItemKind[]).map((k) => (
+                <option key={k} value={k}>
+                  {ITEM_KIND_LABELS[k]}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="販売状態" className="sm:col-span-2">
+            <select
+              value={form.sales_status}
+              onChange={(e) => set("sales_status", e.target.value as ProductSalesStatus)}
+              className={FIELD_CLASS}
+            >
+              {SALES_STATUSES.map((s) => (
+                <option key={s} value={s} disabled={s === "on_sale" && isService}>
+                  {SALES_STATUS_LABELS[s]}
+                  {s === "on_sale" && isService ? " (サービスは予約の仕組みができるまで不可)" : ""}
+                </option>
+              ))}
+            </select>
+            <span className="mt-1 block text-[12px] text-text-secondary">{STATUS_HINTS[form.sales_status]}</span>
+          </Field>
+          <Field
+            label={
+              form.sales_status === "on_sale"
+                ? "販売価格 (円・税込・必須)"
+                : form.sales_status === "preparing"
+                  ? "予定価格 (任意・運営だけが見られます)"
+                  : "価格 (円・税込・任意)"
+            }
+          >
+            <input
+              required={form.sales_status === "on_sale"}
               type="number"
               min={0}
               step={1}
@@ -190,6 +313,7 @@ export function ProductForm({
               value={form.price}
               onChange={(e) => set("price", e.target.value)}
               className={FIELD_CLASS}
+              placeholder={form.sales_status === "on_sale" ? "" : "未定なら空欄"}
             />
           </Field>
           <Field label="在庫数">
@@ -204,20 +328,21 @@ export function ProductForm({
               className={FIELD_CLASS}
             />
           </Field>
-          <Field label="カテゴリ">
-            <select
-              value={form.category}
-              onChange={(e) => set("category", e.target.value as typeof form.category)}
-              className={FIELD_CLASS}
-            >
-              {PRODUCT_CATEGORIES.map((c) => (
-                <option key={c} value={c}>
-                  {PRODUCT_CATEGORY_LABELS[c]}
-                </option>
-              ))}
-            </select>
-          </Field>
-          <Field label="生産者" className="sm:col-span-2">
+          <label className="flex cursor-pointer items-center justify-between gap-3 rounded-xl border border-border-soft px-3 py-2.5 sm:col-span-2">
+            <span>
+              <span className="block text-[14px] font-medium text-text-primary">オブザーバー特典付き</span>
+              <span className="block text-[12px] text-text-secondary">
+                印を付けた公開中・準備中の商品が「オブザーバー特典付き製品一覧」に表示されます。
+              </span>
+            </span>
+            <input
+              type="checkbox"
+              checked={form.has_observer_benefit}
+              onChange={(e) => set("has_observer_benefit", e.target.checked)}
+              className="h-5 w-5 accent-[var(--brand)]"
+            />
+          </label>
+          <Field label={isService ? "提供者" : "生産者"} className="sm:col-span-2">
             <select
               value={form.producer_id}
               onChange={(e) => set("producer_id", e.target.value)}
@@ -226,12 +351,12 @@ export function ProductForm({
               {producers.map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.is_placeholder
-                    ? `${p.name} ※運営から発送`
-                    : `${p.name} (${p.origin ?? "—"} / 発送元: ${p.ship_from_prefecture ?? "—"})${p.is_active ? "" : " ※無効"}`}
+                    ? `${p.name}${isService ? "" : " ※運営から発送"}`
+                    : `${p.name} (${p.origin ?? "—"}${isService ? "" : ` / 発送元: ${p.ship_from_prefecture ?? "—"}`})${p.is_active ? "" : " ※無効"}`}
                 </option>
               ))}
             </select>
-            {selectedProducer && !selectedProducer.is_placeholder ? (
+            {selectedProducer && !selectedProducer.is_placeholder && !isService ? (
               <span className="mt-1 block text-[12px] text-text-secondary">
                 発送目安: {selectedProducer.ship_lead_time ?? "—"} (商品ページに表示されます)
               </span>
@@ -249,44 +374,38 @@ export function ProductForm({
               className={FIELD_CLASS}
             />
           </Field>
-          <div className="flex items-end">
-            <label className="flex w-full cursor-pointer items-center justify-between gap-3 rounded-xl border border-border-soft px-3 py-2.5">
-              <span className="text-[14px] font-medium text-text-primary">
-                {form.is_published ? "公開中" : "非公開"}
-              </span>
-              <input
-                type="checkbox"
-                checked={form.is_published}
-                onChange={(e) => set("is_published", e.target.checked)}
-                className="h-5 w-5 accent-[var(--brand)]"
-              />
-            </label>
-          </div>
-          <Field label={form.is_published ? "内容量・規格 (公開時は必須)" : "内容量・規格"} className="sm:col-span-2">
+          <Field
+            label={form.sales_status === "on_sale" ? `${labels.volume}・規格 (公開時は必須)` : `${labels.volume}・規格`}
+            className="sm:col-span-2"
+          >
             <input
-              required={form.is_published}
+              required={form.sales_status === "on_sale"}
               value={form.content_volume}
               onChange={(e) => set("content_volume", e.target.value)}
               className={FIELD_CLASS}
-              placeholder="例: 500g×2袋"
+              placeholder={isService ? "例: 1回 60分" : "例: 500g×2袋"}
             />
           </Field>
-          <Field label="原材料・成分 (任意)" className="sm:col-span-2">
-            <textarea
-              rows={3}
-              value={form.ingredients}
-              onChange={(e) => set("ingredients", e.target.value)}
-              className={FIELD_CLASS}
-            />
-          </Field>
-          <Field label="賞味期限 / 使用期限の目安 (任意)" className="sm:col-span-2">
-            <input
-              value={form.best_before_note}
-              onChange={(e) => set("best_before_note", e.target.value)}
-              className={FIELD_CLASS}
-              placeholder="例: 製造日から180日"
-            />
-          </Field>
+          {!isService ? (
+            <>
+              <Field label="原材料・成分 (任意)" className="sm:col-span-2">
+                <textarea
+                  rows={3}
+                  value={form.ingredients}
+                  onChange={(e) => set("ingredients", e.target.value)}
+                  className={FIELD_CLASS}
+                />
+              </Field>
+              <Field label="賞味期限 / 使用期限の目安 (任意)" className="sm:col-span-2">
+                <input
+                  value={form.best_before_note}
+                  onChange={(e) => set("best_before_note", e.target.value)}
+                  className={FIELD_CLASS}
+                  placeholder="例: 製造日から180日"
+                />
+              </Field>
+            </>
+          ) : null}
           <Field label="商品説明" className="sm:col-span-2">
             <textarea
               rows={5}

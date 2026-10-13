@@ -1,8 +1,9 @@
-import { PREFECTURES, PRODUCT_CATEGORIES, type ProductCategory } from "@/lib/domain/enums";
+import { PREFECTURES } from "@/lib/domain/enums";
 
 export type SubmissionInput = {
   p_name: string;
-  p_category: ProductCategory;
+  /** カテゴリ (0022 のマスタ)。下書きは未選択 (null) でよく、申請時に DB 側で必須になる */
+  p_category_id: string | null;
   p_description: string | null;
   p_desired_price: number | null;
   p_expected_wholesale_price: number | null;
@@ -90,9 +91,8 @@ export function parseSubmissionInput(
   }
   if (!texts.name) return { error: "商品名は必須です。" };
 
-  const category = (PRODUCT_CATEGORIES as readonly string[]).includes(String(body.category))
-    ? (body.category as ProductCategory)
-    : "other";
+  const categoryId = text(body.category_id);
+  if (categoryId && !UUID.test(categoryId)) return { error: "カテゴリを選択し直してください。" };
 
   const desired = parseYen(body.desired_price, "希望販売価格");
   if ("error" in desired) return desired;
@@ -109,7 +109,7 @@ export function parseSubmissionInput(
   return {
     input: {
       p_name: texts.name,
-      p_category: category,
+      p_category_id: categoryId,
       p_description: texts.description,
       p_desired_price: desired.value,
       p_expected_wholesale_price: wholesale.value,

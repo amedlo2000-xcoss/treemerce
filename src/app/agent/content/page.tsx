@@ -4,11 +4,8 @@ import type { LucideIcon } from "lucide-react";
 import { BigStat, MobilePageHeader, Surface } from "@/components/mobile/primitives";
 import { formatYen } from "@/components/ui";
 import { requireAgentPage } from "@/lib/auth/viewer";
-import {
-  BENEFIT_STATUS_LABELS,
-  PRODUCT_CATEGORIES,
-  PRODUCT_CATEGORY_LABELS,
-} from "@/lib/domain/enums";
+import { loadCatalogCategories } from "@/lib/catalog-categories";
+import { BENEFIT_STATUS_LABELS } from "@/lib/domain/enums";
 import type { BenefitRow } from "@/lib/domain/types";
 
 function ContentCard({
@@ -47,6 +44,8 @@ export default async function ContentPage() {
     .order("created_at", { ascending: false })
     .limit(5);
   const benefits = (data ?? []) as BenefitRow[];
+  // 取り扱い商品カテゴリ (0022 のマスタ。有効なものを並び順で)
+  const categories = await loadCatalogCategories(supabase);
   const paidTotal = benefits
     .filter((b) => b.status === "paid" || b.status === "confirmed")
     .reduce((sum, b) => sum + Number(b.amount ?? 0), 0);
@@ -64,12 +63,12 @@ export default async function ContentPage() {
             <h3 className="text-[16px] font-semibold text-text-primary">取り扱い商品カテゴリ</h3>
           </div>
           <div className="flex flex-wrap gap-2">
-            {PRODUCT_CATEGORIES.map((category) => (
+            {categories.map((category) => (
               <span
-                key={category}
+                key={category.id}
                 className="rounded-2xl border border-border-soft bg-surface-muted px-3.5 py-2 text-[13px] font-medium text-text-primary"
               >
-                {PRODUCT_CATEGORY_LABELS[category]}
+                {category.name}
               </span>
             ))}
           </div>

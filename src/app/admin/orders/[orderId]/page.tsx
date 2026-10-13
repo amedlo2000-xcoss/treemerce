@@ -203,7 +203,13 @@ export default async function AdminOrderDetailPage({
                       </div>
                     ) : null}
                   </td>
-                  <td className={TD}>{PRODUCT_CATEGORY_LABELS[item.product_category] ?? item.product_category}</td>
+                  <td className={TD}>
+                    {/* 注文時点のカテゴリ名 (0023 以降)。それより前の明細は旧カテゴリの表示名 */}
+                    {item.product_category_name ??
+                      (item.product_category
+                        ? (PRODUCT_CATEGORY_LABELS[item.product_category] ?? item.product_category)
+                        : "—")}
+                  </td>
                   <td className={`${TD} tabular-nums`}>{formatYen(Number(item.unit_price))}</td>
                   <td className={`${TD} tabular-nums`}>{item.quantity}</td>
                   <td className={`${TD} font-semibold tabular-nums text-text-primary`}>

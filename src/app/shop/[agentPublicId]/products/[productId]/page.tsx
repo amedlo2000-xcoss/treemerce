@@ -4,7 +4,7 @@ import { notFound } from "next/navigation";
 
 import { Notice, formatYen } from "@/components/ui";
 import { StatusPill, Surface } from "@/components/mobile/primitives";
-import { PRODUCT_CATEGORY_LABELS } from "@/lib/domain/enums";
+import { UNDECIDED, productFieldLabels } from "@/lib/domain/product-labels";
 import { fetchShopCatalog } from "@/lib/shop/catalog";
 
 import { InvalidShopLink, ProductImage, StockLabel } from "../../ShopParts";
@@ -12,7 +12,11 @@ import { AddToCart } from "./AddToCart";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-/** 公開ショップ: 商品詳細 (未ログイン可)。非公開の商品は表示されない。 */
+/**
+ * 公開ショップ: 商品詳細 (未ログイン可)。非公開の商品は表示されない。
+ * 準備中の商品は価格を「未定」と表示し、カートに入れるボタンを出さない (注文受付の RPC でも拒否される)。
+ * サービスは「内容量→提供単位」「発送目安→予約方法」に切り替え、発送情報を表示しない。
+ */
 export default async function ShopProductPage({
   params,
 }: {
@@ -21,11 +25,14 @@ export default async function ShopProductPage({
   const { agentPublicId, productId } = await params;
   if (!UUID.test(productId)) notFound();
 
-  const catalog = await fetchShopCatalog(agentPublicId, productId);
+  const catalog = await fetchShopCatalog(agentPublicId, productId, { includePreparing: true });
   if (!catalog.valid) return <InvalidShopLink />;
 
   const product = catalog.products[0];
   if (!product) notFound();
+
+  const labels = productFieldLabels(product.item_kind);
+  const priceText = product.orderable && product.price != null ? formatYen(Number(product.price)) : UNDECIDED;
 
   return (
     <>
@@ -40,39 +47,56 @@ export default async function ShopProductPage({
       <div className="space-y-5 md:grid md:grid-cols-2 md:items-start md:gap-8 md:space-y-0">
         <ProductImage
           path={product.image_path}
+          placeholderKey={product.placeholder_key}
+          itemKind={product.item_kind}
           className="aspect-square rounded-[24px] border border-border-soft"
         />
 
         <div className="space-y-5">
           <div className="space-y-2">
-            <StatusPill tone="brand">
-              {PRODUCT_CATEGORY_LABELS[product.category] ?? product.category}
-            </StatusPill>
+            <div className="flex flex-wrap items-center gap-1.5">
+              <StatusPill tone="brand">{product.category_name}</StatusPill>
+              {product.has_observer_benefit ? <StatusPill tone="brand">オブザーバー特典付き</StatusPill> : null}
+              {!product.orderable ? <StatusPill tone="warning">準備中</StatusPill> : null}
+            </div>
             <h1 className="text-[24px] font-bold leading-tight text-text-primary">{product.name}</h1>
+            {product.name_kana ? <p className="text-[12px] text-text-secondary">{product.name_kana}</p> : null}
+            {product.product_type_label ? (
+              <p className="text-[13px] font-medium text-text-primary">{product.product_type_label}</p>
+            ) : null}
             {product.producer ? (
               <p className="text-[13px] text-text-secondary">
-                {product.producer.name} ・ {product.producer.origin}
+                {product.producer.name}
+                {product.producer.origin ? ` ・ ${product.producer.origin}` : ""}
               </p>
             ) : null}
             <div className="flex items-end gap-3">
               <span className="text-[28px] font-bold tabular-nums text-text-primary">
-                {formatYen(Number(product.price))}
+                {product.orderable ? priceText : `販売価格：${UNDECIDED}`}
               </span>
-              <span className="pb-1.5 text-[12px] text-text-secondary">税込</span>
+              {product.orderable ? <span className="pb-1.5 text-[12px] text-text-secondary">税込</span> : null}
               <span className="pb-1.5">
                 <StockLabel product={product} />
               </span>
             </div>
-            {catalog.shipping_fee > 0 ? (
-              <p className="text-[12px] text-text-secondary">
-                送料 {formatYen(Number(catalog.shipping_fee))} (1回のご注文につき)
-              </p>
-            ) : (
-              <p className="text-[12px] text-text-secondary">送料無料</p>
-            )}
+            {product.orderable ? (
+              catalog.shipping_fee > 0 ? (
+                <p className="text-[12px] text-text-secondary">
+                  送料 {formatYen(Number(catalog.shipping_fee))} (1回のご注文につき)
+                </p>
+              ) : (
+                <p className="text-[12px] text-text-secondary">送料無料</p>
+              )
+            ) : null}
           </div>
 
-          {catalog.accepting_orders ? (
+          {!product.orderable ? (
+            <Notice tone="info">
+              {product.item_kind === "service"
+                ? "このサービスは準備中です。内容・予約方法は準備が整い次第ご案内します。"
+                : "この商品は準備中です。価格・仕様・提供開始時期は、準備が整い次第ご案内します。"}
+            </Notice>
+          ) : catalog.accepting_orders ? (
             <Surface>
               <AddToCart
                 agentPublicId={agentPublicId}
@@ -99,14 +123,18 @@ export default async function ShopProductPage({
             <dl className="divide-y divide-border-soft text-[14px]">
               {(
                 [
-                  ["価格", `${formatYen(Number(product.price))} (税込)`],
-                  ["内容量・規格", product.content_volume],
-                  ["原材料・成分", product.ingredients],
-                  ["賞味期限 / 使用期限の目安", product.best_before_note],
-                  ["生産者", product.producer?.name],
-                  ["産地", product.producer?.origin],
-                  ["発送元", product.producer?.ship_from_prefecture],
-                  ["発送の目安", product.producer?.ship_lead_time],
+                  ["価格", product.orderable ? `${priceText} (税込)` : UNDECIDED],
+                  [labels.volume, product.content_volume],
+                  ["原材料・成分", product.item_kind === "goods" ? product.ingredients : null],
+                  ["賞味期限 / 使用期限の目安", product.item_kind === "goods" ? product.best_before_note : null],
+                  [labels.producer, product.producer?.name],
+                  [labels.origin, product.producer?.origin],
+                  ...(labels.shipFrom
+                    ? ([
+                        [labels.shipFrom, product.producer?.ship_from_prefecture],
+                        [labels.leadTime, product.producer?.ship_lead_time],
+                      ] as [string, string | null | undefined][])
+                    : []),
                 ] as [string, string | null | undefined][]
               )
                 .filter(([, value]) => value)
@@ -117,7 +145,7 @@ export default async function ShopProductPage({
                   </div>
                 ))}
             </dl>
-            {product.producer ? (
+            {product.producer && product.item_kind === "goods" ? (
               <p className="mt-2 text-[12px] leading-5 text-text-secondary">
                 この商品は生産者から直接お届けします。複数の生産者の商品をご注文の場合は、別々に届きます。
               </p>

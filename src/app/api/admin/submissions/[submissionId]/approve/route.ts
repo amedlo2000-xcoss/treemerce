@@ -2,7 +2,6 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { fail, failFromPostgrest, ok, readJson, requireSuperAdminApi } from "@/lib/api/http";
 import { UUID, parseYen } from "@/lib/api/submission-input";
-import { PRODUCT_CATEGORIES } from "@/lib/domain/enums";
 import type { AdminSubmissionDetail, ProductRow } from "@/lib/domain/types";
 import { PRODUCT_IMAGE_BUCKET } from "@/lib/storage";
 import { SUBMISSION_IMAGE_BUCKET, SUBMISSION_IMAGE_TYPES } from "@/lib/submission-images";
@@ -42,8 +41,9 @@ export async function POST(request: Request, context: { params: Promise<{ submis
   if ("error" in price) return fail("TREEMERCE_INVALID_INPUT", price.error, 400);
 
   const text = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : null);
-  const category = text(body.category);
-  if (category && !(PRODUCT_CATEGORIES as readonly string[]).includes(category)) {
+  // 商品のカテゴリ (0024)。省略時は申請のカテゴリ。有効なカテゴリかは DB 側で確認する
+  const categoryId = text(body.category_id);
+  if (categoryId && !UUID.test(categoryId)) {
     return fail("TREEMERCE_INVALID_INPUT", "カテゴリが不正です。", 400);
   }
   const imageId = text(body.image_id);
@@ -68,7 +68,7 @@ export async function POST(request: Request, context: { params: Promise<{ submis
     p_producer_id: mode === "existing" ? producerId : null,
     p_product_name: text(body.product_name),
     p_price: price.value,
-    p_category: category,
+    p_category_id: categoryId,
     p_reason: text(body.reason),
   });
   if (error) return failFromPostgrest(error);
@@ -112,22 +112,28 @@ async function copyImageToProduct(
   const product = productData as ProductRow | null;
   if (!product) return "作成した商品を読み込めませんでした。";
 
-  const { error: updateError } = await supabase.rpc("treemerce_admin_upsert_product", {
+  // 画像だけを差し替える (他の項目は作成直後の値のまま渡す。0023 の save_product は全項目で置き換えるため)
+  const { error: updateError } = await supabase.rpc("treemerce_admin_save_product", {
+    p_product_id: product.id,
     p_name: product.name,
-    p_price: Number(product.price),
+    p_category_id: product.category_id,
+    p_sales_status: product.sales_status,
+    p_price: product.price,
     p_stock: product.stock,
-    p_is_published: product.is_published,
-    p_category: product.category,
+    p_item_kind: product.item_kind,
+    p_has_observer_benefit: product.has_observer_benefit,
+    p_product_type_label: product.product_type_label,
+    p_name_kana: product.name_kana,
+    p_placeholder_key: product.placeholder_key,
     p_description: product.description,
     p_image_path: targetPath,
     p_sku: product.sku,
     p_sort_order: product.sort_order,
-    p_product_id: product.id,
-    p_reason: `持込み申請 ${submissionNo} の画像を商品画像に設定`,
     p_producer_id: product.producer_id,
-    p_content_volume: null,
-    p_ingredients: null,
-    p_best_before_note: null,
+    p_content_volume: product.content_volume,
+    p_ingredients: product.ingredients,
+    p_best_before_note: product.best_before_note,
+    p_reason: `持込み申請 ${submissionNo} の画像を商品画像に設定`,
   });
   if (updateError) return "商品画像の設定に失敗しました。";
   return null;

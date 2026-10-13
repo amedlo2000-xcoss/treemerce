@@ -137,6 +137,21 @@ const ERROR_MAP: Record<string, { status: number; message: string }> = {
     status: 409,
     message: "申請の代理店と指定の代理店が一致しません。画面を開き直してください。",
   },
+
+  // 商品カテゴリ・販売状態 (0022〜0025)
+  TREEMERCE_CATEGORY_NOT_FOUND: { status: 400, message: "カテゴリを選択してください。" },
+  TREEMERCE_CATEGORY_INACTIVE: { status: 400, message: "無効なカテゴリは選べません。" },
+  TREEMERCE_CATEGORY_IN_USE: {
+    status: 409,
+    message: "公開中・準備中の商品が使っているカテゴリは無効にできません。",
+  },
+  TREEMERCE_CATEGORY_IMMUTABLE: { status: 400, message: "カテゴリのキーは変更できません。" },
+  TREEMERCE_CATEGORY_DELETE_DENIED: { status: 403, message: "カテゴリは削除できません (無効化で扱います)。" },
+  TREEMERCE_CATEGORY_WRITE_DENIED: { status: 403, message: "カテゴリへの直接書込みはできません。" },
+  TREEMERCE_SERVICE_NOT_ORDERABLE: {
+    status: 400,
+    message: "サービスは予約の仕組みができるまで公開 (注文可能) にできません。「準備中」で表示できます。",
+  },
 };
 
 /** DB 側の具体的な理由 (「商品名は必須です」等) をそのまま画面に返すコード */
@@ -144,6 +159,8 @@ const DETAIL_CODES = new Set([
   "TREEMERCE_INVALID_INPUT",
   "TREEMERCE_REASON_REQUIRED",
   "TREEMERCE_SUBMISSION_NOT_EDITABLE",
+  "TREEMERCE_CATEGORY_INACTIVE",
+  "TREEMERCE_CATEGORY_NOT_FOUND",
 ]);
 
 /**

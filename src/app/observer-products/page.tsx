@@ -1,6 +1,9 @@
 import type { Metadata } from "next";
 
-import { ObserverSampleCatalog } from "./ObserverSampleCatalog";
+import type { ObserverCatalog } from "@/lib/domain/types";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
+
+import { ObserverProductCatalog } from "./ObserverProductCatalog";
 
 export const metadata: Metadata = {
   // 親レイアウトの title をそのまま使わず、タブ名をページタイトルと同じにする
@@ -11,10 +14,15 @@ export const metadata: Metadata = {
 
 /**
  * オブザーバー特典付き製品一覧 (/observer-products、ログイン不要・noindex)。
- * データはローカルの固定データ (src/lib/samples/observer-samples.ts) のみで、DB・RPC には接続しない。
- * 購入・決済・予約・問い合わせの機能は持たない。
+ * 商品管理でオブザーバー特典付きの印を付けた、公開中・準備中の商品を表示する (treemerce_observer_products, 0025)。
+ * 代理店 ID・紹介者とは紐づけない。購入・決済・予約・問い合わせの機能は持たない。
  */
-export default function ObserverProductsPage() {
+export default async function ObserverProductsPage() {
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase.rpc("treemerce_observer_products");
+  if (error) throw new Error("製品を読み込めませんでした。");
+  const catalog = (data ?? { products: [], categories: [] }) as ObserverCatalog;
+
   return (
     <>
       <header className="space-y-3 px-1">
@@ -35,7 +43,7 @@ export default function ObserverProductsPage() {
         <p>価格・仕様・提供開始時期は、準備が整い次第ご案内します。</p>
       </div>
 
-      <ObserverSampleCatalog />
+      <ObserverProductCatalog products={catalog.products} categories={catalog.categories} />
 
       <section
         aria-labelledby="observer-benefit-heading"

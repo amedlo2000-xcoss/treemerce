@@ -7,6 +7,7 @@ import type { AdminSubmissionListItem, ProductRow } from "@/lib/domain/types";
 
 import { ProductForm } from "../ProductForm";
 import { loadProducerOptions } from "../producer-options";
+import { loadAdminCategories } from "@/lib/catalog-categories";
 
 export default async function AdminProductEditPage({
   params,
@@ -22,7 +23,10 @@ export default async function AdminProductEditPage({
   const { data } = await supabase.from("products").select("*").eq("id", productId).maybeSingle();
   const product = data as ProductRow | null;
   if (!product) notFound();
-  const producers = await loadProducerOptions(supabase, product.producer_id);
+  const [producers, categories] = await Promise.all([
+    loadProducerOptions(supabase, product.producer_id),
+    loadAdminCategories(supabase),
+  ]);
 
   // 持込み元 (0017)。product_sources は直接読めないため、super_admin 用の申請一覧 RPC から引く。
   const { data: approvedData } = await supabase.rpc("treemerce_admin_list_submissions", { p_status: "approved" });
@@ -51,7 +55,7 @@ export default async function AdminProductEditPage({
         </Notice>
       ) : null}
       <Card>
-        <ProductForm key={product.updated_at} product={product} producers={producers} />
+        <ProductForm key={product.updated_at} product={product} producers={producers} categories={categories} />
       </Card>
     </>
   );

@@ -24,9 +24,11 @@ import {
 } from "@/components/ui";
 import { UUID } from "@/lib/api/submission-input";
 import { requireSuperAdminPage } from "@/lib/auth/viewer";
+import { loadCatalogCategories } from "@/lib/catalog-categories";
 import { AGENT_STATUS_LABELS, SUBMISSION_STATUS_BADGE, SUBMISSION_STATUS_LABELS } from "@/lib/domain/enums";
 import type {
   AdminSubmissionDetail,
+  CatalogCategory,
   ProducerPublicRow,
   SubmissionEvent,
   SubmissionImageView,
@@ -41,10 +43,12 @@ function ProxyEditor({
   submission,
   images,
   agentLabel,
+  categories,
 }: {
   submission: AdminSubmissionDetail;
   images: SubmissionImageView[];
   agentLabel: string;
+  categories: CatalogCategory[];
 }) {
   return (
     <div className="space-y-5">
@@ -64,6 +68,7 @@ function ProxyEditor({
       </Card>
       <Card title="申請内容">
         <SubmissionForm
+          categories={categories}
           key={submission.updated_at}
           submission={submission}
           proxy={{ agentId: submission.agent.id, agentLabel }}
@@ -137,7 +142,10 @@ export default async function AdminSubmissionDetailPage({
   const { data, error } = await supabase.rpc("treemerce_admin_get_submission", { p_submission_id: submissionId });
   if (error || !data) notFound();
   const submission = data as AdminSubmissionDetail;
-  const images = await withSignedUrls(supabase, submission.images);
+  const [images, categories] = await Promise.all([
+    withSignedUrls(supabase, submission.images),
+    loadCatalogCategories(supabase),
+  ]);
 
   let candidates: (ProducerPublicRow & { similarity: number })[] = [];
   let otherProducers: ProducerPublicRow[] = [];
@@ -193,7 +201,7 @@ export default async function AdminSubmissionDetailPage({
 
       <div className="space-y-5 lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(0,24rem)] lg:items-start lg:gap-6 lg:space-y-0">
         {submission.admin_editable ? (
-          <ProxyEditor submission={submission} images={images} agentLabel={agentLabel} />
+          <ProxyEditor submission={submission} images={images} agentLabel={agentLabel} categories={categories} />
         ) : (
           <div className="space-y-5">
             <Card title="画像">
@@ -240,7 +248,7 @@ export default async function AdminSubmissionDetailPage({
                 submission={{
                   id: submission.id,
                   name: submission.name,
-                  category: submission.category,
+                  category_id: submission.category_id,
                   desired_price: submission.desired_price,
                   producer_name: submission.producer_name,
                   producer_origin: submission.producer_origin,
@@ -250,6 +258,7 @@ export default async function AdminSubmissionDetailPage({
                 candidates={candidates}
                 otherProducers={otherProducers}
                 images={images}
+                categories={categories}
               />
             </Card>
           ) : null}

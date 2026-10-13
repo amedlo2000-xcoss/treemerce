@@ -4,6 +4,7 @@ import {
   Badge,
   DataTable,
   EmptyState,
+  FIELD_CLASS,
   Mono,
   PageHeader,
   SectionTitle,
@@ -13,6 +14,7 @@ import {
   formatYen,
 } from "@/components/ui";
 import { requireSuperAdminPage } from "@/lib/auth/viewer";
+import { loadAdminCategories } from "@/lib/catalog-categories";
 import {
   SUBMISSION_STATUSES,
   SUBMISSION_STATUS_BADGE,
@@ -30,21 +32,26 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export default async function AdminSubmissionsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ status?: string; agent?: string }>;
+  searchParams: Promise<{ status?: string; agent?: string; category?: string }>;
 }) {
-  const { status, agent } = await searchParams;
+  const { status, agent, category } = await searchParams;
   const { supabase } = await requireSuperAdminPage("/admin/submissions");
 
   const statusFilter = (SUBMISSION_STATUSES as readonly string[]).includes(status ?? "")
     ? (status as SubmissionStatus)
     : null;
   const agentFilter = agent && UUID.test(agent) ? agent : null;
+  const categoryFilter = category && UUID.test(category) ? category : null;
 
-  // 0021: 代理店の絞り込みは RPC 側で行う
-  const { data, error } = await supabase.rpc("treemerce_admin_list_submissions", {
-    p_status: statusFilter,
-    p_agent_id: agentFilter,
-  });
+  // 0021 / 0024: 代理店・カテゴリの絞り込みは RPC 側で行う
+  const [{ data, error }, categories] = await Promise.all([
+    supabase.rpc("treemerce_admin_list_submissions", {
+      p_status: statusFilter,
+      p_agent_id: agentFilter,
+      p_category_id: categoryFilter,
+    }),
+    loadAdminCategories(supabase),
+  ]);
   if (error) throw new Error("申請を読み込めませんでした。");
   const submissions = (data ?? []) as AdminSubmissionListItem[];
   const agentName = agentFilter ? submissions[0]?.agent_display_name : null;
@@ -53,6 +60,7 @@ export default async function AdminSubmissionsPage({
     const params = new URLSearchParams();
     if (next) params.set("status", next);
     if (agentFilter) params.set("agent", agentFilter);
+    if (categoryFilter) params.set("category", categoryFilter);
     const q = params.toString();
     return q ? `/admin/submissions?${q}` : "/admin/submissions";
   };
@@ -80,6 +88,25 @@ export default async function AdminSubmissionsPage({
           );
         })}
       </nav>
+      <form method="get" className="flex flex-wrap items-end gap-2">
+        {statusFilter ? <input type="hidden" name="status" value={statusFilter} /> : null}
+        {agentFilter ? <input type="hidden" name="agent" value={agentFilter} /> : null}
+        <label className="block">
+          <span className="mb-1 block text-[12px] font-semibold text-text-secondary">カテゴリ</span>
+          <select name="category" defaultValue={categoryFilter ?? ""} className={FIELD_CLASS}>
+            <option value="">すべて</option>
+            {categories.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+                {c.is_active ? "" : " (無効)"}
+              </option>
+            ))}
+          </select>
+        </label>
+        <button type="submit" className="rounded-xl border border-border-soft px-4 py-2.5 text-[14px] font-medium text-text-primary hover:bg-surface-muted">
+          絞り込む
+        </button>
+      </form>
       {agentFilter ? (
         <p className="text-[13px] text-text-secondary">
           代理店 {agentName ?? ""} の申請のみ表示中。{" "}
@@ -94,7 +121,7 @@ export default async function AdminSubmissionsPage({
       {submissions.length === 0 ? (
         <EmptyState title="該当する申請はありません" />
       ) : (
-        <DataTable headers={["申請番号", "商品名", "代理店", "生産者", "希望価格", "画像", "状態", "申請日時"]}>
+        <DataTable headers={["申請番号", "商品名", "カテゴリ", "代理店", "生産者", "希望価格", "画像", "状態", "申請日時"]}>
           {submissions.map((s) => (
             <tr key={s.id}>
               <td className={`${TD} whitespace-nowrap`}>
@@ -111,6 +138,7 @@ export default async function AdminSubmissionsPage({
                   </div>
                 ) : null}
               </td>
+              <td className={TD}>{s.category_name ?? "未選択"}</td>
               <td className={TD}>
                 <Mono>{s.agent_public_id}</Mono>
                 <div className="text-text-primary">{s.agent_display_name}</div>

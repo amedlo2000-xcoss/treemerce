@@ -6,15 +6,15 @@ import { useState } from "react";
 
 import { PrimaryButton } from "@/components/mobile/primitives";
 import { SUBMISSION_LIMITS } from "@/lib/api/submission-input";
-import { PREFECTURES, PRODUCT_CATEGORIES, PRODUCT_CATEGORY_LABELS } from "@/lib/domain/enums";
-import type { SubmissionContent } from "@/lib/domain/types";
+import { PREFECTURES } from "@/lib/domain/enums";
+import type { CatalogCategory, SubmissionContent } from "@/lib/domain/types";
 
 const INPUT =
   "w-full rounded-2xl border border-border-soft bg-surface px-3.5 py-2.5 text-[15px] text-text-primary outline-none focus:border-brand";
 
 type FormState = {
   name: string;
-  category: string;
+  category_id: string;
   description: string;
   desired_price: string;
   expected_wholesale_price: string;
@@ -30,10 +30,11 @@ type FormState = {
   producer_contact_email: string;
 };
 
-function initialState(s?: SubmissionContent): FormState {
+function initialState(categories: CatalogCategory[], s?: SubmissionContent): FormState {
   return {
     name: s?.name ?? "",
-    category: s?.category ?? "food",
+    // 無効になったカテゴリは選び直してもらう (選択肢に出さない)
+    category_id: s?.category_id && categories.some((c) => c.id === s.category_id) ? s.category_id : "",
     description: s?.description ?? "",
     desired_price: s?.desired_price != null ? String(Number(s.desired_price)) : "",
     expected_wholesale_price: s?.expected_wholesale_price != null ? String(Number(s.expected_wholesale_price)) : "",
@@ -73,12 +74,15 @@ function Label({ text, required, hint }: { text: string; required?: boolean; hin
 export function SubmissionForm({
   submission,
   proxy,
+  categories,
 }: {
   submission?: SubmissionContent;
   proxy?: { agentId: string; agentLabel: string };
+  /** 有効なカテゴリ (treemerce_catalog_categories) */
+  categories: CatalogCategory[];
 }) {
   const router = useRouter();
-  const [form, setForm] = useState<FormState>(() => initialState(submission));
+  const [form, setForm] = useState<FormState>(() => initialState(categories, submission));
   const [reason, setReason] = useState("");
   const [pending, setPending] = useState<"save" | "submit" | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -189,11 +193,12 @@ export function SubmissionForm({
           />
         </label>
         <label className="block space-y-1.5">
-          <Label text="カテゴリ" />
-          <select value={form.category} onChange={(e) => set("category", e.target.value)} className={INPUT}>
-            {PRODUCT_CATEGORIES.map((c) => (
-              <option key={c} value={c}>
-                {PRODUCT_CATEGORY_LABELS[c]}
+          <Label text="カテゴリ" required />
+          <select value={form.category_id} onChange={(e) => set("category_id", e.target.value)} className={INPUT}>
+            <option value="">選択してください</option>
+            {categories.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
               </option>
             ))}
           </select>

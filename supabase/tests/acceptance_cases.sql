@@ -1,10 +1,10 @@
 -- ============================================================================
--- TREEMERCE 受け入れテスト  CASE1 - CASE48
+-- TREEMERCE 受け入れテスト  CASE1 - CASE52
 -- ----------------------------------------------------------------------------
 -- Supabase SQL Editor にそのまま貼り付けて実行する。
 -- 全体が 1 トランザクションで、最後に ROLLBACK するため本番データは残らない。
 -- 途中で失敗した CASE があれば例外で停止する。全て通れば最後に
--- 「ALL 48 CASES PASSED」が NOTICE として出力される。
+-- 「ALL 52 CASES PASSED」が NOTICE として出力される。
 --
 -- 木構造:
 --            R  (root)
@@ -3053,7 +3053,7 @@ begin
   if not v_ok then raise exception 'CASE42 FAILED: 必須項目が空のまま申請できた'; end if;
 
   update public.product_submissions
-  set description = '香りの強い深蒸し煎茶', desired_price = 1500, content_volume = '100g',
+  set category = 'food', description = '香りの強い深蒸し煎茶', desired_price = 1500, content_volume = '100g',
       producer_name = 'CASE42 茶園', producer_origin = '静岡県 牧之原市',
       producer_ship_from_prefecture = '静岡県', producer_ship_lead_time = '入金確認後3営業日以内',
       producer_contact_phone = '000-0000-0000',
@@ -3526,7 +3526,7 @@ begin
 
   -- 却下用の 2 件目
   v_other := (public.treemerce_save_my_submission(
-    p_name => 'CASE44 却下用', p_description => '説明', p_desired_price => 500, p_content_volume => '1個',
+    p_name => 'CASE44 却下用', p_category => 'food', p_description => '説明', p_desired_price => 500, p_content_volume => '1個',
     p_producer_name => 'CASE44 生産者', p_producer_origin => '福岡県', p_producer_ship_from_prefecture => '福岡県',
     p_producer_ship_lead_time => '7日', p_producer_contact_email => 'case44@example.com') ->> 'id')::uuid;
   perform public.treemerce_submit_my_submission(v_other);
@@ -4537,10 +4537,595 @@ begin
   raise notice 'CASE48 OK: 代行と一覧の概要は super_admin のみ (admin ロール・代理店は不可)。運営は本人の申請に触れられず、代行のコンテキストでも承認に進めない。本人のコンテキストでは代行の申請を作成・変更できない。作成経路は変更不可。代理店の取り違え・停止中の代理店への代行は拒否。一覧の概要は件数のみで STABLE';
 end $$;
 
+-- ============================================================================
+-- CASE49 : 商品カテゴリのマスタ (0022)
+--   公開の一覧は有効なカテゴリの名前と並び順のみ (未ログイン可・STABLE)。テーブルは直接読めない。
+--   追加・名称変更 (理由必須)・有効/無効 (理由必須)・並べ替えは super_admin のみで監査ログに残る。
+--   削除・キー・旧カテゴリとの対応の変更は postgres でもできない。
+-- ============================================================================
+
+-- (1) 未ログイン・代理店・admin ロール
+do $$
+declare v_res jsonb; v_ok boolean; v_sub text;
+begin
+  perform set_config('request.jwt.claims', '', true);
+  set local role anon;
+  v_res := public.treemerce_catalog_categories();
+  if jsonb_array_length(v_res) <> 8 or v_res -> 0 ->> 'name' <> '食品・飲料' or v_res -> 0 ? 'legacy_code' then
+    raise exception 'CASE49 FAILED: 公開のカテゴリ一覧が不正 (%)', v_res;
+  end if;
+  v_ok := false;
+  begin perform count(*) from public.product_categories;
+  exception when insufficient_privilege then v_ok := true; end;
+  if not v_ok then raise exception 'CASE49 FAILED: 未ログインでカテゴリのテーブルを直接読めた'; end if;
+  reset role;
+
+  foreach v_sub in array array['00000000-0000-4000-8000-000000000002', '00000000-0000-4000-8000-000000000041'] loop
+    perform set_config('request.jwt.claims', jsonb_build_object('sub', v_sub, 'role', 'authenticated')::text, true);
+    set local role authenticated;
+    v_ok := false;
+    begin perform public.treemerce_admin_upsert_category(p_name => 'CASE49 不正');
+    exception when insufficient_privilege then v_ok := true; end;
+    if not v_ok then raise exception 'CASE49 FAILED: super_admin 以外 (%) がカテゴリを追加できた', v_sub; end if;
+    v_ok := false;
+    begin perform public.treemerce_admin_list_categories();
+    exception when insufficient_privilege then v_ok := true; end;
+    if not v_ok then raise exception 'CASE49 FAILED: super_admin 以外 (%) が管理用の一覧を読めた', v_sub; end if;
+    v_ok := false;
+    begin update public.product_categories set name = '直接';
+    exception when insufficient_privilege then v_ok := true; end;
+    if not v_ok then raise exception 'CASE49 FAILED: super_admin 以外 (%) がテーブルを直接更新できた', v_sub; end if;
+    reset role;
+  end loop;
+end $$;
+
+-- (2) super_admin の管理
+select set_config('request.jwt.claims',
+  '{"sub":"00000000-0000-4000-8000-000000000007","role":"authenticated"}', true);
+set local role authenticated;
+
+do $$
+declare v_res jsonb; v_id uuid; v_ok boolean; v_ids uuid[];
+begin
+  v_res := public.treemerce_admin_upsert_category(p_name => 'CASE49 茶器', p_reason => '取扱い開始');
+  v_id := (v_res ->> 'id')::uuid;
+  if v_res ->> 'code' !~ '^cat_[0-9a-f]{10}$' or not (v_res ->> 'is_active')::boolean then
+    raise exception 'CASE49 FAILED: 追加結果が不正 (%)', v_res;
+  end if;
+
+  v_ok := false;
+  begin perform public.treemerce_admin_upsert_category(p_name => '食品・飲料');
+  exception when invalid_parameter_value then v_ok := true; end;
+  if not v_ok then raise exception 'CASE49 FAILED: 同じ名前のカテゴリを追加できた'; end if;
+
+  v_ok := false;
+  begin perform public.treemerce_admin_upsert_category(v_id, 'CASE49 茶道具', null, null);
+  exception when invalid_parameter_value then v_ok := true; end;
+  if not v_ok then raise exception 'CASE49 FAILED: 理由なしで名称変更できた'; end if;
+
+  v_ok := false;
+  begin perform public.treemerce_admin_upsert_category(v_id, 'CASE49 茶道具', 'other_key', '変更');
+  exception when invalid_parameter_value then v_ok := true; end;
+  if not v_ok then raise exception 'CASE49 FAILED: キーを変更できた'; end if;
+
+  v_res := public.treemerce_admin_upsert_category(v_id, 'CASE49 茶道具', null, '表記を統一');
+  if v_res ->> 'name' <> 'CASE49 茶道具' then raise exception 'CASE49 FAILED: 名称変更できない'; end if;
+
+  v_ok := false;
+  begin perform public.treemerce_admin_set_category_active(v_id, false, ' ');
+  exception when invalid_parameter_value then v_ok := true; end;
+  if not v_ok then raise exception 'CASE49 FAILED: 理由なしで無効化できた'; end if;
+
+  v_res := public.treemerce_admin_set_category_active(v_id, false, '取扱い終了');
+  if (v_res ->> 'is_active')::boolean then raise exception 'CASE49 FAILED: 無効化できない'; end if;
+  if exists (select 1 from jsonb_array_elements(public.treemerce_catalog_categories()) e
+             where (e ->> 'id')::uuid = v_id) then
+    raise exception 'CASE49 FAILED: 無効なカテゴリが公開の一覧に出た';
+  end if;
+
+  -- 並べ替え: 過不足は拒否。全件の逆順は受け付ける
+  select array_agg((e ->> 'id')::uuid order by (e ->> 'sort_order')::int desc)
+  into v_ids from jsonb_array_elements(public.treemerce_admin_list_categories()) e;
+  v_ok := false;
+  begin perform public.treemerce_admin_reorder_categories(v_ids[2:]);
+  exception when invalid_parameter_value then v_ok := true; end;
+  if not v_ok then raise exception 'CASE49 FAILED: 一部のカテゴリだけで並べ替えできた'; end if;
+  v_res := public.treemerce_admin_reorder_categories(v_ids, '並び順の見直し');
+  if (v_res -> 0 ->> 'id')::uuid <> v_ids[1] then
+    raise exception 'CASE49 FAILED: 並べ替えが反映されない (%)', v_res -> 0;
+  end if;
+  -- 元の並び順に戻す
+  perform public.treemerce_admin_reorder_categories(
+    (select array_agg(x order by ord desc) from unnest(v_ids) with ordinality t(x, ord)), '元に戻す');
+  perform set_config('tm.case49_cat', v_id::text, false);
+end $$;
+
+reset role;
+select set_config('request.jwt.claims', '', true);
+
+-- (3) DB 層: 削除・キー・旧カテゴリとの対応の変更は postgres でも不可。監査ログ
+do $$
+declare v_ok boolean; v_id uuid := current_setting('tm.case49_cat')::uuid;
+begin
+  v_ok := false;
+  begin delete from public.product_categories where id = v_id;
+  exception when insufficient_privilege then v_ok := true; end;
+  if not v_ok then raise exception 'CASE49 FAILED: カテゴリを削除できた'; end if;
+
+  v_ok := false;
+  begin update public.product_categories set code = 'changed_code' where id = v_id;
+  exception when insufficient_privilege then v_ok := true; end;
+  if not v_ok then raise exception 'CASE49 FAILED: キーを直接変更できた'; end if;
+
+  v_ok := false;
+  begin update public.product_categories set legacy_code = null where code = 'food_beverage';
+  exception when insufficient_privilege then v_ok := true; end;
+  if not v_ok then raise exception 'CASE49 FAILED: 旧カテゴリとの対応を変更できた'; end if;
+
+  -- 管理のコンテキストでも super_admin でなければ書けない
+  perform set_config('app.category_ctx', 'category_admin', true);
+  v_ok := false;
+  begin update public.product_categories set name = '直接' where id = v_id;
+  exception when insufficient_privilege then v_ok := true; end;
+  if not v_ok then raise exception 'CASE49 FAILED: super_admin でないのに管理のコンテキストで書けた'; end if;
+  perform set_config('app.category_ctx', '', true);
+
+  if app.category_id_for_legacy('food') is distinct from
+     (select id from public.product_categories where code = 'food_beverage') then
+    raise exception 'CASE49 FAILED: 旧カテゴリ food の読み替え先が食品・飲料でない';
+  end if;
+
+  if (select count(*) from public.admin_audit_logs
+      where target_table = 'product_categories'
+        and action in ('category.create', 'category.rename', 'category.deactivate', 'category.reorder')
+        and actor_user_id = '00000000-0000-4000-8000-000000000007') < 5
+     or not exists (select 1 from public.admin_audit_logs
+                    where action = 'category.rename' and reason = '表記を統一'
+                      and before_state ->> 'name' = 'CASE49 茶器' and after_state ->> 'name' = 'CASE49 茶道具') then
+    raise exception 'CASE49 FAILED: カテゴリの監査ログが不足';
+  end if;
+
+  if (select provolatile from pg_proc where proname = 'treemerce_catalog_categories') <> 's' then
+    raise exception 'CASE49 FAILED: 公開のカテゴリ一覧が STABLE ではない';
+  end if;
+
+  raise notice 'CASE49 OK: カテゴリの公開一覧は有効なもののみ (名前と並び順・STABLE)。テーブルは直接読めない。追加・名称変更 (理由必須)・有効/無効 (理由必須)・並べ替えは super_admin のみで監査ログに残る。削除・キー・旧カテゴリとの対応の変更は postgres でも不可';
+end $$;
+
+-- ============================================================================
+-- CASE50 : 商品の販売状態・カテゴリ・物品/サービス (0023)
+--   準備中は価格 (予定価格を含む) を出さず注文を拒否。代理店から直接は見えない。公開中は価格必須。
+--   サービスは公開中にできない。無効なカテゴリは新たに選べず、使用中のカテゴリは無効化できない。
+--   明細は注文時点のカテゴリ名を持ち、カテゴリの名称変更で変わらない。販売状態の変更は監査ログに残る。
+-- ============================================================================
+
+select set_config('request.jwt.claims',
+  '{"sub":"00000000-0000-4000-8000-000000000007","role":"authenticated"}', true);
+set local role authenticated;
+
+do $$
+declare
+  v_scent uuid; v_treat uuid; v_food uuid; v_health uuid;
+  v_prep uuid; v_svc uuid; v_ok boolean; v_res jsonb; v_row jsonb;
+begin
+  select (e ->> 'id')::uuid into v_scent from jsonb_array_elements(public.treemerce_catalog_categories()) e
+    where e ->> 'name' = '香り・キャンドル';
+  select (e ->> 'id')::uuid into v_treat from jsonb_array_elements(public.treemerce_catalog_categories()) e
+    where e ->> 'name' = '施術・体験';
+  select (e ->> 'id')::uuid into v_food from jsonb_array_elements(public.treemerce_catalog_categories()) e
+    where e ->> 'name' = '食品・飲料';
+  select (e ->> 'id')::uuid into v_health from jsonb_array_elements(public.treemerce_admin_list_categories()) e
+    where e ->> 'code' = 'health';
+  perform set_config('tm.case50_scent', v_scent::text, false);
+
+  -- 準備中は価格なしで登録できる (予定価格も任意)
+  v_res := public.treemerce_admin_save_product(
+    p_name => 'CASE50 社叢香', p_category_id => v_scent, p_sales_status => 'preparing',
+    p_price => 4800, p_stock => 0, p_has_observer_benefit => true,
+    p_product_type_label => 'お香', p_name_kana => 'しゃそうこう', p_placeholder_key => 'sample-09',
+    p_reason => '準備中として登録');
+  v_prep := (v_res ->> 'id')::uuid;
+  perform set_config('tm.case50_prep', v_prep::text, false);
+  if v_res ->> 'sales_status' <> 'preparing' or (v_res ->> 'is_published')::boolean then
+    raise exception 'CASE50 FAILED: 準備中の登録結果が不正 (%)', v_res;
+  end if;
+
+  -- 公開中は価格必須
+  v_ok := false;
+  begin perform public.treemerce_admin_save_product(
+    p_name => 'CASE50 価格なし', p_category_id => v_food, p_sales_status => 'on_sale', p_stock => 1);
+  exception when invalid_parameter_value then v_ok := true; end;
+  if not v_ok then raise exception 'CASE50 FAILED: 価格なしで公開中にできた'; end if;
+
+  -- サービスは準備中なら可、公開中は不可
+  v_svc := (public.treemerce_admin_save_product(
+    p_name => 'CASE50 整丹', p_category_id => v_treat, p_sales_status => 'preparing',
+    p_item_kind => 'service', p_has_observer_benefit => true) ->> 'id')::uuid;
+  perform set_config('tm.case50_svc', v_svc::text, false);
+  v_ok := false;
+  begin perform public.treemerce_admin_save_product(
+    p_product_id => v_svc, p_name => 'CASE50 整丹', p_category_id => v_treat, p_sales_status => 'on_sale',
+    p_price => 8000, p_item_kind => 'service');
+  exception when invalid_parameter_value then v_ok := true; end;
+  if not v_ok then raise exception 'CASE50 FAILED: サービスを公開中にできた'; end if;
+
+  -- 無効なカテゴリは新たに選べない
+  v_ok := false;
+  begin perform public.treemerce_admin_save_product(
+    p_name => 'CASE50 旧カテゴリ', p_category_id => v_health, p_sales_status => 'unpublished');
+  exception when invalid_parameter_value then v_ok := true; end;
+  if not v_ok then raise exception 'CASE50 FAILED: 無効なカテゴリを選べた'; end if;
+
+  -- ショップ: 既定は公開中のみ。準備中を含める指定でも価格 (予定価格)・在庫は出さない
+  if exists (select 1 from jsonb_array_elements(public.treemerce_shop_products('TM-TEST-A') -> 'products') e
+             where (e ->> 'id')::uuid = v_prep) then
+    raise exception 'CASE50 FAILED: 既定のショップ一覧に準備中の商品が出た';
+  end if;
+  select e into v_row
+  from jsonb_array_elements(public.treemerce_shop_products('TM-TEST-A', null, true) -> 'products') e
+  where (e ->> 'id')::uuid = v_prep;
+  if v_row is null or v_row -> 'price' <> 'null'::jsonb or (v_row ->> 'orderable')::boolean
+     or (v_row ->> 'max_quantity')::int <> 0 or v_row ->> 'category_name' <> '香り・キャンドル'
+     or not (v_row ->> 'has_observer_benefit')::boolean or v_row::text like '%4800%' then
+    raise exception 'CASE50 FAILED: ショップの準備中の商品の形が不正 (%)', v_row;
+  end if;
+end $$;
+
+reset role;
+
+-- 代理店は準備中の商品をテーブルから直接読めない (RLS)
+select set_config('request.jwt.claims',
+  '{"sub":"00000000-0000-4000-8000-000000000002","role":"authenticated"}', true);
+set local role authenticated;
+do $$
+begin
+  if exists (select 1 from public.products where id = current_setting('tm.case50_prep')::uuid) then
+    raise exception 'CASE50 FAILED: 代理店が準備中の商品を直接読めた';
+  end if;
+end $$;
+reset role;
+
+-- 未ログインの購入者: 準備中・サービスは注文できない
+select set_config('request.jwt.claims', '', true);
+set local role anon;
+do $$
+declare v_ok boolean; v_id text;
+begin
+  foreach v_id in array array[current_setting('tm.case50_prep'), current_setting('tm.case50_svc')] loop
+    v_ok := false;
+    begin
+      perform public.treemerce_place_order(current_setting('tm.agent_b_public'),
+        jsonb_build_array(jsonb_build_object('product_id', v_id, 'quantity', 1)),
+        'CASE50 購入者', '東京都千代田区テスト50', 'tm-test-case50@treemerce.test');
+    exception when invalid_parameter_value then v_ok := true; end;
+    if not v_ok then raise exception 'CASE50 FAILED: 準備中・サービスの商品 (%) を注文できた', v_id; end if;
+  end loop;
+end $$;
+reset role;
+
+-- super_admin: 公開中にして注文 → 明細に注文時点のカテゴリ。使用中のカテゴリは無効化できない
+select set_config('request.jwt.claims',
+  '{"sub":"00000000-0000-4000-8000-000000000007","role":"authenticated"}', true);
+set local role authenticated;
+do $$
+declare v_ok boolean; v_scent uuid := current_setting('tm.case50_scent')::uuid;
+begin
+  perform public.treemerce_admin_save_product(
+    p_product_id => current_setting('tm.case50_prep')::uuid, p_name => 'CASE50 社叢香',
+    p_category_id => v_scent, p_sales_status => 'on_sale', p_price => 4800, p_stock => 5,
+    p_has_observer_benefit => true, p_reason => '販売開始');
+
+  v_ok := false;
+  begin perform public.treemerce_admin_set_category_active(v_scent, false, '使用中の無効化');
+  exception when invalid_parameter_value then v_ok := true; end;
+  if not v_ok then raise exception 'CASE50 FAILED: 使用中のカテゴリを無効化できた'; end if;
+end $$;
+reset role;
+
+select set_config('request.jwt.claims', '', true);
+set local role anon;
+do $$
+declare v_res jsonb;
+begin
+  v_res := public.treemerce_place_order(current_setting('tm.agent_b_public'),
+    jsonb_build_array(jsonb_build_object('product_id', current_setting('tm.case50_prep'), 'quantity', 1)),
+    'CASE50 購入者', '東京都千代田区テスト50', 'tm-test-case50@treemerce.test');
+  perform set_config('tm.case50_order', v_res ->> 'order_no', false);
+end $$;
+reset role;
+
+select set_config('request.jwt.claims',
+  '{"sub":"00000000-0000-4000-8000-000000000007","role":"authenticated"}', true);
+set local role authenticated;
+do $$
+begin
+  perform public.treemerce_admin_upsert_category(current_setting('tm.case50_scent')::uuid,
+    '香り・キャンドル (改称)', null, 'CASE50 名称変更');
+end $$;
+reset role;
+select set_config('request.jwt.claims', '', true);
+
+do $$
+declare v_item public.order_items%rowtype; v_ok boolean; v_id uuid;
+begin
+  select oi.* into v_item
+  from public.order_items oi join public.orders o on o.id = oi.order_id
+  where o.order_no = current_setting('tm.case50_order');
+  if v_item.product_category_id is distinct from current_setting('tm.case50_scent')::uuid
+     or v_item.product_category_name <> '香り・キャンドル' then
+    raise exception 'CASE50 FAILED: 明細の注文時点のカテゴリが不正 (%, %)',
+      v_item.product_category_id, v_item.product_category_name;
+  end if;
+
+  -- 旧来の書き方 (is_published だけ) でも販売状態が整合する
+  v_id := current_setting('tm.case50_prep')::uuid;
+  update public.products set is_published = false where id = v_id;
+  if (select sales_status from public.products where id = v_id) <> 'unpublished' then
+    raise exception 'CASE50 FAILED: is_published だけの更新で販売状態が整合しない';
+  end if;
+
+  -- サービスの公開中は DB の制約でも拒否
+  v_ok := false;
+  begin update public.products set sales_status = 'on_sale', price = 1
+        where id = current_setting('tm.case50_svc')::uuid;
+  exception when check_violation then v_ok := true; end;
+  if not v_ok then raise exception 'CASE50 FAILED: サービスを直接公開中にできた'; end if;
+
+  -- 監査ログ: 準備中・公開・非公開の変更と、登録・編集の理由
+  if not exists (select 1 from public.admin_audit_logs where action = 'product.prepare' and target_id = v_id
+                   and actor_user_id = '00000000-0000-4000-8000-000000000007' and reason = '準備中として登録')
+     or not exists (select 1 from public.admin_audit_logs where action = 'product.publish' and target_id = v_id
+                      and reason = '販売開始')
+     or not exists (select 1 from public.admin_audit_logs where action = 'product.unpublish' and target_id = v_id) then
+    raise exception 'CASE50 FAILED: 販売状態の変更が監査ログに残っていない';
+  end if;
+
+  raise notice 'CASE50 OK: 準備中は価格 (予定価格を含む)・在庫を出さず注文を拒否し、代理店から直接見えない。公開中は価格必須。サービスは公開中にできない (RPC・制約)。無効なカテゴリは新たに選べず、使用中のカテゴリは無効化できない。明細は注文時点のカテゴリ名を持つ。旧来の書き方でも状態が整合。販売状態の変更は監査ログに残る';
+end $$;
+
+-- ============================================================================
+-- CASE51 : 持込み申請のカテゴリ・客層分析のカテゴリ (0024)
+--   下書きはカテゴリ未選択でよく、申請時は有効なカテゴリが必須。無効なカテゴリは新たに選べない。
+--   運営の一覧はカテゴリで絞り込める。承認で作る商品は申請のカテゴリ (または指定) で、有効に限る。
+--   客層分析の購入カテゴリのキーはカテゴリ名 (旧列挙型のコードは出ない)。STABLE・丸めは維持。
+-- ============================================================================
+
+select set_config('request.jwt.claims',
+  '{"sub":"00000000-0000-4000-8000-000000000002","role":"authenticated"}', true);
+set local role authenticated;
+
+do $$
+declare
+  v_id uuid; v_ok boolean; v_res jsonb; v_row jsonb;
+  v_scent uuid := current_setting('tm.case50_scent')::uuid;
+  v_health uuid := (select (e ->> 'id')::uuid from jsonb_array_elements(public.treemerce_catalog_categories()) e
+                    where e ->> 'name' = '食品・飲料');
+begin
+  -- 下書きはカテゴリなしで保存できる
+  v_res := public.treemerce_save_my_submission(
+    p_name => 'CASE51 伽藍の灯', p_description => '寺院の灯りをモチーフにしたキャンドル', p_desired_price => 2400,
+    p_content_volume => '1個', p_producer_name => 'CASE51 工房', p_producer_origin => '京都府',
+    p_producer_ship_from_prefecture => '京都府', p_producer_ship_lead_time => '7日',
+    p_producer_contact_email => 'case51@example.com');
+  v_id := (v_res ->> 'id')::uuid;
+  perform set_config('tm.sub51', v_id::text, false);
+  if v_res -> 'category_id' <> 'null'::jsonb then
+    raise exception 'CASE51 FAILED: カテゴリ未選択の下書きにカテゴリが入った (%)', v_res -> 'category_id';
+  end if;
+
+  -- 申請時はカテゴリ必須
+  v_ok := false;
+  begin perform public.treemerce_submit_my_submission(v_id);
+  exception when invalid_parameter_value then v_ok := true; end;
+  if not v_ok then raise exception 'CASE51 FAILED: カテゴリなしで申請できた'; end if;
+
+  -- 無効なカテゴリ (旧カテゴリ) は選べない
+  v_ok := false;
+  begin perform public.treemerce_save_my_submission(p_submission_id => v_id, p_name => 'CASE51 伽藍の灯',
+    p_category => 'beauty');
+  exception when invalid_parameter_value then v_ok := true; end;
+  if not v_ok then raise exception 'CASE51 FAILED: 無効な旧カテゴリを選べた'; end if;
+
+  v_res := public.treemerce_save_my_submission(
+    p_submission_id => v_id, p_name => 'CASE51 伽藍の灯', p_category_id => v_scent,
+    p_description => '寺院の灯りをモチーフにしたキャンドル', p_desired_price => 2400,
+    p_content_volume => '1個', p_producer_name => 'CASE51 工房', p_producer_origin => '京都府',
+    p_producer_ship_from_prefecture => '京都府', p_producer_ship_lead_time => '7日',
+    p_producer_contact_email => 'case51@example.com');
+  if (v_res ->> 'category_id')::uuid <> v_scent or v_res ->> 'category_name' not like '香り・キャンドル%' then
+    raise exception 'CASE51 FAILED: 申請のカテゴリが保存されない (%)', v_res;
+  end if;
+  v_res := public.treemerce_submit_my_submission(v_id);
+  if v_res ->> 'status' <> 'submitted' then raise exception 'CASE51 FAILED: カテゴリ付きで申請できない'; end if;
+
+  select e into v_row from jsonb_array_elements(public.treemerce_my_submissions()) e where (e ->> 'id')::uuid = v_id;
+  if v_row ->> 'category_name' is null then
+    raise exception 'CASE51 FAILED: 本人の一覧にカテゴリ名がない (%)', v_row;
+  end if;
+end $$;
+
+reset role;
+
+select set_config('request.jwt.claims',
+  '{"sub":"00000000-0000-4000-8000-000000000007","role":"authenticated"}', true);
+set local role authenticated;
+
+do $$
+declare
+  v_id uuid := current_setting('tm.sub51')::uuid; v_ok boolean; v_res jsonb; v_product uuid;
+  v_scent uuid := current_setting('tm.case50_scent')::uuid;
+  v_health uuid := (select (e ->> 'id')::uuid from jsonb_array_elements(public.treemerce_admin_list_categories()) e
+                    where e ->> 'code' = 'health');
+begin
+  -- 運営の一覧はカテゴリで絞り込める
+  if not exists (select 1 from jsonb_array_elements(public.treemerce_admin_list_submissions(p_category_id => v_scent)) e
+                 where (e ->> 'id')::uuid = v_id)
+     or exists (select 1 from jsonb_array_elements(public.treemerce_admin_list_submissions(p_category_id => v_scent)) e
+                where (e ->> 'category_id')::uuid <> v_scent) then
+    raise exception 'CASE51 FAILED: カテゴリでの絞り込みが不正';
+  end if;
+
+  -- 無効なカテゴリでは承認できない
+  v_ok := false;
+  begin perform public.treemerce_admin_approve_submission(v_id, p_category_id => v_health);
+  exception when invalid_parameter_value then v_ok := true; end;
+  if not v_ok then raise exception 'CASE51 FAILED: 無効なカテゴリで承認できた'; end if;
+
+  v_res := public.treemerce_admin_approve_submission(v_id, p_reason => 'CASE51 承認');
+  v_product := (v_res ->> 'product_id')::uuid;
+  if (select category_id from public.products where id = v_product) is distinct from v_scent
+     or (select sales_status from public.products where id = v_product) <> 'unpublished' then
+    raise exception 'CASE51 FAILED: 承認で作られた商品のカテゴリ・状態が不正';
+  end if;
+end $$;
+
+reset role;
+
+-- 客層分析: 購入カテゴリのキーはカテゴリ名 (旧列挙型のコードは出ない)
+select set_config('request.jwt.claims',
+  '{"sub":"00000000-0000-4000-8000-000000000003","role":"authenticated"}', true);
+set local role authenticated;
+
+do $$
+declare v_res jsonb;
+begin
+  v_res := public.treemerce_customer_demographics(null, 'all');
+  if exists (select 1 from jsonb_array_elements(v_res -> 'product_category') e
+             where e ->> 'key' in ('health', 'beauty', 'food', 'apparel', 'household', 'digital', 'service', 'other')) then
+    raise exception 'CASE51 FAILED: 客層分析に旧列挙型のコードがキーとして出た (%)', v_res -> 'product_category';
+  end if;
+  if exists (select 1 from jsonb_array_elements(v_res -> 'product_category') e
+             where (e ->> 'count')::int < 5 and e ->> 'key' <> '該当データ少数') then
+    raise exception 'CASE51 FAILED: 購入カテゴリの n<5 が丸められていない (%)', v_res -> 'product_category';
+  end if;
+end $$;
+
+reset role;
+select set_config('request.jwt.claims', '', true);
+
+do $$
+begin
+  if (select provolatile from pg_proc where proname = 'treemerce_customer_demographics') <> 's' then
+    raise exception 'CASE51 FAILED: 客層分析が STABLE ではない';
+  end if;
+  if exists (select 1 from public.admin_audit_logs
+             where target_table = 'product_submissions'
+               and (coalesce(before_state::text, '') || coalesce(after_state::text, '')) like '%case51@example.com%') then
+    raise exception 'CASE51 FAILED: 監査ログに生産者の連絡先の値が含まれた';
+  end if;
+  if not exists (select 1 from public.admin_audit_logs
+                 where action = 'submission.update' and target_id = current_setting('tm.sub51')::uuid
+                   and after_state -> 'changed_fields' ? 'category') then
+    raise exception 'CASE51 FAILED: カテゴリの変更が監査ログの変更項目にない';
+  end if;
+  raise notice 'CASE51 OK: 申請の下書きはカテゴリ未選択で可・申請時は有効なカテゴリ必須・無効なカテゴリは選べない。運営の一覧はカテゴリで絞り込める。承認で作る商品は申請のカテゴリで有効に限る。客層分析の購入カテゴリはカテゴリ名 (旧コードなし)・n<5 丸め・STABLE。監査ログに連絡先の値なし';
+end $$;
+
+-- ============================================================================
+-- CASE52 : オブザーバー特典付き製品一覧 (0025)
+--   未ログインで読める (代理店 ID 不要)。印のある公開中・準備中だけ。準備中は価格なし。
+--   在庫・生産者の連絡先・代理店・顧客の情報は返さない。初期登録 18 件は準備中・架空の値なし。STABLE。
+-- ============================================================================
+
+-- super_admin: 公開中の商品に印を付ける / 印のある非公開の商品を作る (一覧には出ない)
+select set_config('request.jwt.claims',
+  '{"sub":"00000000-0000-4000-8000-000000000007","role":"authenticated"}', true);
+set local role authenticated;
+do $$
+declare v_food uuid; v_res jsonb;
+begin
+  select (e ->> 'id')::uuid into v_food from jsonb_array_elements(public.treemerce_catalog_categories()) e
+    where e ->> 'name' = '食品・飲料';
+  v_res := public.treemerce_admin_save_product(
+    p_name => 'CASE52 公開中の特典付き', p_category_id => v_food, p_sales_status => 'on_sale',
+    p_price => 3300, p_stock => 7, p_has_observer_benefit => true);
+  perform set_config('tm.case52_onsale', v_res ->> 'id', false);
+  v_res := public.treemerce_admin_save_product(
+    p_name => 'CASE52 非公開の特典付き', p_category_id => v_food, p_sales_status => 'unpublished',
+    p_price => 1000, p_has_observer_benefit => true);
+  perform set_config('tm.case52_hidden', v_res ->> 'id', false);
+end $$;
+reset role;
+
+select set_config('request.jwt.claims', '', true);
+set local role anon;
+do $$
+declare v_res jsonb; v_p jsonb; v_seed int; v_txt text;
+begin
+  v_res := public.treemerce_observer_products();
+  v_txt := v_res::text;
+
+  -- 初期登録 18 件 (準備中・価格なし・仮の生産者・印あり)
+  select count(*) into v_seed from jsonb_array_elements(v_res -> 'products') e
+  where e ->> 'placeholder_key' like 'sample-%';
+  if v_seed <> 18 then raise exception 'CASE52 FAILED: 初期登録が 18 件ではない (%)', v_seed; end if;
+  if exists (select 1 from jsonb_array_elements(v_res -> 'products') e
+             where e ->> 'placeholder_key' like 'sample-%'
+               and (e ->> 'sales_status' <> 'preparing' or e -> 'price' <> 'null'::jsonb
+                    or e -> 'producer' <> 'null'::jsonb or not (e ->> 'has_observer_benefit')::boolean)) then
+    raise exception 'CASE52 FAILED: 初期登録の商品に価格・生産者などの値がある';
+  end if;
+  if exists (select 1 from jsonb_array_elements(v_res -> 'products') e
+             where e ->> 'name' in ('奉献漬', '宝石石鹸', '蓮晶')) then
+    raise exception 'CASE52 FAILED: 登録対象外の商品が初期登録された';
+  end if;
+  select e into v_p from jsonb_array_elements(v_res -> 'products') e where e ->> 'name' = '整丹・参道のひととき';
+  if v_p ->> 'item_kind' <> 'service' or v_p ->> 'category_name' <> '施術・体験' or v_p -> 'name_kana' <> 'null'::jsonb then
+    raise exception 'CASE52 FAILED: 整丹がサービス・施術・体験で登録されていない (%)', v_p;
+  end if;
+
+  -- 公開中は価格あり、非公開・印なしは出ない。在庫の情報は返さない
+  select e into v_p from jsonb_array_elements(v_res -> 'products') e
+  where e ->> 'id' = current_setting('tm.case52_onsale');
+  if v_p is null or (v_p ->> 'price')::numeric <> 3300 or v_p ? 'in_stock' or v_p ? 'max_quantity' then
+    raise exception 'CASE52 FAILED: 公開中の特典付き商品の形が不正 (%)', v_p;
+  end if;
+  if v_txt like '%' || current_setting('tm.case52_hidden') || '%' then
+    raise exception 'CASE52 FAILED: 非公開の商品が一覧に出た';
+  end if;
+  if exists (select 1 from jsonb_array_elements(v_res -> 'products') e
+             where not (e ->> 'has_observer_benefit')::boolean) then
+    raise exception 'CASE52 FAILED: 印のない商品が一覧に出た';
+  end if;
+
+  -- 代理店・顧客・連絡先の情報は含まない
+  if v_txt ~ '(contact|phone|email|agent|customer|TM-TEST)' then
+    raise exception 'CASE52 FAILED: 一覧に代理店・顧客・連絡先の情報が含まれた';
+  end if;
+  if jsonb_array_length(v_res -> 'categories') < 8 then
+    raise exception 'CASE52 FAILED: カテゴリの一覧が不正 (%)', v_res -> 'categories';
+  end if;
+
+  -- 初期登録の商品は注文できない
+  begin
+    perform public.treemerce_place_order(current_setting('tm.agent_b_public'),
+      jsonb_build_array(jsonb_build_object('product_id',
+        (select e ->> 'id' from jsonb_array_elements(v_res -> 'products') e where e ->> 'name' = '梅結び'),
+        'quantity', 1)),
+      'CASE52 購入者', '東京都千代田区テスト52', 'tm-test-case52@treemerce.test');
+    raise exception 'CASE52 FAILED: 準備中の初期登録の商品を注文できた';
+  exception when invalid_parameter_value then null;
+  end;
+end $$;
+reset role;
+
+do $$
+begin
+  if (select provolatile from pg_proc where proname = 'treemerce_observer_products') <> 's' then
+    raise exception 'CASE52 FAILED: 一覧の RPC が STABLE ではない';
+  end if;
+  if (select count(*) from public.admin_audit_logs
+      where action = 'product.create' and actor_role = 'db_admin'
+        and reason = '0025: オブザーバー特典付き製品の初期登録 (準備中)') <> 18 then
+    raise exception 'CASE52 FAILED: 初期登録の監査ログが 18 件ではない';
+  end if;
+  raise notice 'CASE52 OK: オブザーバー特典付き製品一覧は未ログインで読め、代理店と紐づかない。印のある公開中・準備中のみ・準備中は価格なし・在庫と連絡先なし。初期登録 18 件は準備中・架空の値なし・注文不可・監査ログあり。STABLE';
+end $$;
+
 do $$
 begin
   raise notice '==========================================';
-  raise notice '  TREEMERCE: ALL 48 CASES PASSED (+EXTRA)';
+  raise notice '  TREEMERCE: ALL 52 CASES PASSED (+EXTRA)';
   raise notice '==========================================';
 end $$;
 

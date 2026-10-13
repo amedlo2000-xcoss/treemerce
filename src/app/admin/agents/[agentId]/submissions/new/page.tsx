@@ -4,6 +4,7 @@ import { SubmissionForm } from "@/app/agent/submissions/SubmissionForm";
 import { BackLink, Card, Mono, Notice, PageHeader } from "@/components/ui";
 import { UUID } from "@/lib/api/submission-input";
 import { requireSuperAdminPage } from "@/lib/auth/viewer";
+import { loadCatalogCategories } from "@/lib/catalog-categories";
 import { AGENT_STATUS_LABELS } from "@/lib/domain/enums";
 import type { AgentRow } from "@/lib/domain/types";
 
@@ -24,6 +25,7 @@ export default async function AdminProxySubmissionNewPage({ params }: { params: 
     .maybeSingle();
   const agent = agentData as Pick<AgentRow, "id" | "public_id" | "display_name" | "status"> | null;
   if (!agent) notFound();
+  const categories = await loadCatalogCategories(supabase);
 
   return (
     <>
@@ -51,6 +53,7 @@ export default async function AdminProxySubmissionNewPage({ params }: { params: 
           </Notice>
           <Card>
             <SubmissionForm
+              categories={categories}
               proxy={{ agentId: agent.id, agentLabel: `${agent.public_id} ${agent.display_name}` }}
             />
           </Card>

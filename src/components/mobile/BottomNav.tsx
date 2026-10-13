@@ -13,6 +13,7 @@ import {
   Settings,
   ShoppingBag,
   Sprout,
+  Tags,
   User,
   UserCircle,
   Users,
@@ -37,6 +38,7 @@ const ICONS = {
   sprout: Sprout,
   inbox: Inbox,
   settings: Settings,
+  tags: Tags,
 } as const;
 
 export type IconKey = keyof typeof ICONS;
