@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 
-/** /samples はサンプル一覧 (現在はオブザーバー特典付き製品・サービスのみ) へ転送する。 */
+/** 旧 URL。オブザーバー特典付き製品一覧 (/observer-products) へ転送する。 */
 export default function SamplesIndexPage() {
-  redirect("/samples/observer");
+  redirect("/observer-products");
 }

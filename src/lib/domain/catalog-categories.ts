@@ -1,7 +1,7 @@
 /**
  * 製品・サービスのカテゴリ名 (表示順)。
  *
- * 現在はオブザーバー特典付き製品・サービスのサンプルページ (/samples/observer) だけが使う。
+ * 現在はオブザーバー特典付き製品一覧 (/observer-products) だけが使う。
  * 本番の商品カテゴリを設計するときに再利用できるよう、カテゴリ名はこのファイルにだけ定義する。
  *
  * 注意: DB の商品カテゴリ (public.product_category / enums.ts の PRODUCT_CATEGORIES) とは別物で、

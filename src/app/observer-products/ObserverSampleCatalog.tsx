@@ -23,9 +23,6 @@ type Filter = CatalogCategory | typeof CATALOG_CATEGORY_ALL;
 function SampleLabels() {
   return (
     <div className="flex flex-wrap items-center gap-1.5">
-      <span className="rounded-full border border-text-secondary/40 px-2 py-0.5 text-[11px] font-semibold tracking-wider text-text-secondary">
-        SAMPLE
-      </span>
       <span className="rounded-full bg-brand-soft px-2 py-0.5 text-[11px] font-semibold text-brand">
         オブザーバー特典付き
       </span>
@@ -138,9 +135,6 @@ function SampleDetailDialog({ sample, onClose }: { sample: ObserverSample; onClo
               </div>
             ))}
           </dl>
-          <p className="mt-4 rounded-2xl bg-surface-muted px-3.5 py-3 text-[12px] leading-5 text-text-secondary">
-            企画段階のサンプルです。実際の販売・提供を案内するものではありません。
-          </p>
         </div>
       </div>
     </div>
