@@ -54,7 +54,7 @@ export default async function AgentOrdersPage() {
       <div className="space-y-2">
         <SectionLabel>注文一覧</SectionLabel>
         {orders.length === 0 ? (
-          <EmptyState title="注文はまだありません" description="ショップの紹介リンクは「招待URL」画面から取得できます。" />
+          <EmptyState title="注文はまだありません" description="ショップの紹介リンクは「紹介リンク」画面から取得できます。" />
         ) : (
           <Surface padded={false} className="divide-y divide-border-soft">
             {orders.map((o) => (

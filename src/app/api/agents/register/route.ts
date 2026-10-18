@@ -1,44 +1,74 @@
 import { fail, failFromPostgrest, getApiContext, ok, readJson } from "@/lib/api/http";
 
 type Body = {
+  auth_user_id?: string;
   display_name?: string;
   email?: string;
   phone?: string | null;
-  invitation_code?: string | null;
+  inviter_mode?: string;
+  inviter_agent_id?: string | null;
+  reason?: string;
 };
 
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 /**
- * 代理店登録 / 招待経路の確定。
+ * 代理店の直接作成 (super_admin 専用)。
  *
- * 絶対原則2 & CASE19: 既に invited_by が確定している代理店に別の招待コードを
- * 適用しようとした場合、DB 側 (treemerce_register_agent + immutable トリガ) が
- * 例外を投げ、ここで 409 に変換される。
+ * 一般の人 (未ログインを含む) は代理店を作れない。代理店登録は紹介リンクの登録フォームから申し込み、
+ * 運営の承認で作られる。ここでは RPC を呼ばずに案内だけを返す。
+ *
+ * 絶対原則2: super_admin が作る場合も、招待元は明示が必須 ('agent' + 代理店ID か 'none')。
+ *            作成と招待経路の確定は DB 側の app.create_agent() だけが行い、監査ログに
+ *            実行者・日時・招待元が残る。既に代理店のアカウントは作り直せない。
  */
 export async function POST(request: Request) {
   const { supabase, viewer } = await getApiContext();
 
-  if (!viewer.userId) {
-    return fail("UNAUTHENTICATED", "ログインが必要です。", 401);
+  if (!viewer.isAdmin || viewer.adminRole !== "super_admin") {
+    return fail(
+      "TREEMERCE_AGENT_APPLICATION_REQUIRED",
+      "代理店登録は、紹介リンクの登録フォームからお申し込みください。運営の確認後に代理店としてご利用いただけます。",
+      403,
+    );
   }
 
   const body = await readJson<Body>(request);
-  if (!body?.display_name?.trim()) {
+  if (!body?.auth_user_id || !UUID.test(body.auth_user_id)) {
+    return fail("TREEMERCE_INVALID_INPUT", "対象のアカウントを指定してください。", 400);
+  }
+  if (!body.display_name?.trim()) {
     return fail("TREEMERCE_INVALID_INPUT", "代理店名は必須です。", 400);
   }
-
-  const email = body.email?.trim() || viewer.email;
-  if (!email) {
+  if (!body.email?.trim()) {
     return fail("TREEMERCE_INVALID_INPUT", "メールアドレスは必須です。", 400);
+  }
+  if (!body.reason?.trim()) {
+    return fail("TREEMERCE_REASON_REQUIRED", "作成理由は必須です。", 400);
+  }
+  const inviterMode = body.inviter_mode;
+  const inviterId = body.inviter_agent_id?.trim() || null;
+  if (
+    !(inviterMode === "agent" && inviterId && UUID.test(inviterId)) &&
+    !(inviterMode === "none" && inviterId === null)
+  ) {
+    return fail(
+      "TREEMERCE_INVITER_REQUIRED",
+      "招待元を指定してください (代理店を指定するか、招待元なしを明示)。",
+      400,
+    );
   }
 
   const { data, error } = await supabase.rpc("treemerce_register_agent", {
+    p_auth_user_id: body.auth_user_id,
     p_display_name: body.display_name.trim(),
-    p_email: email,
+    p_email: body.email.trim(),
     p_phone: body.phone?.trim() || null,
-    p_invitation_code: body.invitation_code?.trim() || null,
+    p_inviter_mode: inviterMode,
+    p_inviter_agent_id: inviterId,
+    p_reason: body.reason.trim(),
   });
 
   if (error) return failFromPostgrest(error);
-
-  return ok(data, 200);
+  return ok(data, 201);
 }

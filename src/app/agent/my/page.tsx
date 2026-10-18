@@ -124,7 +124,7 @@ export default async function AgentMyPage({
                 <dl className="min-w-0 flex-1">
                   <dt className="text-[12px] text-text-secondary">招待元の代理店</dt>
                   <dd className="truncate text-[15px] font-semibold text-text-primary">
-                    {agent.invited_by ? (inviterName ?? "代理店招待URL経由") : "招待元なし"}
+                    {agent.invited_by ? (inviterName ?? "紹介リンク経由") : "招待元なし"}
                   </dd>
                 </dl>
               </div>
@@ -190,7 +190,7 @@ export default async function AgentMyPage({
           </div>
 
           <Surface padded={false} className="divide-y divide-border-soft px-3">
-            <LinkRow icon={UserPlus} label="招待URL・ショップの紹介リンク" href="/agent/invitations" />
+            <LinkRow icon={UserPlus} label="登録URL・ショップの紹介リンク" href="/agent/invitations" />
             <LinkRow icon={PackagePlus} label="商品の持込み申請" href="/agent/submissions" />
             <LinkRow icon={TrendingUp} label="持込み商品の売れ行き" href="/agent/sourced-sales" />
             <LinkRow icon={ShoppingBag} label="担当顧客の注文" href="/agent/orders" />

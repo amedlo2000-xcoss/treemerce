@@ -1,41 +1,43 @@
 import { headers } from "next/headers";
 
-import { Notice, formatDate } from "@/components/ui";
-import { EmptyState, MobilePageHeader, SectionLabel, StatusPill, Surface } from "@/components/mobile/primitives";
+import { Notice } from "@/components/ui";
+import { MobilePageHeader, SectionLabel, Surface } from "@/components/mobile/primitives";
 import { requireAgentPage } from "@/lib/auth/viewer";
 
-import { CopyField, InvitationPanel } from "./InvitationPanel";
+import { CopyField } from "./InvitationPanel";
 
+/**
+ * 紹介リンク。登録フォームは1つにまとめた (0027〜0028)。
+ * 登録した人は全員あなたが担当の会員になり、代理店登録も申し込んだ人は運営の承認後に
+ * あなたが招待元の代理店になる。以前に発行した代理店の招待URLは、この登録URLへ転送される。
+ */
 export default async function InvitationsPage() {
-  const { supabase, agent } = await requireAgentPage("/agent/invitations");
+  const { agent } = await requireAgentPage("/agent/invitations");
 
   const headerList = await headers();
   const host = headerList.get("x-forwarded-host") ?? headerList.get("host") ?? "";
   const protocol = headerList.get("x-forwarded-proto") ?? "https";
   const origin = host ? `${protocol}://${host}` : "";
 
-  const { data: invitations } = await supabase
-    .from("agent_invitations")
-    .select("id, code, status, used_count, max_uses, note, expires_at, created_at")
-    .order("created_at", { ascending: false });
-
   return (
     <>
       <MobilePageHeader
-        title="招待URL"
-        description="代理店の招待URLと、商品購入者の登録URLをここから取得できます。"
+        title="紹介リンク"
+        description="会員 (購入者) の登録と代理店登録のお申し込みは、同じ登録URLから受け付けます。"
       />
 
       <Notice tone="warning">
-        代理店の招待URL (登録経路) と、購入者の登録URL (担当代理店) は別の仕組みです。
-        どちらか一方を使っても、もう一方が自動的に変わることはありません。
+        会員の担当代理店と、代理店の招待元 (登録経路) は別々に記録されます。
+        どちらか一方が変わっても、もう一方が自動的に変わることはありません。
       </Notice>
 
       <div className="space-y-2">
-        <SectionLabel>商品購入者の登録URL</SectionLabel>
+        <SectionLabel>登録URL</SectionLabel>
         <Surface>
           <p className="mb-3 text-[13px] leading-5 text-text-secondary">
-            このURLから登録された購入者は、あなたが担当代理店として確定します。
+            このURLから登録した人は、あなたが担当代理店の会員として確定します。
+            「代理店登録も申し込む」にチェックした人は、運営が承認すると、あなたが招待元の代理店になります
+            (招待元はお申し込みの時点で確定し、変更できません)。
           </p>
           <CopyField label="登録URL" value={`${origin}/register/${agent.public_id}`} />
         </Surface>
@@ -52,40 +54,9 @@ export default async function InvitationsPage() {
         </Surface>
       </div>
 
-      <div className="space-y-2">
-        <SectionLabel>代理店の招待URLを発行</SectionLabel>
-        <Surface>
-          <InvitationPanel origin={origin} />
-        </Surface>
-      </div>
-
-      <div className="space-y-2">
-        <SectionLabel>発行済みの招待URL</SectionLabel>
-        {!invitations || invitations.length === 0 ? (
-          <Surface>
-            <EmptyState title="発行済みの招待URLはありません" />
-          </Surface>
-        ) : (
-          <Surface padded={false} className="divide-y divide-border-soft px-4">
-            {invitations.map((inv) => (
-              <div key={inv.id} className="space-y-2 py-4">
-                <div className="flex flex-wrap items-center gap-2">
-                  <StatusPill tone={inv.status === "active" ? "success" : "neutral"}>
-                    {inv.status === "active" ? "有効" : "無効"}
-                  </StatusPill>
-                  <span className="text-[13px] tabular-nums text-text-secondary">
-                    利用数 {inv.used_count}
-                    {inv.max_uses ? ` / ${inv.max_uses}` : ""}
-                  </span>
-                  <span className="text-[12px] text-text-secondary">{formatDate(inv.created_at)}</span>
-                </div>
-                <CopyField label="URL" value={`${origin}/invite/${inv.code}`} />
-                {inv.note ? <p className="text-[13px] text-text-secondary">{inv.note}</p> : null}
-              </div>
-            ))}
-          </Surface>
-        )}
-      </div>
+      <p className="px-1 text-[12px] leading-5 text-text-secondary">
+        以前に発行した代理店の招待URLは、有効なものに限り、この登録URLへ転送されます。
+      </p>
     </>
   );
 }

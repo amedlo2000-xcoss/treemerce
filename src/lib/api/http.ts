@@ -152,6 +152,48 @@ const ERROR_MAP: Record<string, { status: number; message: string }> = {
     status: 400,
     message: "サービスは予約の仕組みができるまで公開 (注文可能) にできません。「準備中」で表示できます。",
   },
+
+  // 代理店申請・承認・代理店作成の一本化 (0027〜0028)
+  // 原則6: 申請者本人への応答は中立に保つ (重複・既に代理店であることは DB 側で受付と同じ文面になる)
+  TREEMERCE_AGENT_APPLICATION_REQUIRED: {
+    status: 403,
+    message: "代理店登録は、紹介リンクの登録フォームからお申し込みください。",
+  },
+  TREEMERCE_TERMS_CONSENT_REQUIRED: {
+    status: 400,
+    message: "代理店登録のお申し込みには代理店規約への同意が必要です。",
+  },
+  TREEMERCE_TERMS_NOT_AVAILABLE: {
+    status: 409,
+    message: "代理店規約を準備中のため、現在お申し込みを受け付けていません。",
+  },
+  TREEMERCE_TERMS_VERSION_MISMATCH: {
+    status: 409,
+    message: "代理店規約が更新されています。最新の規約をご確認のうえ、改めて同意してください。",
+  },
+  TREEMERCE_APPLICANT_EMAIL_MISMATCH: {
+    status: 400,
+    message: "メールアドレスがログイン中のアカウント (確認済み) と一致しません。",
+  },
+  TREEMERCE_APPLICATION_NOT_FOUND: { status: 404, message: "申請が見つかりません。" },
+  TREEMERCE_APPLICATION_NOT_PENDING: { status: 409, message: "この申請は既に審査済みです。" },
+  TREEMERCE_TERMS_ACCEPTANCE_MISSING: {
+    status: 409,
+    message: "規約の同意記録がない申請は承認できません。",
+  },
+  TREEMERCE_INVITER_REQUIRED: {
+    status: 400,
+    message: "招待元を指定してください (代理店を指定するか、招待元なしを明示)。",
+  },
+  TREEMERCE_INVITER_UNAVAILABLE: {
+    status: 409,
+    message: "招待元の代理店が稼働中ではないため承認できません。",
+  },
+  TREEMERCE_AGENT_ALREADY_EXISTS: { status: 409, message: "このアカウントは既に代理店です。" },
+  TREEMERCE_AGENT_EMAIL_TAKEN: { status: 409, message: "このメールアドレスの代理店が既に存在します。" },
+  TREEMERCE_EMAIL_MISMATCH: { status: 400, message: "メールアドレスが対象アカウントと一致しません。" },
+  TREEMERCE_AGENT_CREATE_DENIED: { status: 403, message: "代理店は運営の承認処理でのみ作成できます。" },
+  TREEMERCE_INVITED_BY_CREATE_ONLY: { status: 409, message: "招待元は代理店の作成時にのみ設定できます。" },
 };
 
 /** DB 側の具体的な理由 (「商品名は必須です」等) をそのまま画面に返すコード */

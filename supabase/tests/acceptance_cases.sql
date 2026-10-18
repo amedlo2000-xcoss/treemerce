@@ -1,10 +1,10 @@
 -- ============================================================================
--- TREEMERCE 受け入れテスト  CASE1 - CASE52
+-- TREEMERCE 受け入れテスト  CASE1 - CASE69
 -- ----------------------------------------------------------------------------
 -- Supabase SQL Editor にそのまま貼り付けて実行する。
 -- 全体が 1 トランザクションで、最後に ROLLBACK するため本番データは残らない。
 -- 途中で失敗した CASE があれば例外で停止する。全て通れば最後に
--- 「ALL 52 CASES PASSED」が NOTICE として出力される。
+-- 「ALL 69 CASES PASSED」が NOTICE として出力される。
 --
 -- 木構造:
 --            R  (root)
@@ -62,26 +62,40 @@ values
 insert into public.admin_roles (auth_user_id, role)
 values ('00000000-0000-4000-8000-000000000007', 'super_admin');
 
+-- 代理店規約の版 (0027)。申請は現行の版が無いと TREEMERCE_TERMS_NOT_AVAILABLE で拒否される。
+insert into public.agent_terms_versions (version, title, body, is_current)
+values ('test-1', 'テスト用代理店規約', 'テスト用の代理店規約の本文', true);
+
 -- ============================================================================
--- CASE1 : A の招待URL経由で B を登録 → A→B の登録経路が保存される
+-- CASE1 : A のリンクから B が代理店を申請 → super_admin が承認 → A→B の登録経路が保存される
+--         (0027/0028: 招待元は申請時点で固定され、承認でそのまま invited_by になる。
+--          登録フォームからの申請 (会員登録を含む) は担当の件数を変えないよう CASE56 以降で確認する)
 -- ============================================================================
 
+do $$
+declare v_app uuid;
+begin
+  -- 申請は DB 管理者 (postgres のセッション) として直接作る (0027 のガードが許可する経路)
+  insert into public.agent_applications
+    (auth_user_id, display_name, email, inviter_agent_id, terms_version_id)
+  values ('00000000-0000-4000-8000-000000000003', 'テスト代理店B', 'tm-test-b@treemerce.test', '10000000-0000-4000-8000-000000000002',
+          (select id from public.agent_terms_versions where is_current))
+  returning id into v_app;
+  insert into public.agent_terms_acceptances
+    (terms_version_id, application_id, auth_user_id, accepted_email)
+  values ((select id from public.agent_terms_versions where is_current), v_app,
+          '00000000-0000-4000-8000-000000000003', 'tm-test-b@treemerce.test');
+  perform set_config('tm.app_b', v_app::text, false);
+end $$;
+
+-- super_admin が承認する (承認処理は招待元を受け取らない)
 select set_config('request.jwt.claims',
-  '{"sub":"00000000-0000-4000-8000-000000000002","role":"authenticated"}', true);
-set local role authenticated;
-
-select set_config('tm.invite_a',
-  public.treemerce_create_agent_invitation('for B', null, null) ->> 'code', true);
-
-reset role;
-
-select set_config('request.jwt.claims',
-  '{"sub":"00000000-0000-4000-8000-000000000003","role":"authenticated"}', true);
+  '{"sub":"00000000-0000-4000-8000-000000000007","role":"authenticated"}', true);
 set local role authenticated;
 
 select set_config('tm.agent_b',
-  public.treemerce_register_agent('テスト代理店B', 'tm-test-b@treemerce.test', null,
-                                  current_setting('tm.invite_a')) ->> 'agent_id', true);
+  public.treemerce_admin_approve_agent_application(
+    current_setting('tm.app_b')::uuid, 'CASE1 承認') ->> 'agent_id', true);
 
 reset role;
 select set_config('request.jwt.claims', '', true);
@@ -98,25 +112,33 @@ begin
 end $$;
 
 -- ============================================================================
--- CASE2 : B の招待URL経由で C を登録 → B→C の登録経路が保存される
+-- CASE2 : B のリンクから C が代理店を申請 → 承認 → B→C の登録経路が保存される
 -- ============================================================================
 
+do $$
+declare v_app uuid;
+begin
+  -- 申請は DB 管理者 (postgres のセッション) として直接作る (0027 のガードが許可する経路)
+  insert into public.agent_applications
+    (auth_user_id, display_name, email, inviter_agent_id, terms_version_id)
+  values ('00000000-0000-4000-8000-000000000004', 'テスト代理店C', 'tm-test-c@treemerce.test', current_setting('tm.agent_b')::uuid,
+          (select id from public.agent_terms_versions where is_current))
+  returning id into v_app;
+  insert into public.agent_terms_acceptances
+    (terms_version_id, application_id, auth_user_id, accepted_email)
+  values ((select id from public.agent_terms_versions where is_current), v_app,
+          '00000000-0000-4000-8000-000000000004', 'tm-test-c@treemerce.test');
+  perform set_config('tm.app_c', v_app::text, false);
+end $$;
+
+-- super_admin が承認する (承認処理は招待元を受け取らない)
 select set_config('request.jwt.claims',
-  '{"sub":"00000000-0000-4000-8000-000000000003","role":"authenticated"}', true);
-set local role authenticated;
-
-select set_config('tm.invite_b',
-  public.treemerce_create_agent_invitation('for C', null, null) ->> 'code', true);
-
-reset role;
-
-select set_config('request.jwt.claims',
-  '{"sub":"00000000-0000-4000-8000-000000000004","role":"authenticated"}', true);
+  '{"sub":"00000000-0000-4000-8000-000000000007","role":"authenticated"}', true);
 set local role authenticated;
 
 select set_config('tm.agent_c',
-  public.treemerce_register_agent('テスト代理店C', 'tm-test-c@treemerce.test', null,
-                                  current_setting('tm.invite_b')) ->> 'agent_id', true);
+  public.treemerce_admin_approve_agent_application(
+    current_setting('tm.app_c')::uuid, 'CASE2 承認') ->> 'agent_id', true);
 
 reset role;
 select set_config('request.jwt.claims', '', true);
@@ -825,18 +847,36 @@ begin
   select invited_by into v_before from public.agents where id = v_c;
 
   -- (1) API 層 (RPC) で拒否されること
+  --     本人 (C) は代理店を作れない。super_admin でも、既に代理店のアカウントを
+  --     別の招待元で作り直すことはできない (0028)。
   perform set_config('request.jwt.claims',
     '{"sub":"00000000-0000-4000-8000-000000000004","role":"authenticated"}', true);
   v_ok := false;
   begin
     perform public.treemerce_register_agent(
-      'テスト代理店C', 'tm-test-c@treemerce.test', null, current_setting('tm.invite_a'));
-  exception when check_violation then
-    v_ok := true;
+      '00000000-0000-4000-8000-000000000004'::uuid, 'テスト代理店C', 'tm-test-c@treemerce.test',
+      null, 'agent', '10000000-0000-4000-8000-000000000002'::uuid, 'CASE19');
+  exception when insufficient_privilege then
+    v_ok := sqlerrm like 'TREEMERCE_SUPER_ADMIN_ONLY%';
   end;
   if not v_ok then
-    raise exception 'CASE19 FAILED: 招待元が確定済みの代理店を RPC で再登録できてしまった';
+    raise exception 'CASE19 FAILED: 一般の代理店が treemerce_register_agent を実行できた';
   end if;
+
+  perform set_config('request.jwt.claims',
+    '{"sub":"00000000-0000-4000-8000-000000000007","role":"authenticated"}', true);
+  v_ok := false;
+  begin
+    perform public.treemerce_register_agent(
+      '00000000-0000-4000-8000-000000000004'::uuid, 'テスト代理店C', 'tm-test-c@treemerce.test',
+      null, 'agent', '10000000-0000-4000-8000-000000000002'::uuid, 'CASE19');
+  exception when unique_violation then
+    v_ok := sqlerrm like 'TREEMERCE_AGENT_ALREADY_EXISTS%';
+  end;
+  if not v_ok then
+    raise exception 'CASE19 FAILED: 招待元が確定済みの代理店を別の招待元で作り直せてしまった';
+  end if;
+  perform set_config('request.jwt.claims', '', true);
 
   -- (2) DB 層 (トリガ) でも拒否されること
   v_ok := false;
@@ -5122,10 +5162,1046 @@ begin
   raise notice 'CASE52 OK: オブザーバー特典付き製品一覧は未ログインで読め、代理店と紐づかない。印のある公開中・準備中のみ・準備中は価格なし・在庫と連絡先なし。初期登録 18 件は準備中・架空の値なし・注文不可・監査ログあり。STABLE';
 end $$;
 
+-- ============================================================================
+-- CASE53 : コンテキストを張らない SECURITY DEFINER 関数 (postgres 所有) から
+--          agents / agent_applications / agent_terms_acceptances に INSERT → 拒否 (0027)
+-- ----------------------------------------------------------------------------
+-- 関数の中では current_user が postgres になる。ガードの「DB管理者の直接操作」の
+-- 例外は session_user で判定しているため、PostgREST と同じく postgres 以外の
+-- セッションユーザーから呼べば拒否されなければならない。
+-- session_authorization を切り替えて確認する (SET ROLE では session_user は
+-- postgres のまま変わらない)。切り替えには superuser が必要なため、superuser で
+-- ない環境 (Supabase の SQL Editor の postgres 等) では SKIPPED と表示して飛ばす。
+-- ローカルの PGlite ハーネスでは必ず実行される (件数に数えるため)。
+-- ============================================================================
+
+create role tm_test_session nologin;
+grant authenticated to tm_test_session;
+
+create function app.tm_test_definer_insert(p_target text)
+returns void
+language plpgsql
+security definer
+set search_path = public, app, pg_temp
+as $fn$
+begin
+  if p_target = 'agents' then
+    insert into public.agents (display_name, email)
+    values ('CASE53 代理店', 'tm-case53@treemerce.test');
+  elsif p_target = 'agent_applications' then
+    insert into public.agent_applications
+      (auth_user_id, display_name, email, inviter_agent_id, terms_version_id)
+    values ('00000000-0000-4000-8000-000000000002', 'CASE53 申請', 'tm-case53@treemerce.test',
+            '10000000-0000-4000-8000-000000000001', gen_random_uuid());
+  else
+    insert into public.agent_terms_acceptances
+      (terms_version_id, application_id, auth_user_id, accepted_email)
+    values (gen_random_uuid(), gen_random_uuid(),
+            '00000000-0000-4000-8000-000000000002', 'tm-case53@treemerce.test');
+  end if;
+end;
+$fn$;
+
+revoke all on function app.tm_test_definer_insert(text) from public, anon, authenticated;
+grant usage on schema app to tm_test_session;
+grant execute on function app.tm_test_definer_insert(text) to tm_test_session;
+
+do $$
+declare
+  v_orig     text := session_user;
+  v_target   text;
+  v_expected text;
+  v_ok       boolean;
+begin
+  if current_setting('is_superuser') <> 'on' then
+    raise notice 'CASE53 SKIPPED: superuser でないためセッションユーザーを切り替えられません (ローカルの PGlite ハーネスで確認してください)';
+    return;
+  end if;
+
+  -- 「PostgREST と同じく postgres 以外のセッションユーザー」から呼ぶ
+  perform set_config('session_authorization', 'tm_test_session', true);
+  if session_user = 'postgres' then
+    raise exception 'CASE53 FAILED: セッションユーザーが postgres のまま (テストの前提が不成立)';
+  end if;
+
+  foreach v_target in array array['agents', 'agent_applications', 'agent_terms_acceptances'] loop
+    v_expected := case v_target
+                    when 'agents'             then 'TREEMERCE_AGENT_CREATE_DENIED'
+                    when 'agent_applications' then 'TREEMERCE_APPLICATION_WRITE_DENIED'
+                    else                           'TREEMERCE_TERMS_ACCEPTANCE_WRITE_DENIED'
+                  end;
+    v_ok := false;
+    begin
+      perform app.tm_test_definer_insert(v_target);
+    exception when insufficient_privilege then
+      v_ok := sqlerrm like v_expected || '%';
+      if not v_ok then
+        raise exception 'CASE53 FAILED: % への INSERT が想定外の理由で拒否された (%)', v_target, sqlerrm;
+      end if;
+    end;
+    if not v_ok then
+      raise exception 'CASE53 FAILED: コンテキストなしの SECURITY DEFINER 関数から % に INSERT できた', v_target;
+    end if;
+  end loop;
+
+  perform set_config('session_authorization', v_orig, true);
+  if session_user <> v_orig then
+    raise exception 'CASE53 FAILED: セッションユーザーが戻っていない';
+  end if;
+  if exists (select 1 from public.agents where email = 'tm-case53@treemerce.test') then
+    raise exception 'CASE53 FAILED: 代理店の行が作られている';
+  end if;
+  raise notice 'CASE53 OK: コンテキストを張らない SECURITY DEFINER 関数からは agents / agent_applications / agent_terms_acceptances に INSERT できない (session_user 判定)';
+end $$;
+
+-- ============================================================================
+-- CASE54 : 既存の12個の書込みガードも session_user 判定 (0029)
+-- ----------------------------------------------------------------------------
+-- コンテキストを張らない SECURITY DEFINER 関数 (postgres 所有) からの書込みは、
+-- postgres 以外のセッションユーザーから呼ぶと拒否される。
+-- 対照として、postgres のセッションからの直接操作はガードを通る
+-- (後続の NOT NULL 等の制約で失敗するのは構わない。42501 で拒否されないことを確認)。
+-- superuser でない環境では CASE53 と同じく SKIPPED。
+-- ============================================================================
+
+create function app.tm_test_definer_exec(p_sql text)
+returns void
+language plpgsql
+security definer
+set search_path = public, app, pg_temp
+as $fn$
+begin
+  execute p_sql;
+end;
+$fn$;
+
+revoke all on function app.tm_test_definer_exec(text) from public, anon, authenticated;
+grant execute on function app.tm_test_definer_exec(text) to tm_test_session;
+
+do $$
+declare
+  v_orig   text := session_user;
+  v_tables text[] := array[
+    'customer_assignments', 'customer_assignment_history',
+    'orders', 'order_items', 'order_status_history', 'producers', 'order_shipments',
+    'agent_profiles',
+    'product_submissions', 'product_submission_events', 'product_submission_images',
+    'product_categories'];
+  v_t      text;
+  v_ok     boolean;
+begin
+  if current_setting('is_superuser') <> 'on' then
+    raise notice 'CASE54 SKIPPED: superuser でないためセッションユーザーを切り替えられません (ローカルの PGlite ハーネスで確認してください)';
+    return;
+  end if;
+
+  -- 対照: postgres のセッションからはガードを通る (成功した行は直後に巻き戻す)
+  foreach v_t in array v_tables loop
+    begin
+      perform app.tm_test_definer_exec(format('insert into public.%I default values', v_t));
+      raise exception using errcode = 'P0001', message = 'tm_rollback';
+    exception when others then
+      if sqlstate = '42501' then
+        raise exception 'CASE54 FAILED: postgres のセッションからの % への直接操作が拒否された (%)', v_t, sqlerrm;
+      end if;
+    end;
+  end loop;
+
+  perform set_config('session_authorization', 'tm_test_session', true);
+  if session_user = 'postgres' then
+    raise exception 'CASE54 FAILED: セッションユーザーが postgres のまま (テストの前提が不成立)';
+  end if;
+
+  foreach v_t in array v_tables loop
+    v_ok := false;
+    begin
+      perform app.tm_test_definer_exec(format('insert into public.%I default values', v_t));
+    exception when others then
+      -- ガードで拒否されたこと (42501 + TREEMERCE_*) だけを合格とする。
+      -- 制約違反などで失敗した場合は、ガードを通過してしまっている。
+      v_ok := sqlstate = '42501' and sqlerrm like 'TREEMERCE_%';
+      if not v_ok then
+        raise exception 'CASE54 FAILED: コンテキストなしの SECURITY DEFINER 関数からの % への INSERT がガードを通過した (%: %)',
+          v_t, sqlstate, sqlerrm;
+      end if;
+    end;
+    if not v_ok then
+      raise exception 'CASE54 FAILED: コンテキストなしの SECURITY DEFINER 関数から % に INSERT できた', v_t;
+    end if;
+  end loop;
+
+  perform set_config('session_authorization', v_orig, true);
+  if session_user <> v_orig then
+    raise exception 'CASE54 FAILED: セッションユーザーが戻っていない';
+  end if;
+  raise notice 'CASE54 OK: 既存の12個のガードも、コンテキストを張らない SECURITY DEFINER 関数からの書込みを拒否する。postgres のセッションからの直接操作は通る (session_user 判定)';
+end $$;
+
+-- ============================================================================
+-- CASE55 : アカウント削除の ON DELETE SET NULL (0029 の狭い例外)
+-- ----------------------------------------------------------------------------
+-- Supabase Auth (session_user ≠ postgres) がアカウントを削除しても、
+-- producers.created_by / agent_profiles.updated_by は NULL になり削除できる。
+-- 例外は「その列だけが NULL になり、他の列は変わらない UPDATE」に限られ、
+-- 他の列も変える UPDATE や NULL 以外への変更は引き続き拒否される。
+-- superuser でない環境では SKIPPED。
+-- ============================================================================
+
+do $$
+declare
+  v_orig     text := session_user;
+  v_user     uuid := '00000000-0000-4000-8000-000000000055';
+  v_agent    uuid := '10000000-0000-4000-8000-000000000055';
+  v_producer uuid;
+  v_p_before jsonb;
+  v_p_after  jsonb;
+  v_a_before jsonb;
+  v_a_after  jsonb;
+  v_sql      text;
+  v_ok       boolean;
+begin
+  if current_setting('is_superuser') <> 'on' then
+    raise notice 'CASE55 SKIPPED: superuser でないためセッションユーザーを切り替えられません (ローカルの PGlite ハーネスで確認してください)';
+    return;
+  end if;
+
+  -- 準備 (postgres のセッションから直接)
+  insert into auth.users (instance_id, id, aud, role, email, encrypted_password, email_confirmed_at)
+  values ('00000000-0000-0000-0000-000000000000', v_user, 'authenticated', 'authenticated',
+          'tm-case55@treemerce.test', '', now());
+  insert into public.agents (id, auth_user_id, public_id, display_name, email, status)
+  values (v_agent, null, 'TM-TEST-CASE55', 'テスト代理店CASE55', 'tm-case55-agent@treemerce.test', 'active');
+  insert into public.agent_profiles (agent_id, updated_by, updated_by_role)
+  values (v_agent, v_user, 'agent');
+  insert into public.producers (name, origin, ship_from_prefecture, ship_lead_time, created_by)
+  values ('CASE55 生産者', 'CASE55 産地', '東京都', '3日', v_user)
+  returning id into v_producer;
+
+  select to_jsonb(p) - 'created_by' - 'updated_at' into v_p_before from public.producers p where p.id = v_producer;
+  select to_jsonb(a) - 'updated_by' - 'updated_at' into v_a_before from public.agent_profiles a where a.agent_id = v_agent;
+
+  -- Supabase Auth の接続 (supabase_auth_admin) に相当するセッションユーザー
+  execute 'create role tm_test_auth nologin';
+  execute 'grant usage on schema auth to tm_test_auth';
+  execute 'grant select, delete on auth.users to tm_test_auth';
+
+  -- 例外の範囲外の UPDATE は、postgres 以外のセッションからは引き続き拒否される
+  perform set_config('session_authorization', 'tm_test_session', true);
+  foreach v_sql in array array[
+    format('update public.producers set created_by = null, name = name || ''x'' where id = %L', v_producer),
+    format('update public.producers set created_by = %L where id = %L', gen_random_uuid(), v_producer),
+    format('update public.agent_profiles set updated_by = null, updated_by_role = ''super_admin'' where agent_id = %L', v_agent),
+    format('update public.agent_profiles set updated_by = %L where agent_id = %L', gen_random_uuid(), v_agent)
+  ] loop
+    v_ok := false;
+    begin
+      perform app.tm_test_definer_exec(v_sql);
+    exception when others then
+      v_ok := sqlstate = '42501' and sqlerrm like 'TREEMERCE_%';
+    end;
+    if not v_ok then
+      raise exception 'CASE55 FAILED: 例外の範囲外の UPDATE が通った (%)', v_sql;
+    end if;
+  end loop;
+  perform set_config('session_authorization', v_orig, true);
+
+  -- アカウント削除
+  perform set_config('session_authorization', 'tm_test_auth', true);
+  if session_user = 'postgres' then
+    raise exception 'CASE55 FAILED: セッションユーザーが postgres のまま (テストの前提が不成立)';
+  end if;
+  delete from auth.users where id = v_user;
+  perform set_config('session_authorization', v_orig, true);
+  if session_user <> v_orig then
+    raise exception 'CASE55 FAILED: セッションユーザーが戻っていない';
+  end if;
+
+  if exists (select 1 from auth.users where id = v_user) then
+    raise exception 'CASE55 FAILED: アカウントが削除されていない';
+  end if;
+  select to_jsonb(p) - 'created_by' - 'updated_at' into v_p_after from public.producers p where p.id = v_producer;
+  select to_jsonb(a) - 'updated_by' - 'updated_at' into v_a_after from public.agent_profiles a where a.agent_id = v_agent;
+  if (select created_by from public.producers where id = v_producer) is not null
+     or (select updated_by from public.agent_profiles where agent_id = v_agent) is not null then
+    raise exception 'CASE55 FAILED: 参照列が NULL になっていない';
+  end if;
+  if v_p_after is distinct from v_p_before or v_a_after is distinct from v_a_before then
+    raise exception 'CASE55 FAILED: 参照列以外の列が変わった';
+  end if;
+
+  execute 'revoke select, delete on auth.users from tm_test_auth';
+  execute 'revoke usage on schema auth from tm_test_auth';
+  execute 'drop role tm_test_auth';
+
+  raise notice 'CASE55 OK: アカウント削除では producers.created_by / agent_profiles.updated_by だけが NULL になる。他の列も変える UPDATE や NULL 以外への変更は拒否される';
+end $$;
+
+-- ============================================================================
+-- CASE56〜69 : 紹介リンクからの登録フォーム (会員登録 + 代理店申請) と運営の承認 (0027〜0028)
+-- ----------------------------------------------------------------------------
+-- 会員登録を伴うため担当の件数が増える。既存の CASE の件数に影響しないよう最後に置く。
+--   リンクの代理店: A / D / S、既存の会員: X (担当 B)
+--   申請者: 56 (新規)、57 (X と同じメールアドレス)、58 (メール未確認)、
+--           60 (招待元が停止する申請)、61・62 (super_admin の直接作成)
+--   admin ロール (super_admin ではない): 59
+-- ============================================================================
+
+insert into auth.users (instance_id, id, aud, role, email, encrypted_password,
+                        email_confirmed_at, created_at, updated_at)
+values
+  ('00000000-0000-0000-0000-000000000000', '00000000-0000-4000-8000-000000000056',
+   'authenticated', 'authenticated', 'tm-case57@treemerce.test', '', now(), now(), now()),
+  ('00000000-0000-0000-0000-000000000000', '00000000-0000-4000-8000-000000000057',
+   'authenticated', 'authenticated', 'tm-test-x@treemerce.test', '', now(), now(), now()),
+  ('00000000-0000-0000-0000-000000000000', '00000000-0000-4000-8000-000000000058',
+   'authenticated', 'authenticated', 'tm-case58@treemerce.test', '', null, now(), now()),
+  ('00000000-0000-0000-0000-000000000000', '00000000-0000-4000-8000-000000000059',
+   'authenticated', 'authenticated', 'tm-case59-admin@treemerce.test', '', now(), now(), now()),
+  ('00000000-0000-0000-0000-000000000000', '00000000-0000-4000-8000-000000000060',
+   'authenticated', 'authenticated', 'tm-case64@treemerce.test', '', now(), now(), now()),
+  ('00000000-0000-0000-0000-000000000000', '00000000-0000-4000-8000-000000000061',
+   'authenticated', 'authenticated', 'tm-case66a@treemerce.test', '', now(), now(), now()),
+  ('00000000-0000-0000-0000-000000000000', '00000000-0000-4000-8000-000000000062',
+   'authenticated', 'authenticated', 'tm-case66b@treemerce.test', '', now(), now(), now());
+
+insert into public.admin_roles (auth_user_id, role)
+values ('00000000-0000-4000-8000-000000000059', 'admin');
+
+-- 拒否されること (エラーメッセージの先頭) を確認する補助関数。呼び出し元のロールで実行される。
+create function app.tm_expect_error(p_label text, p_sql text, p_prefix text)
+returns void
+language plpgsql
+as $fn$
+begin
+  begin
+    execute p_sql;
+  exception when others then
+    if sqlerrm like p_prefix || '%' then
+      return;
+    end if;
+    raise exception '% FAILED: 想定外のエラー (%: %)', p_label, sqlstate, sqlerrm;
+  end;
+  raise exception '% FAILED: 拒否されなかった (%)', p_label, p_sql;
+end;
+$fn$;
+
+revoke all on function app.tm_expect_error(text, text, text) from public;
+grant execute on function app.tm_expect_error(text, text, text) to anon, authenticated;
+
+-- ============================================================================
+-- CASE56 : チェックなしの登録 → 会員だけ。担当はリンクの代理店。申請・代理店は作られない
+-- ============================================================================
+
+select set_config('request.jwt.claims', '', true);
+set local role anon;
+
+select set_config('tm.case56',
+  public.treemerce_register_member(
+    p_agent_public_id => 'TM-TEST-S', p_full_name => 'CASE56 会員',
+    p_email => 'tm-case56@treemerce.test')::text, true);
+
+reset role;
+
+do $$
+declare v jsonb := current_setting('tm.case56')::jsonb; v_assigned uuid;
+begin
+  if v ->> 'member_status' <> 'registered' or v ->> 'application_status' is not null then
+    raise exception 'CASE56 FAILED: 応答が不正 (%)', v;
+  end if;
+  if v ? 'customer_id' or v ? 'assigned_agent_public_id' then
+    raise exception 'CASE56 FAILED: 応答に顧客ID・担当代理店が含まれる (%)', v;
+  end if;
+  select ca.assigned_agent_id into v_assigned
+  from public.customer_assignments ca join public.customers c on c.id = ca.customer_id
+  where c.email_normalized = 'tm-case56@treemerce.test' and ca.status = 'active';
+  if v_assigned is distinct from '10000000-0000-4000-8000-000000000006'::uuid then
+    raise exception 'CASE56 FAILED: 担当がリンクの代理店 S ではない (%)', v_assigned;
+  end if;
+  if exists (select 1 from public.agent_applications where email_normalized = 'tm-case56@treemerce.test')
+     or exists (select 1 from public.agents where email_normalized = 'tm-case56@treemerce.test') then
+    raise exception 'CASE56 FAILED: 申請または代理店が作られた';
+  end if;
+  raise notice 'CASE56 OK: チェックなしの登録は会員のみ。担当はリンクの代理店。申請・代理店は作られず、応答に顧客ID・担当代理店を含まない';
+end $$;
+
+-- ============================================================================
+-- CASE57 : 2つのチェックで申請 → 会員 + 承認待ちの申請 (招待元 = リンクの代理店 D)。
+--          規約の版・同意日時・IP・ブラウザ情報が記録される。代理店はまだ作られない
+-- ============================================================================
+
+select set_config('request.jwt.claims',
+  '{"sub":"00000000-0000-4000-8000-000000000056","role":"authenticated"}', true);
+set local role authenticated;
+
+do $$
+declare v jsonb;
+begin
+  v := public.treemerce_register_member(
+    p_agent_public_id => 'TM-TEST-D', p_full_name => 'CASE57 申請者',
+    p_email => 'tm-case57@treemerce.test', p_phone => '090-5700-0057',
+    p_apply_agent => true, p_accept_agent_terms => true,
+    p_agent_terms_version => 'test-1', p_agent_display_name => 'CASE57 代理店',
+    p_ip_address => '203.0.113.57', p_user_agent => 'CASE57-UA');
+  perform set_config('tm.case57', v::text, true);
+
+  if app.current_agent_id() is not null then
+    raise exception 'CASE57 FAILED: 申請しただけで代理店として扱われている';
+  end if;
+  if public.treemerce_my_agent_application() ->> 'state' <> 'received' then
+    raise exception 'CASE57 FAILED: 本人の申請状況が received ではない';
+  end if;
+end $$;
+
+reset role;
+select set_config('request.jwt.claims', '', true);
+
+do $$
+declare
+  v    jsonb := current_setting('tm.case57')::jsonb;
+  v_ap public.agent_applications%rowtype;
+  v_ta public.agent_terms_acceptances%rowtype;
+  v_assigned uuid;
+begin
+  if (select array_agg(k order by k) from jsonb_object_keys(v) k)
+     <> array['application_message', 'application_status', 'member_message', 'member_status'] then
+    raise exception 'CASE57 FAILED: 応答に余分な項目がある (%)', v;
+  end if;
+  if v ->> 'member_status' <> 'registered' or v ->> 'application_status' <> 'received'
+     or v ->> 'application_message' <> app.agent_application_received_message() then
+    raise exception 'CASE57 FAILED: 応答が不正 (%)', v;
+  end if;
+
+  select * into v_ap from public.agent_applications
+  where auth_user_id = '00000000-0000-4000-8000-000000000056';
+  if v_ap.status <> 'pending' or v_ap.inviter_agent_id <> '10000000-0000-4000-8000-000000000005'::uuid
+     or v_ap.display_name <> 'CASE57 代理店' then
+    raise exception 'CASE57 FAILED: 申請の内容が不正 (%)', to_jsonb(v_ap);
+  end if;
+  perform set_config('tm.case57_app', v_ap.id::text, true);
+
+  select * into v_ta from public.agent_terms_acceptances where application_id = v_ap.id;
+  if v_ta.id is null
+     or v_ta.terms_version_id <> (select id from public.agent_terms_versions where version = 'test-1')
+     or v_ta.accepted_at is null or v_ta.accepted_email <> 'tm-case57@treemerce.test'
+     or v_ta.ip_address <> '203.0.113.57' or v_ta.user_agent <> 'CASE57-UA' then
+    raise exception 'CASE57 FAILED: 規約の同意記録が不正 (%)', to_jsonb(v_ta);
+  end if;
+
+  select ca.assigned_agent_id into v_assigned
+  from public.customer_assignments ca join public.customers c on c.id = ca.customer_id
+  where c.email_normalized = 'tm-case57@treemerce.test' and ca.status = 'active';
+  if v_assigned is distinct from '10000000-0000-4000-8000-000000000005'::uuid then
+    raise exception 'CASE57 FAILED: 会員の担当がリンクの代理店 D ではない (%)', v_assigned;
+  end if;
+  if exists (select 1 from public.agents where auth_user_id = '00000000-0000-4000-8000-000000000056') then
+    raise exception 'CASE57 FAILED: 承認前に代理店が作られた';
+  end if;
+  raise notice 'CASE57 OK: 2つのチェックで会員 + 承認待ちの申請 (招待元はリンクの代理店)。規約の版・同意日時・IP・ブラウザ情報を記録。代理店はまだ作られない';
+end $$;
+
+-- ============================================================================
+-- CASE58 : 申請の条件を満たさない送信は全体を拒否し、何も作らない。
+--          「申し込む」なしで「同意」だけの場合は会員登録のみ (同意は記録しない)
+-- ============================================================================
+
+do $$
+declare
+  v_customers integer := (select count(*) from public.customers);
+  v_apps      integer := (select count(*) from public.agent_applications);
+  v_accepts   integer := (select count(*) from public.agent_terms_acceptances);
+  v_call      text := 'select public.treemerce_register_member(p_agent_public_id => ''TM-TEST-A'', '
+                      'p_full_name => ''CASE58'', p_email => %L, p_apply_agent => %s, '
+                      'p_accept_agent_terms => %s, p_agent_terms_version => %L, p_agent_display_name => ''CASE58 代理店'')';
+  v jsonb;
+begin
+  -- 申請者 56 として
+  perform set_config('request.jwt.claims',
+    '{"sub":"00000000-0000-4000-8000-000000000056","role":"authenticated"}', true);
+  perform app.tm_expect_error('CASE58 (同意なし)',
+    format(v_call, 'tm-case57@treemerce.test', 'true', 'false', 'test-1'), 'TREEMERCE_TERMS_CONSENT_REQUIRED');
+  perform app.tm_expect_error('CASE58 (古い規約の版)',
+    format(v_call, 'tm-case57@treemerce.test', 'true', 'true', 'test-0'), 'TREEMERCE_TERMS_VERSION_MISMATCH');
+  perform app.tm_expect_error('CASE58 (ログイン中と違うメールアドレス)',
+    format(v_call, 'tm-case58-other@treemerce.test', 'true', 'true', 'test-1'), 'TREEMERCE_APPLICANT_EMAIL_MISMATCH');
+
+  -- 規約が未登録 (現行の版なし) の間は「準備中」で拒否
+  update public.agent_terms_versions set is_current = false where version = 'test-1';
+  perform app.tm_expect_error('CASE58 (規約の準備中)',
+    format(v_call, 'tm-case57@treemerce.test', 'true', 'true', 'test-1'), 'TREEMERCE_TERMS_NOT_AVAILABLE');
+  update public.agent_terms_versions set is_current = true where version = 'test-1';
+
+  -- メール未確認のアカウント (58)
+  perform set_config('request.jwt.claims',
+    '{"sub":"00000000-0000-4000-8000-000000000058","role":"authenticated"}', true);
+  perform app.tm_expect_error('CASE58 (メール未確認)',
+    format(v_call, 'tm-case58@treemerce.test', 'true', 'true', 'test-1'), 'TREEMERCE_APPLICANT_EMAIL_MISMATCH');
+
+  -- 未ログイン
+  perform set_config('request.jwt.claims', '', true);
+  perform app.tm_expect_error('CASE58 (未ログイン)',
+    format(v_call, 'tm-case58@treemerce.test', 'true', 'true', 'test-1'), 'TREEMERCE_UNAUTHENTICATED');
+
+  if (select count(*) from public.customers) <> v_customers
+     or (select count(*) from public.agent_applications) <> v_apps
+     or (select count(*) from public.agent_terms_acceptances) <> v_accepts then
+    raise exception 'CASE58 FAILED: 拒否された送信で会員・申請・同意記録が作られた';
+  end if;
+
+  -- 「同意」だけ (申し込まない) → 会員登録のみ
+  execute format(v_call, 'tm-case58-member@treemerce.test', 'false', 'true', 'test-1') into v;
+  if v ->> 'member_status' <> 'registered' or v ->> 'application_status' is not null then
+    raise exception 'CASE58 FAILED: 同意だけの送信の応答が不正 (%)', v;
+  end if;
+  if (select count(*) from public.agent_applications) <> v_apps
+     or (select count(*) from public.agent_terms_acceptances) <> v_accepts then
+    raise exception 'CASE58 FAILED: 申し込んでいないのに申請・同意記録が作られた';
+  end if;
+  raise notice 'CASE58 OK: 同意なし・古い規約の版・規約の準備中・メール不一致・メール未確認・未ログインの申請は全体を拒否し何も作らない。同意だけ (申し込まない) は会員登録のみ';
+end $$;
+
+-- ============================================================================
+-- CASE59 : 既存の会員 X (担当 B) が別のリンク S から申請 → 会員は重複の中立メッセージで担当は不変。
+--          申請の招待元は S (担当 B とは独立)
+-- ============================================================================
+
+do $$
+declare
+  v_x        uuid := current_setting('tm.customer_x')::uuid;
+  v_before   uuid;
+  v_after    uuid;
+  v_hist     integer;
+  v          jsonb;
+  v_ap       public.agent_applications%rowtype;
+begin
+  select assigned_agent_id into v_before from public.customer_assignments
+  where customer_id = v_x and status = 'active';
+  select count(*) into v_hist from public.customer_assignment_history where customer_id = v_x;
+
+  perform set_config('request.jwt.claims',
+    '{"sub":"00000000-0000-4000-8000-000000000057","role":"authenticated"}', true);
+  v := public.treemerce_register_member(
+    p_agent_public_id => 'TM-TEST-S', p_full_name => 'CASE59 既存会員',
+    p_email => 'tm-test-x@treemerce.test',
+    p_apply_agent => true, p_accept_agent_terms => true,
+    p_agent_terms_version => 'test-1', p_agent_display_name => 'CASE59 代理店');
+  perform set_config('request.jwt.claims', '', true);
+
+  if v ->> 'member_status' <> 'duplicate' or v ->> 'application_status' <> 'received'
+     or v ->> 'application_message' <> app.agent_application_received_message() then
+    raise exception 'CASE59 FAILED: 応答が不正 (%)', v;
+  end if;
+  if v::text like '%テスト代理店%' or v::text like '%TM-TEST%' then
+    raise exception 'CASE59 FAILED: 応答に担当代理店が含まれる (%)', v;
+  end if;
+
+  select assigned_agent_id into v_after from public.customer_assignments
+  where customer_id = v_x and status = 'active';
+  if v_after is distinct from v_before
+     or (select count(*) from public.customer_assignment_history where customer_id = v_x) <> v_hist then
+    raise exception 'CASE59 FAILED: 既存会員の担当または担当履歴が変わった';
+  end if;
+
+  select * into v_ap from public.agent_applications
+  where auth_user_id = '00000000-0000-4000-8000-000000000057' and status = 'pending';
+  if v_ap.inviter_agent_id is distinct from '10000000-0000-4000-8000-000000000006'::uuid then
+    raise exception 'CASE59 FAILED: 申請の招待元がリンクの代理店 S ではない (%)', v_ap.inviter_agent_id;
+  end if;
+  if v_ap.inviter_agent_id = v_before then
+    raise exception 'CASE59 FAILED: 前提の誤り (担当と招待元が同じ)';
+  end if;
+  perform set_config('tm.case59_app', v_ap.id::text, true);
+  raise notice 'CASE59 OK: 既存の会員が別のリンクから申請しても担当・担当履歴は変わらず中立メッセージのみ。申請の招待元はリンクの代理店 (担当とは独立)';
+end $$;
+
+-- ============================================================================
+-- CASE60 : 承認待ちの申請がある人・既に代理店の人の申請 → 何も作らず、新規受付と同じ文面
+-- ============================================================================
+
+do $$
+declare
+  v_apps integer := (select count(*) from public.agent_applications);
+  v1 jsonb;
+  v2 jsonb;
+begin
+  -- 56 (承認待ち) が別のリンク A から再び申請
+  perform set_config('request.jwt.claims',
+    '{"sub":"00000000-0000-4000-8000-000000000056","role":"authenticated"}', true);
+  v1 := public.treemerce_register_member(
+    p_agent_public_id => 'TM-TEST-A', p_full_name => 'CASE57 申請者',
+    p_email => 'tm-case57@treemerce.test',
+    p_apply_agent => true, p_accept_agent_terms => true,
+    p_agent_terms_version => 'test-1', p_agent_display_name => 'CASE60 代理店');
+
+  -- 既に代理店の A (02) が申請
+  perform set_config('request.jwt.claims',
+    '{"sub":"00000000-0000-4000-8000-000000000002","role":"authenticated"}', true);
+  v2 := public.treemerce_register_member(
+    p_agent_public_id => 'TM-TEST-S', p_full_name => 'テスト代理店A 担当者',
+    p_email => 'tm-test-a@treemerce.test',
+    p_apply_agent => true, p_accept_agent_terms => true,
+    p_agent_terms_version => 'test-1', p_agent_display_name => 'CASE60 代理店A');
+  perform set_config('request.jwt.claims', '', true);
+
+  if v1 ->> 'application_message' <> app.agent_application_received_message()
+     or v2 ->> 'application_message' <> app.agent_application_received_message()
+     or v1 ->> 'application_status' <> 'received' or v2 ->> 'application_status' <> 'received' then
+    raise exception 'CASE60 FAILED: 中立メッセージではない (% / %)', v1, v2;
+  end if;
+  if (select count(*) from public.agent_applications) <> v_apps then
+    raise exception 'CASE60 FAILED: 重複した申請が作られた';
+  end if;
+  if (select inviter_agent_id from public.agent_applications
+      where id = current_setting('tm.case57_app')::uuid) <> '10000000-0000-4000-8000-000000000005'::uuid then
+    raise exception 'CASE60 FAILED: 既存の申請の招待元が変わった';
+  end if;
+  raise notice 'CASE60 OK: 承認待ちの人・既に代理店の人の申請は何も作らず、新規受付と同じ文面。既存の申請の招待元は変わらない';
+end $$;
+
+-- ============================================================================
+-- CASE61 : super_admin が承認 → 稼働中の代理店 (invited_by = 申請の招待元 D)。
+--          監査ログ2件 (作成・承認)。会員の担当は不変。二重の承認は拒否
+-- ============================================================================
+
+do $$
+declare
+  v_app   uuid := current_setting('tm.case57_app')::uuid;
+  v       jsonb;
+  v_agent public.agents%rowtype;
+  v_log   public.admin_audit_logs%rowtype;
+  v_hist  integer;
+begin
+  select count(*) into v_hist from public.customer_assignment_history h
+  join public.customers c on c.id = h.customer_id where c.email_normalized = 'tm-case57@treemerce.test';
+
+  perform set_config('request.jwt.claims',
+    '{"sub":"00000000-0000-4000-8000-000000000007","role":"authenticated"}', true);
+  v := public.treemerce_admin_approve_agent_application(v_app, 'CASE61 審査済み');
+  perform app.tm_expect_error('CASE61 (二重の承認)',
+    format('select public.treemerce_admin_approve_agent_application(%L, ''再承認'')', v_app),
+    'TREEMERCE_APPLICATION_NOT_PENDING');
+
+  select * into v_agent from public.agents where id = (v ->> 'agent_id')::uuid;
+  if v_agent.status <> 'active' or v_agent.invited_by <> '10000000-0000-4000-8000-000000000005'::uuid
+     or v_agent.auth_user_id <> '00000000-0000-4000-8000-000000000056'::uuid
+     or v_agent.display_name <> 'CASE57 代理店' then
+    raise exception 'CASE61 FAILED: 作られた代理店が不正 (%)', to_jsonb(v_agent);
+  end if;
+
+  select * into v_log from public.admin_audit_logs
+  where action = 'agent.create' and target_id = v_agent.id;
+  if v_log.actor_user_id <> '00000000-0000-4000-8000-000000000007'::uuid
+     or v_log.after_state ->> 'invited_by' <> '10000000-0000-4000-8000-000000000005'
+     or v_log.after_state ->> 'source' <> 'application'
+     or v_log.after_state ->> 'application_id' <> v_app::text
+     or v_log.reason <> 'CASE61 審査済み' or v_log.created_at is null then
+    raise exception 'CASE61 FAILED: 代理店作成の監査ログが不正 (%)', to_jsonb(v_log);
+  end if;
+  if not exists (select 1 from public.admin_audit_logs
+                 where action = 'agent_application.approve' and target_id = v_app
+                   and reason = 'CASE61 審査済み'
+                   and after_state ->> 'created_agent_id' = v_agent.id::text) then
+    raise exception 'CASE61 FAILED: 承認の監査ログがない';
+  end if;
+  if (select status from public.agent_applications where id = v_app) <> 'approved' then
+    raise exception 'CASE61 FAILED: 申請が承認済みになっていない';
+  end if;
+
+  if (select count(*) from public.customer_assignment_history h
+      join public.customers c on c.id = h.customer_id
+      where c.email_normalized = 'tm-case57@treemerce.test') <> v_hist
+     or (select ca.assigned_agent_id from public.customer_assignments ca
+         join public.customers c on c.id = ca.customer_id
+         where c.email_normalized = 'tm-case57@treemerce.test' and ca.status = 'active')
+        <> '10000000-0000-4000-8000-000000000005'::uuid then
+    raise exception 'CASE61 FAILED: 承認で会員の担当が変わった';
+  end if;
+
+  perform set_config('request.jwt.claims',
+    '{"sub":"00000000-0000-4000-8000-000000000056","role":"authenticated"}', true);
+  if app.current_agent_id() is distinct from v_agent.id
+     or public.treemerce_my_agent_application() ->> 'state' <> 'approved' then
+    raise exception 'CASE61 FAILED: 承認後に本人が代理店として扱われない';
+  end if;
+  perform set_config('request.jwt.claims', '', true);
+  raise notice 'CASE61 OK: 承認で稼働中の代理店ができ invited_by は申請の招待元。監査ログに作成 (実行者・招待元・経路) と承認が残る。会員の担当は不変。二重の承認は拒否';
+end $$;
+
+-- ============================================================================
+-- CASE62 : super_admin 以外 (代理店・admin ロール・未ログイン) の承認・却下と、理由のない承認・却下は拒否
+-- ============================================================================
+
+do $$
+declare
+  v_app uuid := current_setting('tm.case59_app')::uuid;
+  v_sub text;
+begin
+  foreach v_sub in array array['00000000-0000-4000-8000-000000000002',
+                               '00000000-0000-4000-8000-000000000059', ''] loop
+    perform set_config('request.jwt.claims',
+      case when v_sub = '' then '' else format('{"sub":"%s","role":"authenticated"}', v_sub) end, true);
+    perform app.tm_expect_error('CASE62 (承認 ' || v_sub || ')',
+      format('select public.treemerce_admin_approve_agent_application(%L, ''理由'')', v_app),
+      'TREEMERCE_SUPER_ADMIN_ONLY');
+    perform app.tm_expect_error('CASE62 (却下 ' || v_sub || ')',
+      format('select public.treemerce_admin_reject_agent_application(%L, ''理由'')', v_app),
+      'TREEMERCE_SUPER_ADMIN_ONLY');
+    perform app.tm_expect_error('CASE62 (一覧 ' || v_sub || ')',
+      'select public.treemerce_admin_list_agent_applications()', 'TREEMERCE_SUPER_ADMIN_ONLY');
+  end loop;
+
+  perform set_config('request.jwt.claims',
+    '{"sub":"00000000-0000-4000-8000-000000000007","role":"authenticated"}', true);
+  perform app.tm_expect_error('CASE62 (理由のない承認)',
+    format('select public.treemerce_admin_approve_agent_application(%L, '' '')', v_app),
+    'TREEMERCE_REASON_REQUIRED');
+  perform app.tm_expect_error('CASE62 (理由のない却下)',
+    format('select public.treemerce_admin_reject_agent_application(%L, null)', v_app),
+    'TREEMERCE_REASON_REQUIRED');
+  perform set_config('request.jwt.claims', '', true);
+
+  if (select status from public.agent_applications where id = v_app) <> 'pending' then
+    raise exception 'CASE62 FAILED: 拒否された操作で申請の状態が変わった';
+  end if;
+  raise notice 'CASE62 OK: 承認・却下・一覧は super_admin のみ (代理店・admin ロール・未ログインは不可)。理由のない承認・却下は拒否';
+end $$;
+
+-- ============================================================================
+-- CASE63 : 却下 → 代理店は作られず会員のまま。理由は監査ログにだけ残り、本人には中立的な表示。
+--          却下後の再申請は新しい申請として受け付け、その時のリンクの代理店が招待元
+-- ============================================================================
+
+do $$
+declare
+  v_app uuid := current_setting('tm.case59_app')::uuid;
+  v_me  jsonb;
+  v_re  public.agent_applications%rowtype;
+begin
+  perform set_config('request.jwt.claims',
+    '{"sub":"00000000-0000-4000-8000-000000000007","role":"authenticated"}', true);
+  perform public.treemerce_admin_reject_agent_application(v_app, 'CASE63 の却下理由');
+
+  if (select status from public.agent_applications where id = v_app) <> 'rejected'
+     or exists (select 1 from public.agents where auth_user_id = '00000000-0000-4000-8000-000000000057') then
+    raise exception 'CASE63 FAILED: 却下で代理店が作られた、または状態が却下になっていない';
+  end if;
+  if not exists (select 1 from public.customers where email_normalized = 'tm-test-x@treemerce.test') then
+    raise exception 'CASE63 FAILED: 会員の登録が消えた';
+  end if;
+  if not exists (select 1 from public.admin_audit_logs
+                 where action = 'agent_application.reject' and target_id = v_app
+                   and reason = 'CASE63 の却下理由') then
+    raise exception 'CASE63 FAILED: 却下の監査ログに理由がない';
+  end if;
+  if exists (select 1 from information_schema.columns
+             where table_schema = 'public' and table_name = 'agent_applications'
+               and column_name like '%reason%') then
+    raise exception 'CASE63 FAILED: 申請テーブルに理由の列がある';
+  end if;
+  -- 運営の詳細には理由が出る
+  if not (public.treemerce_admin_get_agent_application(v_app)::text like '%CASE63 の却下理由%') then
+    raise exception 'CASE63 FAILED: 運営の詳細に却下理由が出ない';
+  end if;
+
+  perform set_config('request.jwt.claims',
+    '{"sub":"00000000-0000-4000-8000-000000000057","role":"authenticated"}', true);
+  v_me := public.treemerce_my_agent_application();
+  if v_me ->> 'state' <> 'closed' or v_me::text like '%CASE63%' or v_me::text like '%却下%'
+     or v_me ? 'reason' or v_me ? 'inviter' then
+    raise exception 'CASE63 FAILED: 本人向けの表示が中立ではない (%)', v_me;
+  end if;
+
+  -- 再申請 (リンク A から)
+  perform public.treemerce_register_member(
+    p_agent_public_id => 'TM-TEST-A', p_full_name => 'CASE59 既存会員',
+    p_email => 'tm-test-x@treemerce.test',
+    p_apply_agent => true, p_accept_agent_terms => true,
+    p_agent_terms_version => 'test-1', p_agent_display_name => 'CASE63 再申請');
+  perform set_config('request.jwt.claims', '', true);
+
+  select * into v_re from public.agent_applications
+  where auth_user_id = '00000000-0000-4000-8000-000000000057' and status = 'pending';
+  if v_re.id is null or v_re.inviter_agent_id <> '10000000-0000-4000-8000-000000000002'::uuid
+     or (select count(*) from public.agent_applications
+         where auth_user_id = '00000000-0000-4000-8000-000000000057') <> 2 then
+    raise exception 'CASE63 FAILED: 却下後の再申請が新しい申請として受け付けられていない (%)', to_jsonb(v_re);
+  end if;
+  perform set_config('tm.case63_app', v_re.id::text, true);
+  raise notice 'CASE63 OK: 却下で代理店は作られず会員のまま。理由は監査ログ (と運営の詳細) にだけあり、本人には中立的な表示。却下後の再申請は新しい申請で、招待元はその時のリンクの代理店';
+end $$;
+
+-- ============================================================================
+-- CASE64 : 申請の招待元は変更できない。承認は招待元を受け取らない。
+--          招待元が稼働中でなくなった後の承認は失敗し、別の代理店に置き換わらない
+-- ============================================================================
+
+insert into public.agents (id, auth_user_id, public_id, display_name, email, status, invited_by)
+values ('10000000-0000-4000-8000-000000000064', null, 'TM-TEST-CASE64', 'テスト代理店CASE64',
+        'tm-case64-agent@treemerce.test', 'active', '10000000-0000-4000-8000-000000000001');
+
+do $$
+declare v_app uuid;
+begin
+  perform app.tm_expect_error('CASE64 (招待元の変更)',
+    format('update public.agent_applications set inviter_agent_id = %L where id = %L',
+           '10000000-0000-4000-8000-000000000006', current_setting('tm.case63_app')),
+    'TREEMERCE_APPLICATION_INVITER_IMMUTABLE');
+
+  if pg_get_function_identity_arguments('public.treemerce_admin_approve_agent_application'::regproc)
+     <> 'p_application_id uuid, p_reason text' then
+    raise exception 'CASE64 FAILED: 承認の RPC の引数が想定と違う';
+  end if;
+
+  perform set_config('request.jwt.claims',
+    '{"sub":"00000000-0000-4000-8000-000000000060","role":"authenticated"}', true);
+  perform public.treemerce_register_member(
+    p_agent_public_id => 'TM-TEST-CASE64', p_full_name => 'CASE64 申請者',
+    p_email => 'tm-case64@treemerce.test',
+    p_apply_agent => true, p_accept_agent_terms => true,
+    p_agent_terms_version => 'test-1', p_agent_display_name => 'CASE64 代理店');
+  select id into v_app from public.agent_applications
+  where auth_user_id = '00000000-0000-4000-8000-000000000060';
+
+  -- 申請の後に招待元が停止
+  update public.agents set status = 'suspended' where id = '10000000-0000-4000-8000-000000000064';
+
+  perform set_config('request.jwt.claims',
+    '{"sub":"00000000-0000-4000-8000-000000000007","role":"authenticated"}', true);
+  perform app.tm_expect_error('CASE64 (停止中の招待元)',
+    format('select public.treemerce_admin_approve_agent_application(%L, ''承認'')', v_app),
+    'TREEMERCE_INVITER_UNAVAILABLE');
+  perform set_config('request.jwt.claims', '', true);
+
+  if exists (select 1 from public.agents where auth_user_id = '00000000-0000-4000-8000-000000000060')
+     or (select status from public.agent_applications where id = v_app) <> 'pending'
+     or (select inviter_agent_id from public.agent_applications where id = v_app)
+        <> '10000000-0000-4000-8000-000000000064'::uuid then
+    raise exception 'CASE64 FAILED: 停止中の招待元の申請が承認された、または招待元が置き換わった';
+  end if;
+  raise notice 'CASE64 OK: 申請の招待元は変更不可。承認の RPC は招待元を受け取らない。招待元が停止した申請は承認できず、招待元も置き換わらない';
+end $$;
+
+-- ============================================================================
+-- CASE65 : 一般ユーザー・admin ロール・未ログインは treemerce_register_agent で代理店を作れない
+-- ============================================================================
+
+select set_config('tm.case65_agents', (select count(*) from public.agents)::text, true);
+select set_config('request.jwt.claims', '', true);
+set local role anon;
+
+do $$
+begin
+  perform app.tm_expect_error('CASE65 (未ログイン)',
+    format('select public.treemerce_register_agent(%L::uuid, ''x'', ''tm-case66a@treemerce.test'', null, ''none'', null, ''r'')',
+           '00000000-0000-4000-8000-000000000061'),
+    'permission denied');
+end $$;
+
+reset role;
+
+do $$
+declare v_sub text;
+begin
+  foreach v_sub in array array['00000000-0000-4000-8000-000000000061',
+                               '00000000-0000-4000-8000-000000000002',
+                               '00000000-0000-4000-8000-000000000059'] loop
+    perform set_config('request.jwt.claims', format('{"sub":"%s","role":"authenticated"}', v_sub), true);
+    perform app.tm_expect_error('CASE65 (' || v_sub || ')',
+      format('select public.treemerce_register_agent(%L::uuid, ''x'', ''tm-case66a@treemerce.test'', null, ''none'', null, ''r'')',
+             '00000000-0000-4000-8000-000000000061'),
+      'TREEMERCE_SUPER_ADMIN_ONLY');
+  end loop;
+  perform set_config('request.jwt.claims', '', true);
+
+  if (select count(*) from public.agents) <> current_setting('tm.case65_agents')::integer then
+    raise exception 'CASE65 FAILED: 代理店が作られた';
+  end if;
+  raise notice 'CASE65 OK: 一般ユーザー・代理店・admin ロール・未ログインは treemerce_register_agent で代理店を作れない';
+end $$;
+
+-- ============================================================================
+-- CASE66 : super_admin の直接作成は招待元の明示が必須。作成すると監査ログに
+--          実行者・日時・招待元・経路 (direct) が残る。「招待元なし」も明示で作れる
+-- ============================================================================
+
+do $$
+declare
+  v_call text := 'select public.treemerce_register_agent(%L::uuid, %L, %L, null, %L, %L::uuid, %L)';
+  v_a    jsonb;
+  v_n    jsonb;
+  v_log  public.admin_audit_logs%rowtype;
+begin
+  perform set_config('request.jwt.claims',
+    '{"sub":"00000000-0000-4000-8000-000000000007","role":"authenticated"}', true);
+
+  perform app.tm_expect_error('CASE66 (招待元の指定なし)',
+    format(v_call, '00000000-0000-4000-8000-000000000061', 'CASE66A', 'tm-case66a@treemerce.test', null, null, '理由'),
+    'TREEMERCE_INVITER_REQUIRED');
+  perform app.tm_expect_error('CASE66 (agent 指定で代理店なし)',
+    format(v_call, '00000000-0000-4000-8000-000000000061', 'CASE66A', 'tm-case66a@treemerce.test', 'agent', null, '理由'),
+    'TREEMERCE_INVITER_REQUIRED');
+  perform app.tm_expect_error('CASE66 (none 指定で代理店あり)',
+    format(v_call, '00000000-0000-4000-8000-000000000061', 'CASE66A', 'tm-case66a@treemerce.test', 'none',
+           '10000000-0000-4000-8000-000000000002', '理由'),
+    'TREEMERCE_INVITER_REQUIRED');
+  perform app.tm_expect_error('CASE66 (メールアドレスの不一致)',
+    format(v_call, '00000000-0000-4000-8000-000000000061', 'CASE66A', 'tm-other@treemerce.test', 'agent',
+           '10000000-0000-4000-8000-000000000002', '理由'),
+    'TREEMERCE_EMAIL_MISMATCH');
+  perform app.tm_expect_error('CASE66 (理由なし)',
+    format(v_call, '00000000-0000-4000-8000-000000000061', 'CASE66A', 'tm-case66a@treemerce.test', 'agent',
+           '10000000-0000-4000-8000-000000000002', ' '),
+    'TREEMERCE_REASON_REQUIRED');
+
+  v_a := public.treemerce_register_agent('00000000-0000-4000-8000-000000000061'::uuid, 'CASE66A',
+           'tm-case66a@treemerce.test', null, 'agent', '10000000-0000-4000-8000-000000000002'::uuid, 'CASE66 直接作成');
+  v_n := public.treemerce_register_agent('00000000-0000-4000-8000-000000000062'::uuid, 'CASE66B',
+           'tm-case66b@treemerce.test', null, 'none', null, 'CASE66 招待元なし');
+  perform set_config('request.jwt.claims', '', true);
+
+  if (select invited_by from public.agents where id = (v_a ->> 'agent_id')::uuid)
+       <> '10000000-0000-4000-8000-000000000002'::uuid
+     or (select invited_by from public.agents where id = (v_n ->> 'agent_id')::uuid) is not null then
+    raise exception 'CASE66 FAILED: 作成した代理店の招待元が不正';
+  end if;
+
+  select * into v_log from public.admin_audit_logs
+  where action = 'agent.create' and target_id = (v_a ->> 'agent_id')::uuid;
+  if v_log.actor_user_id <> '00000000-0000-4000-8000-000000000007'::uuid or v_log.created_at is null
+     or v_log.after_state ->> 'invited_by' <> '10000000-0000-4000-8000-000000000002'
+     or v_log.after_state ->> 'source' <> 'direct' or v_log.reason <> 'CASE66 直接作成' then
+    raise exception 'CASE66 FAILED: 直接作成の監査ログが不正 (%)', to_jsonb(v_log);
+  end if;
+  select * into v_log from public.admin_audit_logs
+  where action = 'agent.create' and target_id = (v_n ->> 'agent_id')::uuid;
+  if v_log.id is null or (v_log.after_state -> 'invited_by') <> 'null'::jsonb
+     or v_log.after_state ->> 'source' <> 'direct' then
+    raise exception 'CASE66 FAILED: 招待元なしの直接作成の監査ログが不正 (%)', to_jsonb(v_log);
+  end if;
+  perform set_config('tm.case66_none', v_n ->> 'agent_id', true);
+  raise notice 'CASE66 OK: super_admin の直接作成は招待元の明示 (代理店 / なし) が必須。メール不一致・理由なしは拒否。監査ログに実行者・日時・招待元・経路 (direct) が残る';
+end $$;
+
+-- ============================================================================
+-- CASE67 : agents への直接 INSERT は拒否。招待元は作成後に未設定から設定することもできない
+-- ============================================================================
+
+select set_config('request.jwt.claims',
+  '{"sub":"00000000-0000-4000-8000-000000000062","role":"authenticated"}', true);
+set local role authenticated;
+
+do $$
+begin
+  perform app.tm_expect_error('CASE67 (直接 INSERT)',
+    'insert into public.agents (auth_user_id, display_name, email) values '
+    '(''00000000-0000-4000-8000-000000000062'', ''x'', ''tm-case67@treemerce.test'')',
+    'permission denied');
+end $$;
+
+reset role;
+select set_config('request.jwt.claims', '', true);
+
+do $$
+begin
+  perform app.tm_expect_error('CASE67 (未設定からの招待元の設定)',
+    format('update public.agents set invited_by = %L where id = %L',
+           '10000000-0000-4000-8000-000000000002', current_setting('tm.case66_none')),
+    'TREEMERCE_INVITED_BY_CREATE_ONLY');
+  if (select invited_by from public.agents where id = current_setting('tm.case66_none')::uuid) is not null then
+    raise exception 'CASE67 FAILED: 招待元が設定された';
+  end if;
+  raise notice 'CASE67 OK: agents への直接 INSERT は拒否。招待元は作成時にのみ決まり、未設定から設定することもできない (postgres でも不可)';
+end $$;
+
+-- ============================================================================
+-- CASE68 : 規約の同意記録は追記専用。公開済みの規約は変更・削除できない。
+--          現行の版は1つだけ。本文のハッシュは DB 側で算出される
+-- ============================================================================
+
+do $$
+declare v_hash text;
+begin
+  perform app.tm_expect_error('CASE68 (同意記録の変更)',
+    'update public.agent_terms_acceptances set accepted_at = now()', 'TREEMERCE_TERMS_ACCEPTANCE_APPEND_ONLY');
+  perform app.tm_expect_error('CASE68 (同意記録の削除)',
+    'delete from public.agent_terms_acceptances', 'TREEMERCE_TERMS_ACCEPTANCE_APPEND_ONLY');
+  perform app.tm_expect_error('CASE68 (規約の本文の変更)',
+    'update public.agent_terms_versions set body = ''改変'' where version = ''test-1''', 'TREEMERCE_TERMS_IMMUTABLE');
+  perform app.tm_expect_error('CASE68 (規約の削除)',
+    'delete from public.agent_terms_versions where version = ''test-1''', 'TREEMERCE_TERMS_DELETE_DENIED');
+  perform app.tm_expect_error('CASE68 (現行の版が2つ)',
+    'insert into public.agent_terms_versions (version, title, body, is_current) values (''test-2'', ''t'', ''b'', true)',
+    'duplicate key');
+
+  insert into public.agent_terms_versions (version, title, body, body_sha256, is_current)
+  values ('test-hash', 'ハッシュ確認', '本文', 'fake', false)
+  returning body_sha256 into v_hash;
+  if v_hash <> encode(sha256(convert_to('本文', 'UTF8')), 'hex') then
+    raise exception 'CASE68 FAILED: 本文のハッシュが DB 側で算出されていない (%)', v_hash;
+  end if;
+  raise notice 'CASE68 OK: 同意記録は変更・削除不可。公開済みの規約は本文の変更・削除不可。現行の版は1つだけ。本文のハッシュは入力値を使わず DB 側で算出';
+end $$;
+
+-- ============================================================================
+-- CASE69 : 申請・同意記録・規約のテーブルは誰も直接読めない (リンクの代理店・申請者本人を含む)。
+--          承認待ちの申請者はコミュニティマップに現れない
+-- ============================================================================
+
+select set_config('request.jwt.claims',
+  '{"sub":"00000000-0000-4000-8000-000000000002","role":"authenticated"}', true);
+set local role authenticated;
+
+do $$
+declare v_map text;
+begin
+  -- A は CASE63 の再申請 (承認待ち) のリンクの代理店
+  perform app.tm_expect_error('CASE69 (申請)', 'select count(*) from public.agent_applications', 'permission denied');
+  perform app.tm_expect_error('CASE69 (同意記録)', 'select count(*) from public.agent_terms_acceptances', 'permission denied');
+  perform app.tm_expect_error('CASE69 (規約)', 'select count(*) from public.agent_terms_versions', 'permission denied');
+  perform app.tm_expect_error('CASE69 (審査の詳細)',
+    format('select public.treemerce_admin_get_agent_application(%L)', current_setting('tm.case63_app')),
+    'TREEMERCE_SUPER_ADMIN_ONLY');
+
+  v_map := public.treemerce_community_map(null)::text;
+  if v_map like '%CASE63 再申請%' or v_map like '%CASE59%' or v_map like '%CASE64 代理店%' then
+    raise exception 'CASE69 FAILED: 承認待ち・却下の申請者がコミュニティマップに現れた';
+  end if;
+end $$;
+
+reset role;
+
+select set_config('request.jwt.claims',
+  '{"sub":"00000000-0000-4000-8000-000000000057","role":"authenticated"}', true);
+set local role authenticated;
+
+do $$
+declare v_me jsonb;
+begin
+  perform app.tm_expect_error('CASE69 (申請者本人)', 'select count(*) from public.agent_applications', 'permission denied');
+  v_me := public.treemerce_my_agent_application();
+  if (select array_agg(k order by k) from jsonb_object_keys(v_me) k) <> array['message', 'state'] then
+    raise exception 'CASE69 FAILED: 本人向けの申請状況に余分な項目がある (%)', v_me;
+  end if;
+  if (public.treemerce_current_agent_terms() ->> 'version') <> 'test-1' then
+    raise exception 'CASE69 FAILED: 現行の規約を RPC から読めない';
+  end if;
+  raise notice 'CASE69 OK: 申請・同意記録・規約のテーブルはリンクの代理店・申請者本人とも直接読めない。本人は状態と中立的な文面だけ。承認待ち・却下の申請者はコミュニティマップに現れない';
+end $$;
+
+reset role;
+select set_config('request.jwt.claims', '', true);
+
+drop function app.tm_expect_error(text, text, text);
+
+drop function app.tm_test_definer_exec(text);
+drop function app.tm_test_definer_insert(text);
+revoke usage on schema app from tm_test_session;
+revoke authenticated from tm_test_session;
+drop role tm_test_session;
+
 do $$
 begin
   raise notice '==========================================';
-  raise notice '  TREEMERCE: ALL 52 CASES PASSED (+EXTRA)';
+  raise notice '  TREEMERCE: ALL 69 CASES PASSED (+EXTRA)';
   raise notice '==========================================';
 end $$;
 

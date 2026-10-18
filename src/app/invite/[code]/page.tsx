@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 
 import { LinkButton, Notice } from "@/components/ui";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -11,14 +12,20 @@ const REASONS: Record<string, string> = {
   inviter_unavailable: "招待元の代理店が現在ご利用いただけません。",
 };
 
+/**
+ * 旧来の代理店招待URL。有効なら発行した代理店の登録フォーム (/register/{公開ID}) へ転送する。
+ * 代理店のお申し込みはそのフォームで行い、招待元はそのリンクの代理店として申請時点で固定される。
+ */
 export default async function InvitePage({ params }: { params: Promise<{ code: string }> }) {
   const { code } = await params;
   const supabase = await createSupabaseServerClient();
 
   const { data } = await supabase.rpc("treemerce_resolve_invitation", { p_code: code });
-  const resolved = data as
-    | { valid: boolean; reason?: string; inviter_display_name?: string; inviter_public_id?: string }
-    | null;
+  const resolved = data as { valid: boolean; reason?: string; inviter_public_id?: string } | null;
+
+  if (resolved?.valid && resolved.inviter_public_id) {
+    redirect(`/register/${encodeURIComponent(resolved.inviter_public_id)}`);
+  }
 
   return (
     <div className="flex flex-1 items-center justify-center bg-app-bg px-5 py-16">
@@ -26,39 +33,17 @@ export default async function InvitePage({ params }: { params: Promise<{ code: s
         <Link href="/" className="font-mono text-[11px] tracking-widest text-text-secondary">
           TREEMERCE
         </Link>
-
-        {resolved?.valid ? (
-          <>
-            <h1 className="mt-2 mb-6 text-[22px] font-bold leading-tight tracking-tight text-text-primary">
-              {resolved.inviter_display_name} さんからの招待
-            </h1>
-            <div className="space-y-5 rounded-[24px] border border-border-soft bg-surface p-6 shadow-[var(--shadow-card)]">
-              <Notice tone="info">
-                この招待URLから登録すると、招待元は{" "}
-                <strong>{resolved.inviter_display_name}</strong> に確定します。
-                招待元は1代理店につき1つだけで、一度確定すると変更できません。
-                なお招待元は代理店の登録経路を表すもので、顧客の担当代理店とは別のデータです。
-              </Notice>
-              <LinkButton href={`/onboarding?invite=${encodeURIComponent(code)}`}>
-                この招待で登録を進める
-              </LinkButton>
-            </div>
-          </>
-        ) : (
-          <>
-            <h1 className="mt-2 mb-6 text-[22px] font-bold leading-tight tracking-tight text-text-primary">
-              招待URLを利用できません
-            </h1>
-            <div className="space-y-5 rounded-[24px] border border-border-soft bg-surface p-6 shadow-[var(--shadow-card)]">
-              <Notice tone="warning">
-                {REASONS[resolved?.reason ?? ""] ?? "この招待URLは利用できません。"}
-              </Notice>
-              <LinkButton href="/onboarding" variant="secondary">
-                招待元なしで登録する
-              </LinkButton>
-            </div>
-          </>
-        )}
+        <h1 className="mt-2 mb-6 text-[22px] font-bold leading-tight tracking-tight text-text-primary">
+          招待URLを利用できません
+        </h1>
+        <div className="space-y-5 rounded-[24px] border border-border-soft bg-surface p-6 shadow-[var(--shadow-card)]">
+          <Notice tone="warning">
+            {REASONS[resolved?.reason ?? ""] ?? "この招待URLは利用できません。"}
+          </Notice>
+          <LinkButton href="/onboarding" variant="secondary">
+            代理店登録について
+          </LinkButton>
+        </div>
       </div>
     </div>
   );

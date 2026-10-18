@@ -16,6 +16,7 @@ import {
   Tags,
   User,
   UserCircle,
+  UserPlus,
   Users,
 } from "lucide-react";
 
@@ -31,6 +32,7 @@ const ICONS = {
   network: Network,
   package: Package,
   "user-circle": UserCircle,
+  "user-plus": UserPlus,
   "arrow-right-left": ArrowRightLeft,
   "bar-chart": BarChart3,
   "clipboard-list": ClipboardList,

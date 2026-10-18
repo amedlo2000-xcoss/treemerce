@@ -12,6 +12,7 @@ import {
   Truck,
   Wallet,
   User,
+  UserPlus,
   Users,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -22,6 +23,7 @@ import { requireAdminPage } from "@/lib/auth/viewer";
 
 const QUICK_LINKS: { href: string; title: string; description: string; icon: LucideIcon }[] = [
   { href: "/admin/agents", title: "代理店管理", description: "招待経路・ステータスの確認", icon: Users },
+  { href: "/admin/agent-applications", title: "代理店申請", description: "代理店登録のお申し込みの審査", icon: UserPlus },
   { href: "/admin/customers", title: "商品購入者管理", description: "購入者情報の確認・編集", icon: User },
   { href: "/admin/assignments", title: "顧客担当管理", description: "担当代理店の確認・変更", icon: ArrowRightLeft },
   { href: "/admin/orders", title: "注文管理", description: "入金確認・発送・キャンセル", icon: ShoppingBag },
@@ -40,11 +42,16 @@ export default async function AdminDashboard({
   const { error } = await searchParams;
   const { supabase, viewer } = await requireAdminPage("/admin");
 
-  // 持込み申請は super_admin のみ参照できる (RPC 側でも判定)。それ以外のロールには件数も出さない。
+  // 持込み申請・代理店申請は super_admin のみ参照できる (RPC 側でも判定)。それ以外のロールには件数も出さない。
   let pendingSubmissions: number | null = null;
+  let pendingApplications: number | null = null;
   if (viewer.adminRole === "super_admin") {
-    const { data } = await supabase.rpc("treemerce_admin_list_submissions", { p_status: "submitted" });
-    pendingSubmissions = Array.isArray(data) ? data.length : 0;
+    const [{ data: submissions }, { data: applications }] = await Promise.all([
+      supabase.rpc("treemerce_admin_list_submissions", { p_status: "submitted" }),
+      supabase.rpc("treemerce_admin_list_agent_applications", { p_status: "pending" }),
+    ]);
+    pendingSubmissions = Array.isArray(submissions) ? submissions.length : 0;
+    pendingApplications = Array.isArray(applications) ? applications.length : 0;
   }
 
   const [agents, customers, assignments, { data: recentLogs }, awaitingPayment, awaitingShipment] = await Promise.all([
@@ -96,7 +103,21 @@ export default async function AdminDashboard({
         />
       </div>
 
-      <div className={`grid gap-3 md:gap-4 ${pendingSubmissions !== null ? "sm:grid-cols-3" : "sm:grid-cols-2"}`}>
+      <div
+        className={`grid gap-3 md:gap-4 ${
+          pendingSubmissions !== null ? "sm:grid-cols-2 lg:grid-cols-4" : "sm:grid-cols-2"
+        }`}
+      >
+        {pendingApplications !== null ? (
+          <Link href="/admin/agent-applications?status=pending" className="block transition-opacity hover:opacity-90">
+            <Stat
+              label="承認待ちの代理店申請"
+              value={pendingApplications}
+              hint="紹介リンクの登録フォームから"
+              icon={<UserPlus size={18} />}
+            />
+          </Link>
+        ) : null}
         {pendingSubmissions !== null ? (
           <Link href="/admin/submissions?status=submitted" className="block transition-opacity hover:opacity-90">
             <Stat

@@ -1,5 +1,6 @@
 import type {
   AgeGroup,
+  AgentApplicationStatus,
   AgentStatus,
   BankAccountType,
   BenefitStatus,
@@ -739,4 +740,51 @@ export type AgentOrderSummary = {
   own_transferred: SuppressedAggregate;
   subtree: SuppressedAggregate;
   generated_at: string;
+};
+
+/** treemerce_current_agent_terms (公開) */
+export type AgentTerms =
+  | { available: false }
+  | { available: true; version: string; title: string; body: string; body_sha256: string; published_at: string };
+
+/** treemerce_my_agent_application (本人。状態と中立的な文面のみ) */
+export type MyAgentApplication = {
+  state: "none" | "received" | "approved" | "closed";
+  message: string | null;
+};
+
+/** treemerce_register_member の応答 (顧客ID・担当代理店・招待元は含まない) */
+export type RegisterMemberResult = {
+  member_status: "registered" | "duplicate";
+  member_message: string | null;
+  application_status: "received" | null;
+  application_message: string | null;
+};
+
+/** treemerce_admin_list_agent_applications / treemerce_admin_get_agent_application (super_admin) */
+export type AdminAgentApplication = {
+  id: string;
+  status: AgentApplicationStatus;
+  auth_user_id: string;
+  display_name: string;
+  email: string;
+  phone: string | null;
+  created_at: string;
+  reviewed_at: string | null;
+  reviewed_by: string | null;
+  created_agent_id: string | null;
+  inviter: { id: string; public_id: string; display_name: string; status: AgentStatus } | null;
+  terms: {
+    version: string;
+    title: string;
+    body_sha256: string;
+    accepted_at: string | null;
+    accepted_email: string | null;
+    ip_address: string | null;
+    user_agent: string | null;
+  } | null;
+};
+
+export type AdminAgentApplicationDetail = AdminAgentApplication & {
+  audit: { action: string; actor_user_id: string | null; actor_role: string; reason: string | null; created_at: string }[];
 };

@@ -287,3 +287,26 @@ export const SHIPMENT_STATUS_LABELS: Record<string, string> = {
   shipped: "発送済み",
   cancelled: "キャンセル",
 };
+
+// ---- 代理店申請 (0027〜0028) -------------------------------------------------
+
+export const AGENT_APPLICATION_STATUSES = ["pending", "approved", "rejected"] as const;
+export type AgentApplicationStatus = (typeof AGENT_APPLICATION_STATUSES)[number];
+
+/** 運営の画面用。本人には表示しない (本人には treemerce_my_agent_application の中立的な文面だけを出す) */
+export const AGENT_APPLICATION_STATUS_LABELS: Record<AgentApplicationStatus, string> = {
+  pending: "承認待ち",
+  approved: "承認済み",
+  rejected: "却下",
+};
+
+export const AGENT_APPLICATION_STATUS_BADGE: Record<AgentApplicationStatus, "amber" | "green" | "red"> = {
+  pending: "amber",
+  approved: "green",
+  rejected: "red",
+};
+
+export const AGENT_APPLICATION_AUDIT_LABELS: Record<string, string> = {
+  "agent_application.approve": "承認",
+  "agent_application.reject": "却下",
+};

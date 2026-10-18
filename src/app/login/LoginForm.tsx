@@ -29,7 +29,15 @@ export function LoginForm({ next }: { next: string }) {
     const result =
       mode === "signin"
         ? await supabase.auth.signInWithPassword({ email, password })
-        : await supabase.auth.signUp({ email, password });
+        : await supabase.auth.signUp({
+            email,
+            password,
+            // 確認メールのリンクから、申し込みを始めたページ (next) へ戻す。
+            // Supabase の Redirect URLs にこのサイトの /auth/callback を登録しておくこと。
+            options: {
+              emailRedirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`,
+            },
+          });
 
     if (result.error) {
       setError(result.error.message);
