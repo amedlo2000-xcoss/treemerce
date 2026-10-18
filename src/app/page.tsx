@@ -27,9 +27,12 @@ export default async function Home() {
         <div className="mt-8 flex flex-wrap gap-3">
           <LinkButton href="/login">ログイン</LinkButton>
           <LinkButton href="/onboarding" variant="secondary">
-            代理店として登録
+            代理店登録のお申し込みについて
           </LinkButton>
         </div>
+        <p className="mt-3 text-[13px] leading-6 text-text-secondary">
+          代理店登録は、代理店から受け取った紹介リンクの登録フォームからお申し込みください。
+        </p>
 
         <dl className="mt-12 grid gap-4 border-t border-border-soft pt-8 text-sm sm:grid-cols-2">
           <div>

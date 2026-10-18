@@ -1,8 +1,10 @@
 import { ADMIN_NAV, AppShell } from "@/components/nav";
+import { currentReturnTo } from "@/lib/auth/return-to";
 import { requireAdminPage } from "@/lib/auth/viewer";
 
 export default async function AdminLayout({ children }: LayoutProps<"/admin">) {
-  const { viewer } = await requireAdminPage("/admin");
+  // 未ログインで開いたページ (例: /admin/agent-applications) へログイン後に戻す
+  const { viewer } = await requireAdminPage(await currentReturnTo("/admin"));
 
   return (
     <AppShell
