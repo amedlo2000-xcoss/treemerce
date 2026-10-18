@@ -24,6 +24,7 @@ import { requireAdminPage } from "@/lib/auth/viewer";
 const QUICK_LINKS: { href: string; title: string; description: string; icon: LucideIcon }[] = [
   { href: "/admin/agents", title: "代理店管理", description: "招待経路・ステータスの確認", icon: Users },
   { href: "/admin/agent-applications", title: "代理店申請", description: "代理店登録のお申し込みの審査", icon: UserPlus },
+  { href: "/admin/agent-registration-links", title: "代理店登録リンク", description: "運営からの代理店登録リンクの発行・無効化", icon: Link2 },
   { href: "/admin/customers", title: "商品購入者管理", description: "購入者情報の確認・編集", icon: User },
   { href: "/admin/assignments", title: "顧客担当管理", description: "担当代理店の確認・変更", icon: ArrowRightLeft },
   { href: "/admin/orders", title: "注文管理", description: "入金確認・発送・キャンセル", icon: ShoppingBag },

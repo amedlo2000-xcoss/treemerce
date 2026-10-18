@@ -31,7 +31,7 @@ export default async function Home() {
           </LinkButton>
         </div>
         <p className="mt-3 text-[13px] leading-6 text-text-secondary">
-          代理店登録は、代理店から受け取った紹介リンクの登録フォームからお申し込みください。
+          代理店登録は、代理店から受け取った紹介リンク、または運営事務局からご案内した代理店登録リンクからお申し込みください。
         </p>
 
         <dl className="mt-12 grid gap-4 border-t border-border-soft pt-8 text-sm sm:grid-cols-2">

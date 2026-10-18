@@ -62,15 +62,15 @@ export default async function OnboardingPage({
 
         <div className="space-y-4 rounded-[24px] border border-border-soft bg-surface p-6 shadow-[var(--shadow-card)]">
           <p className="text-[14px] leading-7 text-text-primary">
-            代理店登録は、代理店から受け取った紹介リンクの登録フォームからお申し込みいただけます。
-            フォームで「代理店登録も申し込む」と「代理店規約に同意する」にチェックしてお申し込みください。
+            代理店登録は、代理店から受け取った紹介リンクの登録フォーム、または運営事務局からご案内した
+            代理店登録リンクからお申し込みいただけます。フォームで同意・誓約事項にチェックしてお申し込みください。
             運営が確認したうえで、代理店としてご利用いただけるようになります。
           </p>
           {registerHref ? (
             <LinkButton href={registerHref}>登録フォームへ進む</LinkButton>
           ) : (
             <p className="text-[13px] leading-6 text-text-secondary">
-              紹介リンクがお手元にない場合は、紹介を受けた代理店または運営事務局までお問い合わせください。
+              リンクがお手元にない場合は、紹介を受けた代理店または運営事務局までお問い合わせください。
             </p>
           )}
         </div>

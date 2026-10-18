@@ -194,6 +194,17 @@ const ERROR_MAP: Record<string, { status: number; message: string }> = {
   TREEMERCE_EMAIL_MISMATCH: { status: 400, message: "メールアドレスが対象アカウントと一致しません。" },
   TREEMERCE_AGENT_CREATE_DENIED: { status: 403, message: "代理店は運営の承認処理でのみ作成できます。" },
   TREEMERCE_INVITED_BY_CREATE_ONLY: { status: 409, message: "招待元は代理店の作成時にのみ設定できます。" },
+
+  // 運営の代理店登録リンク (0030)
+  TREEMERCE_REGISTRATION_LINK_UNAVAILABLE: {
+    status: 409,
+    message: "この代理店登録リンクは利用できません。有効期限が切れたか、利用の上限に達した可能性があります。",
+  },
+  TREEMERCE_REGISTRATION_LINK_NOT_FOUND: { status: 404, message: "代理店登録リンクが見つかりません。" },
+  TREEMERCE_REGISTRATION_LINK_NOT_ACTIVE: { status: 409, message: "このリンクは既に無効化されています。" },
+  TREEMERCE_REGISTRATION_LINK_WRITE_DENIED: { status: 403, message: "代理店登録リンクへの直接書込みはできません。" },
+  TREEMERCE_REGISTRATION_LINK_IMMUTABLE: { status: 403, message: "発行済みのリンクの内容は変更できません。" },
+  TREEMERCE_REGISTRATION_LINK_DELETE_DENIED: { status: 403, message: "代理店登録リンクは削除できません (無効化で扱います)。" },
 };
 
 /** DB 側の具体的な理由 (「商品名は必須です」等) をそのまま画面に返すコード */

@@ -15,6 +15,7 @@ import {
 import { requireSuperAdminPage } from "@/lib/auth/viewer";
 import {
   AGENT_APPLICATION_AUDIT_LABELS,
+  AGENT_APPLICATION_SOURCE_LABELS,
   AGENT_APPLICATION_STATUS_BADGE,
   AGENT_APPLICATION_STATUS_LABELS,
   AGENT_STATUS_LABELS,
@@ -61,6 +62,10 @@ export default async function AdminAgentApplicationPage({
       <div className="grid gap-4 lg:grid-cols-2">
         <Card title="申請内容">
           <DetailList>
+            <DetailRow label="経路" value={AGENT_APPLICATION_SOURCE_LABELS[a.source] ?? a.source} />
+            {a.registration_link ? (
+              <DetailRow label="代理店登録リンク" value={a.registration_link.note ?? "(メモなし)"} />
+            ) : null}
             <DetailRow label="代理店名" value={a.display_name} />
             <DetailRow label="メールアドレス" value={a.email} />
             <DetailRow label="電話番号" value={a.phone ?? "—"} />
@@ -70,8 +75,8 @@ export default async function AdminAgentApplicationPage({
         </Card>
 
         <Card
-          title="招待元 (申請に使われたリンクの代理店)"
-          description="申請の時点で確定しています。承認するとこの代理店が招待元 (invited_by) になり、あとから変更できません。会員としての担当代理店とは別のデータです。"
+          title="招待元"
+          description="申請の時点で確定しています。紹介リンクからの申請はリンクの代理店、運営の代理店登録リンクからの申請は招待元なし (運営からの直接登録) です。承認するとそのまま招待元 (invited_by) になり、あとから変更・追加できません。会員としての担当代理店とは別のデータです。"
         >
           {a.inviter ? (
             <DetailList>
@@ -83,7 +88,7 @@ export default async function AdminAgentApplicationPage({
               <DetailRow label="状態" value={AGENT_STATUS_LABELS[a.inviter.status]} />
             </DetailList>
           ) : (
-            <p className="text-[14px] text-text-secondary">—</p>
+            <p className="text-[14px] text-text-secondary">なし (運営からの直接登録)</p>
           )}
           {a.status === "pending" && a.inviter && a.inviter.status !== "active" ? (
             <div className="mt-3">

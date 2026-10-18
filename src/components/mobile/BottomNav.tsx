@@ -8,6 +8,7 @@ import {
   ClipboardList,
   Home,
   Inbox,
+  Link2,
   Network,
   Package,
   Settings,
@@ -39,6 +40,7 @@ const ICONS = {
   "shopping-bag": ShoppingBag,
   sprout: Sprout,
   inbox: Inbox,
+  link: Link2,
   settings: Settings,
   tags: Tags,
 } as const;

@@ -1,10 +1,10 @@
 -- ============================================================================
--- TREEMERCE 受け入れテスト  CASE1 - CASE69
+-- TREEMERCE 受け入れテスト  CASE1 - CASE77
 -- ----------------------------------------------------------------------------
 -- Supabase SQL Editor にそのまま貼り付けて実行する。
 -- 全体が 1 トランザクションで、最後に ROLLBACK するため本番データは残らない。
 -- 途中で失敗した CASE があれば例外で停止する。全て通れば最後に
--- 「ALL 69 CASES PASSED」が NOTICE として出力される。
+-- 「ALL 77 CASES PASSED」が NOTICE として出力される。
 --
 -- 木構造:
 --            R  (root)
@@ -6190,6 +6190,510 @@ end $$;
 reset role;
 select set_config('request.jwt.claims', '', true);
 
+-- ============================================================================
+-- CASE70〜77 : 運営が発行する代理店登録リンク (代理店登録の入口 ②、0030)
+-- ----------------------------------------------------------------------------
+--   申請者: 70 (新規)、71 (メール未確認)、72 (上限到達後)、73 (既存の会員 Y と同じメールアドレス)
+-- ============================================================================
+
+insert into auth.users (instance_id, id, aud, role, email, encrypted_password,
+                        email_confirmed_at, created_at, updated_at)
+values
+  ('00000000-0000-0000-0000-000000000000', '00000000-0000-4000-8000-000000000070',
+   'authenticated', 'authenticated', 'tm-case70@treemerce.test', '', now(), now(), now()),
+  ('00000000-0000-0000-0000-000000000000', '00000000-0000-4000-8000-000000000071',
+   'authenticated', 'authenticated', 'tm-case71@treemerce.test', '', null, now(), now()),
+  ('00000000-0000-0000-0000-000000000000', '00000000-0000-4000-8000-000000000072',
+   'authenticated', 'authenticated', 'tm-case72@treemerce.test', '', now(), now(), now()),
+  ('00000000-0000-0000-0000-000000000000', '00000000-0000-4000-8000-000000000073',
+   'authenticated', 'authenticated', 'tm-test-y@treemerce.test', '', now(), now(), now());
+
+-- ============================================================================
+-- CASE70 : リンクの発行・一覧は super_admin のみ。発行は監査ログに残り、トークンは
+--          発行の応答にだけ出る (DB はハッシュのみ・一覧と監査ログには出ない)。テーブルは直接読めない
+-- ============================================================================
+
+do $$
+declare
+  v_sub  text;
+  v      jsonb;
+  v_list jsonb;
+  v_hash text;
+begin
+  foreach v_sub in array array['00000000-0000-4000-8000-000000000002',
+                               '00000000-0000-4000-8000-000000000059', ''] loop
+    perform set_config('request.jwt.claims',
+      case when v_sub = '' then '' else format('{"sub":"%s","role":"authenticated"}', v_sub) end, true);
+    perform app.tm_expect_error('CASE70 (発行 ' || v_sub || ')',
+      'select public.treemerce_admin_create_registration_link(''x'', null, null)', 'TREEMERCE_SUPER_ADMIN_ONLY');
+    perform app.tm_expect_error('CASE70 (一覧 ' || v_sub || ')',
+      'select public.treemerce_admin_list_registration_links()', 'TREEMERCE_SUPER_ADMIN_ONLY');
+  end loop;
+
+  perform set_config('request.jwt.claims',
+    '{"sub":"00000000-0000-4000-8000-000000000007","role":"authenticated"}', true);
+  perform app.tm_expect_error('CASE70 (上限 0)',
+    'select public.treemerce_admin_create_registration_link(''x'', 0, null)', 'TREEMERCE_INVALID_INPUT');
+  perform app.tm_expect_error('CASE70 (過去の期限)',
+    format('select public.treemerce_admin_create_registration_link(''x'', null, %L)', now() - interval '1 hour'),
+    'TREEMERCE_INVALID_INPUT');
+
+  v := public.treemerce_admin_create_registration_link('CASE70 リンク', 2, now() + interval '1 day');
+  v_list := public.treemerce_admin_list_registration_links();
+  perform set_config('request.jwt.claims', '', true);
+
+  if (v ->> 'token') !~ '^[0-9a-f]{64}$' then
+    raise exception 'CASE70 FAILED: トークンが 64 桁の 16 進数ではない (%)', v;
+  end if;
+  perform set_config('tm.link1_token', v ->> 'token', true);
+  perform set_config('tm.link1_id', v ->> 'id', true);
+
+  select token_sha256 into v_hash from public.agent_registration_links where id = (v ->> 'id')::uuid;
+  if v_hash <> app.registration_link_hash(v ->> 'token') or v_hash = v ->> 'token' then
+    raise exception 'CASE70 FAILED: DB にトークンのハッシュだけが保存されていない';
+  end if;
+  if v_list::text like '%' || (v ->> 'token') || '%' or v_list::text like '%' || v_hash || '%'
+     or (v_list -> 0) ? 'token' or (v_list -> 0) ? 'token_sha256' then
+    raise exception 'CASE70 FAILED: 一覧にトークンが出ている';
+  end if;
+  if (v_list -> 0 ->> 'state') <> 'active' or (v_list -> 0 ->> 'note') <> 'CASE70 リンク' then
+    raise exception 'CASE70 FAILED: 一覧の内容が不正 (%)', v_list -> 0;
+  end if;
+  if not exists (select 1 from public.admin_audit_logs
+                 where action = 'registration_link.create' and target_id = (v ->> 'id')::uuid
+                   and actor_user_id = '00000000-0000-4000-8000-000000000007'
+                   and after_state::text not like '%' || (v ->> 'token') || '%') then
+    raise exception 'CASE70 FAILED: 発行の監査ログがない、またはトークンが記録されている';
+  end if;
+end $$;
+
+select set_config('request.jwt.claims',
+  '{"sub":"00000000-0000-4000-8000-000000000007","role":"authenticated"}', true);
+set local role authenticated;
+
+do $$
+begin
+  perform app.tm_expect_error('CASE70 (テーブルの直接読み取り)',
+    'select count(*) from public.agent_registration_links', 'permission denied');
+  raise notice 'CASE70 OK: 代理店登録リンクの発行・一覧は super_admin のみ (上限・期限の検証あり)。発行は監査ログに残り、トークンは発行の応答にだけ出る (DB はハッシュのみ・一覧と監査ログに出ない)。テーブルは super_admin でも直接読めない';
+end $$;
+
+reset role;
+select set_config('request.jwt.claims', '', true);
+
+-- ============================================================================
+-- CASE71 : リンクの状態 (有効・見つからない・期限切れ・無効化・上限到達) の判定。
+--          無効化は super_admin のみ・理由必須・1回だけで、監査ログに残る
+-- ============================================================================
+
+-- 期限切れ・上限到達のリンクは DB 管理者として直接作る (発行の RPC では作れないため)
+insert into public.agent_registration_links (token_sha256, note, expires_at)
+values (app.registration_link_hash('case71-expired'), 'CASE71 期限切れ', now() - interval '1 minute');
+insert into public.agent_registration_links (token_sha256, note, max_uses, used_count)
+values (app.registration_link_hash('case71-exhausted'), 'CASE71 上限到達', 1, 1);
+
+do $$
+declare
+  v       jsonb;
+  v_rid   uuid;
+begin
+  perform set_config('request.jwt.claims',
+    '{"sub":"00000000-0000-4000-8000-000000000007","role":"authenticated"}', true);
+  v := public.treemerce_admin_create_registration_link('CASE71 無効化', null, null);
+  v_rid := (v ->> 'id')::uuid;
+  perform set_config('tm.link_revoked_token', v ->> 'token', true);
+
+  perform app.tm_expect_error('CASE71 (理由なしの無効化)',
+    format('select public.treemerce_admin_revoke_registration_link(%L, '' '')', v_rid), 'TREEMERCE_REASON_REQUIRED');
+  perform set_config('request.jwt.claims',
+    '{"sub":"00000000-0000-4000-8000-000000000002","role":"authenticated"}', true);
+  perform app.tm_expect_error('CASE71 (代理店による無効化)',
+    format('select public.treemerce_admin_revoke_registration_link(%L, ''理由'')', v_rid), 'TREEMERCE_SUPER_ADMIN_ONLY');
+
+  perform set_config('request.jwt.claims',
+    '{"sub":"00000000-0000-4000-8000-000000000007","role":"authenticated"}', true);
+  perform public.treemerce_admin_revoke_registration_link(v_rid, 'CASE71 の無効化理由');
+  perform app.tm_expect_error('CASE71 (二重の無効化)',
+    format('select public.treemerce_admin_revoke_registration_link(%L, ''理由'')', v_rid),
+    'TREEMERCE_REGISTRATION_LINK_NOT_ACTIVE');
+  perform set_config('request.jwt.claims', '', true);
+
+  if not exists (select 1 from public.admin_audit_logs
+                 where action = 'registration_link.revoke' and target_id = v_rid
+                   and reason = 'CASE71 の無効化理由') then
+    raise exception 'CASE71 FAILED: 無効化の監査ログに理由がない';
+  end if;
+end $$;
+
+select set_config('request.jwt.claims', '', true);
+set local role anon;
+
+do $$
+declare v jsonb;
+begin
+  v := public.treemerce_resolve_registration_link(current_setting('tm.link1_token'));
+  if v <> '{"valid": true}'::jsonb then
+    raise exception 'CASE71 FAILED: 有効なリンクの判定が不正 (%)', v;
+  end if;
+  if public.treemerce_resolve_registration_link('no-such-token') ->> 'reason' <> 'not_found'
+     or public.treemerce_resolve_registration_link('case71-expired') ->> 'reason' <> 'expired'
+     or public.treemerce_resolve_registration_link('case71-exhausted') ->> 'reason' <> 'exhausted'
+     or public.treemerce_resolve_registration_link(current_setting('tm.link_revoked_token')) ->> 'reason' <> 'revoked' then
+    raise exception 'CASE71 FAILED: 使えないリンクの理由の判定が不正';
+  end if;
+  raise notice 'CASE71 OK: リンクの状態 (有効・見つからない・期限切れ・無効化・上限到達) を未ログインでも判定できる。無効化は super_admin のみ・理由必須・1回だけで監査ログに理由が残る';
+end $$;
+
+reset role;
+
+-- ============================================================================
+-- CASE72 : ② で申し込む → 承認待ちの申請 (経路 admin_link・招待元なし・リンクID)。
+--          会員登録は行わない (customers・担当・担当履歴の件数は不変)。使用回数 +1。申し込みは監査ログに残る
+-- ============================================================================
+
+do $$
+declare
+  v_customers   integer := (select count(*) from public.customers);
+  v_assignments integer := (select count(*) from public.customer_assignments);
+  v_history     integer := (select count(*) from public.customer_assignment_history);
+  v             jsonb;
+  v_ap          public.agent_applications%rowtype;
+  v_ta          public.agent_terms_acceptances%rowtype;
+begin
+  perform set_config('request.jwt.claims',
+    '{"sub":"00000000-0000-4000-8000-000000000070","role":"authenticated"}', true);
+  v := public.treemerce_apply_agent_via_link(
+    p_token => current_setting('tm.link1_token'), p_agent_display_name => 'CASE72 代理店',
+    p_email => 'tm-case70@treemerce.test', p_phone => '090-7200-0072',
+    p_accept_agent_terms => true, p_agent_terms_version => 'test-1',
+    p_ip_address => '198.51.100.72', p_user_agent => 'CASE72-UA');
+  if public.treemerce_my_agent_application() ->> 'state' <> 'received' or app.current_agent_id() is not null then
+    raise exception 'CASE72 FAILED: 本人の申請状況が不正';
+  end if;
+  perform set_config('request.jwt.claims', '', true);
+
+  if v <> jsonb_build_object('application_status', 'received',
+                             'application_message', app.agent_application_received_message()) then
+    raise exception 'CASE72 FAILED: 応答が不正 (%)', v;
+  end if;
+
+  select * into v_ap from public.agent_applications
+  where auth_user_id = '00000000-0000-4000-8000-000000000070';
+  if v_ap.source <> 'admin_link' or v_ap.inviter_agent_id is not null
+     or v_ap.registration_link_id <> current_setting('tm.link1_id')::uuid or v_ap.status <> 'pending' then
+    raise exception 'CASE72 FAILED: 申請の内容が不正 (%)', to_jsonb(v_ap);
+  end if;
+  perform set_config('tm.case72_app', v_ap.id::text, true);
+
+  select * into v_ta from public.agent_terms_acceptances where application_id = v_ap.id;
+  if v_ta.id is null or v_ta.ip_address <> '198.51.100.72' or v_ta.user_agent <> 'CASE72-UA'
+     or v_ta.accepted_email <> 'tm-case70@treemerce.test' then
+    raise exception 'CASE72 FAILED: 規約の同意記録が不正 (%)', to_jsonb(v_ta);
+  end if;
+
+  if (select count(*) from public.customers) <> v_customers
+     or (select count(*) from public.customer_assignments) <> v_assignments
+     or (select count(*) from public.customer_assignment_history) <> v_history then
+    raise exception 'CASE72 FAILED: ② の申し込みで会員・担当・担当履歴が作られた';
+  end if;
+  if (select used_count from public.agent_registration_links
+      where id = current_setting('tm.link1_id')::uuid) <> 1 then
+    raise exception 'CASE72 FAILED: 使用回数が 1 になっていない';
+  end if;
+  if not exists (select 1 from public.admin_audit_logs
+                 where action = 'agent_application.submit' and target_id = v_ap.id
+                   and actor_user_id = '00000000-0000-4000-8000-000000000070' and actor_role = 'applicant'
+                   and after_state ->> 'source' = 'admin_link'
+                   and (after_state -> 'inviter_agent_id') = 'null'::jsonb) then
+    raise exception 'CASE72 FAILED: 申し込みの監査ログがない';
+  end if;
+  -- ① の申し込み (CASE57) も監査ログに残る
+  if not exists (select 1 from public.admin_audit_logs
+                 where action = 'agent_application.submit'
+                   and target_id = current_setting('tm.case57_app')::uuid
+                   and after_state ->> 'source' = 'referral_link') then
+    raise exception 'CASE72 FAILED: ① の申し込みの監査ログがない';
+  end if;
+  raise notice 'CASE72 OK: ② の申し込みは経路 admin_link・招待元なし・リンクIDで承認待ちになる。会員・担当・担当履歴は作られない。使用回数 +1。規約の同意と申し込み (①②とも) が記録される';
+end $$;
+
+-- ============================================================================
+-- CASE73 : 使えないリンク・申請者の条件を満たさない申し込みは拒否し、何も作らず使用回数も増えない
+-- ============================================================================
+
+do $$
+declare
+  v_apps integer := (select count(*) from public.agent_applications);
+  v_used integer := (select used_count from public.agent_registration_links
+                     where id = current_setting('tm.link1_id')::uuid);
+  v_call text := 'select public.treemerce_apply_agent_via_link(p_token => %L, p_agent_display_name => ''CASE73'', '
+                 'p_email => %L, p_accept_agent_terms => %s, p_agent_terms_version => %L)';
+  v_tok  text;
+begin
+  perform set_config('request.jwt.claims',
+    '{"sub":"00000000-0000-4000-8000-000000000072","role":"authenticated"}', true);
+  foreach v_tok in array array['no-such-token', 'case71-expired', 'case71-exhausted',
+                               current_setting('tm.link_revoked_token')] loop
+    perform app.tm_expect_error('CASE73 (使えないリンク ' || left(v_tok, 16) || ')',
+      format(v_call, v_tok, 'tm-case72@treemerce.test', 'true', 'test-1'),
+      'TREEMERCE_REGISTRATION_LINK_UNAVAILABLE');
+  end loop;
+  perform app.tm_expect_error('CASE73 (同意なし)',
+    format(v_call, current_setting('tm.link1_token'), 'tm-case72@treemerce.test', 'false', 'test-1'),
+    'TREEMERCE_TERMS_CONSENT_REQUIRED');
+  perform app.tm_expect_error('CASE73 (古い規約の版)',
+    format(v_call, current_setting('tm.link1_token'), 'tm-case72@treemerce.test', 'true', 'test-0'),
+    'TREEMERCE_TERMS_VERSION_MISMATCH');
+  perform app.tm_expect_error('CASE73 (メール不一致)',
+    format(v_call, current_setting('tm.link1_token'), 'tm-other@treemerce.test', 'true', 'test-1'),
+    'TREEMERCE_APPLICANT_EMAIL_MISMATCH');
+
+  perform set_config('request.jwt.claims',
+    '{"sub":"00000000-0000-4000-8000-000000000071","role":"authenticated"}', true);
+  perform app.tm_expect_error('CASE73 (メール未確認)',
+    format(v_call, current_setting('tm.link1_token'), 'tm-case71@treemerce.test', 'true', 'test-1'),
+    'TREEMERCE_APPLICANT_EMAIL_MISMATCH');
+
+  perform set_config('request.jwt.claims', '', true);
+  perform app.tm_expect_error('CASE73 (未ログイン)',
+    format(v_call, current_setting('tm.link1_token'), 'tm-case72@treemerce.test', 'true', 'test-1'),
+    'TREEMERCE_UNAUTHENTICATED');
+
+  if (select count(*) from public.agent_applications) <> v_apps
+     or (select used_count from public.agent_registration_links
+         where id = current_setting('tm.link1_id')::uuid) <> v_used then
+    raise exception 'CASE73 FAILED: 拒否された申し込みで申請が作られた、または使用回数が増えた';
+  end if;
+  raise notice 'CASE73 OK: 見つからない・期限切れ・上限到達・無効化のリンク、同意なし・古い規約の版・メール不一致・メール未確認・未ログインの申し込みは拒否され、何も作らず使用回数も増えない';
+end $$;
+
+-- ============================================================================
+-- CASE74 : 承認待ちの人・既に代理店の人の申し込みは中立メッセージで何も作らず、使用回数も数えない。
+--          既存の会員 Y (担当 A) が ② で申し込んでも担当は不変。上限に達したら以後は拒否
+-- ============================================================================
+
+do $$
+declare
+  v_y      uuid;
+  v_before uuid;
+  v_hist   integer;
+  v1 jsonb; v2 jsonb; v3 jsonb;
+begin
+  select id into v_y from public.customers where email_normalized = 'tm-test-y@treemerce.test';
+  select assigned_agent_id into v_before from public.customer_assignments
+  where customer_id = v_y and status = 'active';
+  select count(*) into v_hist from public.customer_assignment_history where customer_id = v_y;
+
+  -- 70 (承認待ち) がもう一度
+  perform set_config('request.jwt.claims',
+    '{"sub":"00000000-0000-4000-8000-000000000070","role":"authenticated"}', true);
+  v1 := public.treemerce_apply_agent_via_link(current_setting('tm.link1_token'), 'CASE74 再申込',
+          'tm-case70@treemerce.test', null, true, 'test-1');
+  -- 既に代理店の A (02)
+  perform set_config('request.jwt.claims',
+    '{"sub":"00000000-0000-4000-8000-000000000002","role":"authenticated"}', true);
+  v2 := public.treemerce_apply_agent_via_link(current_setting('tm.link1_token'), 'CASE74 代理店A',
+          'tm-test-a@treemerce.test', null, true, 'test-1');
+
+  if v1 <> v2 or v1 ->> 'application_message' <> app.agent_application_received_message() then
+    raise exception 'CASE74 FAILED: 中立メッセージではない (% / %)', v1, v2;
+  end if;
+  if (select used_count from public.agent_registration_links
+      where id = current_setting('tm.link1_id')::uuid) <> 1
+     or (select count(*) from public.agent_applications
+         where auth_user_id in ('00000000-0000-4000-8000-000000000070', '00000000-0000-4000-8000-000000000002')) <> 1 then
+    raise exception 'CASE74 FAILED: 重複の申し込みで申請が作られた、または使用回数が増えた';
+  end if;
+
+  -- 既存の会員 Y と同じメールアドレスの 73
+  perform set_config('request.jwt.claims',
+    '{"sub":"00000000-0000-4000-8000-000000000073","role":"authenticated"}', true);
+  v3 := public.treemerce_apply_agent_via_link(current_setting('tm.link1_token'), 'CASE74 既存会員',
+          'tm-test-y@treemerce.test', null, true, 'test-1');
+  perform set_config('request.jwt.claims', '', true);
+
+  if (select assigned_agent_id from public.customer_assignments where customer_id = v_y and status = 'active')
+       is distinct from v_before
+     or (select count(*) from public.customer_assignment_history where customer_id = v_y) <> v_hist then
+    raise exception 'CASE74 FAILED: 既存の会員の担当が変わった';
+  end if;
+  if not exists (select 1 from public.agent_applications
+                 where auth_user_id = '00000000-0000-4000-8000-000000000073'
+                   and source = 'admin_link' and inviter_agent_id is null) then
+    raise exception 'CASE74 FAILED: 既存の会員の ② の申請が作られていない';
+  end if;
+  if public.treemerce_resolve_registration_link(current_setting('tm.link1_token')) ->> 'reason' <> 'exhausted' then
+    raise exception 'CASE74 FAILED: 上限 (2) に達したリンクが使える状態のまま';
+  end if;
+
+  perform set_config('request.jwt.claims',
+    '{"sub":"00000000-0000-4000-8000-000000000072","role":"authenticated"}', true);
+  perform app.tm_expect_error('CASE74 (上限到達後)',
+    format('select public.treemerce_apply_agent_via_link(%L, ''CASE74'', ''tm-case72@treemerce.test'', null, true, ''test-1'')',
+           current_setting('tm.link1_token')),
+    'TREEMERCE_REGISTRATION_LINK_UNAVAILABLE');
+  perform set_config('request.jwt.claims', '', true);
+  raise notice 'CASE74 OK: 承認待ち・既に代理店の申し込みは中立メッセージで何も作らず使用回数も数えない。既存の会員が ② で申し込んでも担当・担当履歴は不変。上限に達したリンクは以後拒否';
+end $$;
+
+-- ============================================================================
+-- CASE75 : 承認 → 招待元なし (invited_by NULL) の稼働中の代理店。監査ログに作成・承認 (経路)。
+--          申請者は会員にならない。リンクを無効化したあとでも、届いた申請は審査できる
+-- ============================================================================
+
+do $$
+declare
+  v       jsonb;
+  v_agent public.agents%rowtype;
+  v_app73 uuid := (select id from public.agent_applications
+                   where auth_user_id = '00000000-0000-4000-8000-000000000073' and source = 'admin_link');
+begin
+  perform set_config('request.jwt.claims',
+    '{"sub":"00000000-0000-4000-8000-000000000007","role":"authenticated"}', true);
+  perform public.treemerce_admin_revoke_registration_link(current_setting('tm.link1_id')::uuid, 'CASE75 終了');
+  v := public.treemerce_admin_approve_agent_application(current_setting('tm.case72_app')::uuid, 'CASE75 承認');
+  perform public.treemerce_admin_reject_agent_application(v_app73, 'CASE75 却下');
+
+  if not (public.treemerce_admin_get_agent_application(current_setting('tm.case72_app')::uuid) ->> 'source' = 'admin_link'
+          and public.treemerce_admin_get_agent_application(current_setting('tm.case72_app')::uuid)
+                -> 'registration_link' ->> 'note' = 'CASE70 リンク') then
+    raise exception 'CASE75 FAILED: 運営の詳細に経路・リンクが出ない';
+  end if;
+  perform set_config('request.jwt.claims', '', true);
+
+  select * into v_agent from public.agents where id = (v ->> 'agent_id')::uuid;
+  if v_agent.status <> 'active' or v_agent.invited_by is not null
+     or v_agent.auth_user_id <> '00000000-0000-4000-8000-000000000070'::uuid then
+    raise exception 'CASE75 FAILED: 作られた代理店が不正 (%)', to_jsonb(v_agent);
+  end if;
+  perform set_config('tm.case75_agent', v_agent.id::text, true);
+
+  if not exists (select 1 from public.admin_audit_logs
+                 where action = 'agent.create' and target_id = v_agent.id
+                   and (after_state -> 'invited_by') = 'null'::jsonb
+                   and after_state ->> 'source' = 'application'
+                   and actor_user_id = '00000000-0000-4000-8000-000000000007') then
+    raise exception 'CASE75 FAILED: 代理店作成の監査ログが不正';
+  end if;
+  if not exists (select 1 from public.admin_audit_logs
+                 where action = 'agent_application.approve'
+                   and target_id = current_setting('tm.case72_app')::uuid
+                   and after_state ->> 'source' = 'admin_link' and reason = 'CASE75 承認') then
+    raise exception 'CASE75 FAILED: 承認の監査ログに経路がない';
+  end if;
+  if exists (select 1 from public.customers where email_normalized = 'tm-case70@treemerce.test') then
+    raise exception 'CASE75 FAILED: ② の申請者が会員になっている';
+  end if;
+  if exists (select 1 from public.agents where auth_user_id = '00000000-0000-4000-8000-000000000073') then
+    raise exception 'CASE75 FAILED: 却下した申請で代理店が作られた';
+  end if;
+  raise notice 'CASE75 OK: ② の承認で招待元なし (invited_by NULL) の稼働中の代理店ができ、監査ログに作成と承認 (経路) が残る。申請者は会員にならない。リンクの無効化後も届いた申請は承認・却下できる';
+end $$;
+
+-- ============================================================================
+-- CASE76 : 申請の経路・リンク・招待元は変更できない。経路と招待元の組み合わせは制約で強制。
+--          ② で作られた代理店に招待元は付けられない。リンクの内容・使用回数は直接変更できず、削除もできない
+-- ============================================================================
+
+do $$
+declare v_app text := current_setting('tm.case72_app');
+begin
+  perform app.tm_expect_error('CASE76 (招待元を付ける)',
+    format('update public.agent_applications set inviter_agent_id = %L where id = %L',
+           '10000000-0000-4000-8000-000000000002', v_app), 'TREEMERCE_APPLICATION_INVITER_IMMUTABLE');
+  perform app.tm_expect_error('CASE76 (経路の変更)',
+    format('update public.agent_applications set source = ''referral_link'' where id = %L', v_app),
+    'TREEMERCE_APPLICATION_INVITER_IMMUTABLE');
+  perform app.tm_expect_error('CASE76 (リンクの付け替え)',
+    format('update public.agent_applications set registration_link_id = null where id = %L', v_app),
+    'TREEMERCE_APPLICATION_INVITER_IMMUTABLE');
+
+  perform app.tm_expect_error('CASE76 (① で招待元なし)',
+    'insert into public.agent_applications (auth_user_id, display_name, email, source, terms_version_id) values '
+    '(''00000000-0000-4000-8000-000000000072'', ''x'', ''tm-case72@treemerce.test'', ''referral_link'', '
+    '(select id from public.agent_terms_versions where is_current))',
+    'new row for relation "agent_applications" violates check constraint "agent_applications_source_consistency"');
+  perform app.tm_expect_error('CASE76 (② で招待元あり)',
+    format('insert into public.agent_applications (auth_user_id, display_name, email, source, inviter_agent_id, '
+           'registration_link_id, terms_version_id) values (''00000000-0000-4000-8000-000000000072'', ''x'', '
+           '''tm-case72@treemerce.test'', ''admin_link'', ''10000000-0000-4000-8000-000000000002'', %L, '
+           '(select id from public.agent_terms_versions where is_current))', current_setting('tm.link1_id')),
+    'new row for relation "agent_applications" violates check constraint "agent_applications_source_consistency"');
+
+  perform app.tm_expect_error('CASE76 (作成後に招待元を付ける)',
+    format('update public.agents set invited_by = %L where id = %L',
+           '10000000-0000-4000-8000-000000000002', current_setting('tm.case75_agent')),
+    'TREEMERCE_INVITED_BY_CREATE_ONLY');
+
+  perform app.tm_expect_error('CASE76 (リンクのメモの変更)',
+    format('update public.agent_registration_links set note = ''改変'' where id = %L', current_setting('tm.link1_id')),
+    'TREEMERCE_REGISTRATION_LINK_IMMUTABLE');
+  perform app.tm_expect_error('CASE76 (使用回数の直接変更)',
+    format('update public.agent_registration_links set used_count = 0 where id = %L', current_setting('tm.link1_id')),
+    'TREEMERCE_REGISTRATION_LINK_WRITE_DENIED');
+  perform app.tm_expect_error('CASE76 (リンクの削除)',
+    format('delete from public.agent_registration_links where id = %L', current_setting('tm.link1_id')),
+    'TREEMERCE_REGISTRATION_LINK_DELETE_DENIED');
+  raise notice 'CASE76 OK: 申請の経路・リンク・招待元は変更不可で、① は招待元必須・② は招待元なしを制約で強制。② の代理店に後から招待元は付けられない。リンクの内容・使用回数は直接変更できず削除もできない (postgres でも不可)';
+end $$;
+
+-- ============================================================================
+-- CASE77 : ② で作られた代理店は既存の系統の傘下に現れない (自分だけの系統の頂点)。
+--          コンテキストを張らない SECURITY DEFINER 関数からはリンクを作れない (session_user 判定)
+-- ============================================================================
+
+select set_config('request.jwt.claims',
+  '{"sub":"00000000-0000-4000-8000-000000000002","role":"authenticated"}', true);
+set local role authenticated;
+
+do $$
+begin
+  if public.treemerce_community_map(null)::text like '%CASE72 代理店%' then
+    raise exception 'CASE77 FAILED: ② の代理店が A の傘下に現れた';
+  end if;
+end $$;
+
+reset role;
+
+select set_config('request.jwt.claims',
+  '{"sub":"00000000-0000-4000-8000-000000000070","role":"authenticated"}', true);
+set local role authenticated;
+
+do $$
+declare v_map jsonb;
+begin
+  v_map := public.treemerce_community_map(null);
+  if jsonb_array_length(v_map -> 'nodes') <> 1 or v_map::text not like '%CASE72 代理店%' then
+    raise exception 'CASE77 FAILED: ② の代理店のコミュニティマップが自分だけになっていない (%)', v_map;
+  end if;
+end $$;
+
+reset role;
+select set_config('request.jwt.claims', '', true);
+
+do $$
+declare
+  v_orig text := session_user;
+  v_ok   boolean := false;
+begin
+  if current_setting('is_superuser') <> 'on' then
+    raise notice 'CASE77 OK: ② の代理店は既存の系統の傘下に現れない (セッションユーザーを切り替える確認は superuser でないため SKIPPED)';
+    return;
+  end if;
+  perform set_config('session_authorization', 'tm_test_session', true);
+  begin
+    perform app.tm_test_definer_exec(format(
+      'insert into public.agent_registration_links (token_sha256) values (%L)', repeat('a', 64)));
+  exception when others then
+    v_ok := sqlstate = '42501' and sqlerrm like 'TREEMERCE_REGISTRATION_LINK_WRITE_DENIED%';
+  end;
+  perform set_config('session_authorization', v_orig, true);
+  if not v_ok then
+    raise exception 'CASE77 FAILED: コンテキストを張らない SECURITY DEFINER 関数からリンクを作れた';
+  end if;
+  raise notice 'CASE77 OK: ② の代理店は既存の系統の傘下に現れない (自分だけの系統)。コンテキストを張らない SECURITY DEFINER 関数からはリンクを作れない (session_user 判定)';
+end $$;
+
 drop function app.tm_expect_error(text, text, text);
 
 drop function app.tm_test_definer_exec(text);
@@ -6201,7 +6705,7 @@ drop role tm_test_session;
 do $$
 begin
   raise notice '==========================================';
-  raise notice '  TREEMERCE: ALL 69 CASES PASSED (+EXTRA)';
+  raise notice '  TREEMERCE: ALL 77 CASES PASSED (+EXTRA)';
   raise notice '==========================================';
 end $$;
 

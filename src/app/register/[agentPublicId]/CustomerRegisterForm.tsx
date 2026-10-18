@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState, useSyncExternalStore } from "react";
 
+import { AgentPledges, NO_PLEDGES, allPledged, type PledgeState } from "@/components/AgentPledges";
 import { Chip, PrimaryButton, ProgressBar } from "@/components/mobile/primitives";
 import {
   AGE_GROUPS,
@@ -51,18 +52,6 @@ const EMPTY_FORM: FormState = {
   gender: "",
   prefecture: "",
   customer_type: "individual",
-};
-
-/**
- * 申込時の同意・誓約事項 (代理店規約の本文の末尾と同じ3項目)。それぞれ独立したチェックで、
- * 3つすべてにチェックしたときだけ申し込める (DB には p_accept_agent_terms = true として送る)。
- */
-const PLEDGES = ["terms_and_privacy", "confidentiality", "incident_report"] as const;
-type Pledge = (typeof PLEDGES)[number];
-const NO_PLEDGES: Record<Pledge, boolean> = {
-  terms_and_privacy: false,
-  confidentiality: false,
-  incident_report: false,
 };
 
 const draftKey = (agentPublicId: string) => `treemerce:register-draft:${agentPublicId}`;
@@ -195,8 +184,8 @@ function RegisterFormInner({
   const [form, setForm] = useState<FormState>(draft?.form ?? EMPTY_FORM);
   // ログインから戻ってきた場合は「申し込む」を選んだ状態で再開する。規約への同意は改めてチェックしてもらう
   const [applyAgent, setApplyAgent] = useState(Boolean(draft));
-  const [pledges, setPledges] = useState<Record<Pledge, boolean>>(NO_PLEDGES);
-  const acceptTerms = PLEDGES.every((p) => pledges[p]);
+  const [pledges, setPledges] = useState<PledgeState>(NO_PLEDGES);
+  const acceptTerms = allPledged(pledges);
   const [agentDisplayName, setAgentDisplayName] = useState(draft?.agentDisplayName ?? "");
   const [result, setResult] = useState<RegisterMemberResult | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -489,44 +478,7 @@ function RegisterFormInner({
                       />
                     </label>
 
-                    <fieldset className="space-y-3">
-                      <legend className="mb-1 text-[13px] font-semibold text-text-primary">
-                        申込時の同意・誓約事項 (すべてにチェックしてください)
-                      </legend>
-                      {PLEDGES.map((key) => (
-                        <label key={key} className="flex cursor-pointer items-start gap-3">
-                          <input
-                            type="checkbox"
-                            checked={pledges[key]}
-                            onChange={(e) => setPledges((prev) => ({ ...prev, [key]: e.target.checked }))}
-                            className="mt-1 h-4 w-4 shrink-0 accent-[var(--brand)]"
-                          />
-                          <span className="text-[14px] leading-6 text-text-primary">
-                            {key === "terms_and_privacy" ? (
-                              <>
-                                「
-                                <a
-                                  href="/legal/agent-terms"
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="font-semibold text-brand underline"
-                                >
-                                  代理店登録および個人情報の取り扱いに関する同意規約
-                                </a>
-                                」と「プライバシーポリシー」を読み、内容を理解し、同意します。
-                              </>
-                            ) : key === "confidentiality" ? (
-                              "業務上知り得た個人情報・秘密情報を適切に管理し、目的外利用、無断提供・公開および漏えいを行わないことを誓約します。"
-                            ) : (
-                              "情報の漏えい、紛失、誤送信等が発生した場合、またはそのおそれを認識した場合は、直ちに運営事業者へ報告することに同意します。"
-                            )}
-                          </span>
-                        </label>
-                      ))}
-                      <p className="text-[12px] text-text-secondary">
-                        対象の規約: {terms.title} (第 {terms.version} 版)
-                      </p>
-                    </fieldset>
+                    <AgentPledges terms={terms} value={pledges} onChange={setPledges} />
                   </div>
                 )
               ) : null}

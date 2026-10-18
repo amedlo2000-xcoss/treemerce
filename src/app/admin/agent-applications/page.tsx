@@ -13,6 +13,7 @@ import {
 } from "@/components/ui";
 import { requireSuperAdminPage } from "@/lib/auth/viewer";
 import {
+  AGENT_APPLICATION_SOURCE_LABELS,
   AGENT_APPLICATION_STATUSES,
   AGENT_APPLICATION_STATUS_BADGE,
   AGENT_APPLICATION_STATUS_LABELS,
@@ -58,7 +59,7 @@ export default async function AdminAgentApplicationsPage({
     <>
       <PageHeader
         title="代理店申請"
-        description="紹介リンクの登録フォームから届いた代理店登録のお申し込みを審査します。承認すると代理店が作られ、却下した場合は会員のままです。承認・却下の理由は監査ログに記録され、申請者本人には表示されません。"
+        description="紹介リンクの登録フォームと、運営の代理店登録リンクから届いた代理店登録のお申し込みを審査します。承認すると代理店が作られ、却下した場合は会員のままです。承認・却下の理由は監査ログに記録され、申請者本人には表示されません。"
       />
 
       <nav className="flex flex-wrap gap-2" aria-label="状態で絞り込み">
@@ -80,7 +81,7 @@ export default async function AdminAgentApplicationsPage({
       {applications.length === 0 ? (
         <EmptyState title="該当する申請はありません" />
       ) : (
-        <DataTable headers={["申請日時", "代理店名", "メールアドレス", "招待元 (リンクの代理店)", "状態", "審査日時"]}>
+        <DataTable headers={["申請日時", "代理店名", "メールアドレス", "経路", "招待元", "状態", "審査日時"]}>
           {applications.map((a) => (
             <tr key={a.id}>
               <td className={`${TD} whitespace-nowrap`}>{formatDateTime(a.created_at)}</td>
@@ -91,13 +92,19 @@ export default async function AdminAgentApplicationsPage({
               </td>
               <td className={TD}>{a.email}</td>
               <td className={TD}>
+                {AGENT_APPLICATION_SOURCE_LABELS[a.source] ?? a.source}
+                {a.registration_link?.note ? (
+                  <div className="text-[12px] text-text-secondary">{a.registration_link.note}</div>
+                ) : null}
+              </td>
+              <td className={TD}>
                 {a.inviter ? (
                   <>
                     <Mono>{a.inviter.public_id}</Mono>
                     <div className="text-text-primary">{a.inviter.display_name}</div>
                   </>
                 ) : (
-                  "—"
+                  "なし (運営からの直接登録)"
                 )}
               </td>
               <td className={TD}>

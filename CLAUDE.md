@@ -14,6 +14,7 @@
    設定し、作成後は再設定も「未設定からの設定」も DB 層 (`agents_invited_by_immutable`
    トリガ) で拒否する。代理店申請の招待元は「申請に使われたリンクの代理店」で申請時点に
    固定され (`agent_applications.inviter_agent_id`、変更不可)、承認でそのまま `invited_by` になる。
+   運営の代理店登録リンクからの申請は招待元なし (NULL) で固定される (経路 `source` ごとに CHECK 制約で強制、0030)。
 
 3. **代理店の登録経路 (`invited_by` の連なり) と顧客の担当代理店 (`customer_assignments`)
    は完全に別データ。** 片方の変更が他方を自動的に変更してはならない。
@@ -58,6 +59,7 @@
 | --- | --- |
 | 代理店の作成・招待経路の確定 | `app.create_agent()` (0028、直接 EXECUTE 不可)。呼び出し元は次の2つだけ: 申請の承認 `public.treemerce_admin_approve_agent_application()` (招待元は申請に固定された値で、引数で受け取らない) と、super_admin の直接作成 `public.treemerce_register_agent()` (招待元の明示が必須: `'agent'` + 代理店ID か `'none'`)。どちらも監査ログ `agent.create` に実行者・日時・招待元・経路が残る。一般ユーザーが代理店を作る経路は無い |
 | 紹介リンクからの登録 (会員 + 代理店申請) | `public.treemerce_register_member()` (0028)。全員を会員として `treemerce_register_customer()` で登録し、「申し込む」「規約に同意」の両方が true のときだけ申請を作る (ログイン・メール確認済み・規約の現行の版が必須)。IP・ブラウザ情報は API ルートがリクエストヘッダーから渡す |
+| 運営の代理店登録リンク (入口 ②) | `public.treemerce_admin_create_registration_link()` / `treemerce_admin_list_registration_links()` / `treemerce_admin_revoke_registration_link()` (super_admin。無効化は理由必須。トークンはハッシュのみ保存し発行時に一度だけ返す) / `treemerce_resolve_registration_link()` (公開) / `treemerce_apply_agent_via_link()` (0030。代理店の申し込みだけで会員登録は行わない。招待元なし・使用回数と有効期限を強制)。申請の作成は①②とも `app.submit_agent_application()` を通り、監査ログ `agent_application.submit` に残る |
 | 代理店申請の審査 | `public.treemerce_admin_list_agent_applications()` / `treemerce_admin_get_agent_application()` / `treemerce_admin_approve_agent_application()` / `treemerce_admin_reject_agent_application()` (super_admin、理由必須。却下理由は監査ログにのみ保存) |
 | 本人の申請状況 | `public.treemerce_my_agent_application()` (状態と中立的な文面のみ。却下理由・招待元は返さない) |
 | 代理店規約 | `public.treemerce_current_agent_terms()` (公開・STABLE)。版は `agent_terms_versions` (公開は DB 管理者が SQL で行う)、同意は `agent_terms_acceptances` (追記専用) |

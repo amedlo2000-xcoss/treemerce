@@ -765,6 +765,8 @@ export type RegisterMemberResult = {
 export type AdminAgentApplication = {
   id: string;
   status: AgentApplicationStatus;
+  /** 申請の経路 (0030)。referral_link = 紹介リンク (招待元あり)、admin_link = 運営の登録リンク (招待元なし) */
+  source: "referral_link" | "admin_link";
   auth_user_id: string;
   display_name: string;
   email: string;
@@ -774,6 +776,7 @@ export type AdminAgentApplication = {
   reviewed_by: string | null;
   created_agent_id: string | null;
   inviter: { id: string; public_id: string; display_name: string; status: AgentStatus } | null;
+  registration_link: { id: string; note: string | null; state: string } | null;
   terms: {
     version: string;
     title: string;
@@ -787,4 +790,19 @@ export type AdminAgentApplication = {
 
 export type AdminAgentApplicationDetail = AdminAgentApplication & {
   audit: { action: string; actor_user_id: string | null; actor_role: string; reason: string | null; created_at: string }[];
+};
+
+/** treemerce_admin_list_registration_links (super_admin。トークンは含まない) */
+export type AdminRegistrationLink = {
+  id: string;
+  note: string | null;
+  status: "active" | "revoked";
+  state: "active" | "expired" | "exhausted" | "revoked";
+  max_uses: number | null;
+  used_count: number;
+  expires_at: string | null;
+  created_at: string;
+  created_by: string | null;
+  revoked_at: string | null;
+  applications: { pending: number; approved: number; rejected: number };
 };
