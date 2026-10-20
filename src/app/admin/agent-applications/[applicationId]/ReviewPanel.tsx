@@ -105,10 +105,14 @@ export function ReviewPanel({
       </p>
 
       <Field
-        label={action === "approve" ? "承認の理由 (監査ログに記録)" : "却下の理由 (監査ログに記録・本人には表示しない)"}
+        label={
+          action === "approve"
+            ? "承認の理由 (任意・監査ログに記録。空のときは「（理由の入力なし）」と記録)"
+            : "却下の理由 (必須・監査ログに記録・本人には表示しない)"
+        }
       >
         <textarea
-          required
+          required={action === "reject"}
           rows={3}
           maxLength={1000}
           value={reason}
@@ -145,7 +149,9 @@ export function ReviewPanel({
       ) : (
         <button
           type="submit"
-          disabled={pending || reason.trim().length === 0 || (action === "approve" && !canApprove)}
+          disabled={
+            pending || (action === "approve" ? !canApprove : reason.trim().length === 0)
+          }
           className={BUTTON_CLASS}
         >
           {pending ? "処理中…" : action === "approve" ? "承認する (確認へ)" : "却下する"}

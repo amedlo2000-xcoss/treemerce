@@ -172,7 +172,7 @@ export default async function AdminAgentApplicationPage({
       {a.status === "pending" ? (
         <Card
           title="承認・却下"
-          description="理由は必須です。監査ログに記録され、申請者本人には表示されません (本人には中立的な文面だけが表示されます)。"
+          description="却下は理由が必須です (承認は任意)。理由は監査ログに記録され、申請者本人には表示されません (本人には中立的な文面だけが表示されます)。"
         >
           <ReviewPanel
             applicationId={a.id}
