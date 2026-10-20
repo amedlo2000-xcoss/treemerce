@@ -800,6 +800,9 @@ export type AdminAgentApplicationDetail = AdminAgentApplication & {
 /** 代理店登録リンクの状態 (DB の app.registration_link_state と同じ) */
 export type RegistrationLinkState = "active" | "expired" | "exhausted" | "revoked" | "issuer_inactive";
 
+/** treemerce_my_inviter_profile (代理店本人、0009)。招待元の代理店名だけ。招待元がいなければ found = false */
+export type MyInviterProfile = { found: true; display_name: string } | { found: false };
+
 /** treemerce_resolve_registration_link (公開)。紹介者は代理店名と代理店IDだけ。運営のリンクは inviter = null */
 export type RegistrationLinkResolution =
   | { valid: true; inviter: { public_id: string; display_name: string } | null }

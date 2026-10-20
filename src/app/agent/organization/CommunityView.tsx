@@ -36,7 +36,7 @@ const STATUS_TONE = {
   withdrawn: "neutral",
 } as const;
 
-function AgentProfileCard({ item }: { item: FlatAgent }) {
+function AgentProfileCard({ item, selfInviterLabel }: { item: FlatAgent; selfInviterLabel: string }) {
   const { node } = item;
   return (
     <div className="h-full [&>section]:h-full">
@@ -63,7 +63,7 @@ function AgentProfileCard({ item }: { item: FlatAgent }) {
             <div className="rounded-2xl border border-border-soft px-3 py-2.5">
               <p className="text-[12px] text-text-secondary">招待元 (登録経路)</p>
               <p className="mt-0.5 text-[14px] font-medium text-text-primary">
-                {node.is_self ? "自分" : (item.parentName ?? "—")}
+                {node.is_self ? selfInviterLabel : (item.parentName ?? "—")}
               </p>
             </div>
           </div>
@@ -112,7 +112,14 @@ function TreeNodeItem({
   );
 }
 
-export function CommunityView({ roots }: { roots: CommunityTreeNode[] }) {
+export function CommunityView({
+  roots,
+  selfInviterLabel,
+}: {
+  roots: CommunityTreeNode[];
+  /** 自分のカードの招待元。「紹介者：○○さん」か「運営からの直接登録」 (代理店名以外は受け取らない) */
+  selfInviterLabel: string;
+}) {
   const [view, setView] = useState<"tree" | "card">("tree");
   const [selected, setSelected] = useState<FlatAgent | null>(null);
   const flat = useMemo(() => flatten(roots), [roots]);
@@ -156,12 +163,12 @@ export function CommunityView({ roots }: { roots: CommunityTreeNode[] }) {
         <SwipeDeck
           items={flat}
           keyFor={(item) => item.node.agent_id}
-          renderCard={(item) => <AgentProfileCard item={item} />}
+          renderCard={(item) => <AgentProfileCard item={item} selfInviterLabel={selfInviterLabel} />}
         />
       )}
 
       <BottomSheet open={!!selected} onClose={() => setSelected(null)} title={selected?.node.display_name}>
-        {selected ? <AgentProfileCard item={selected} /> : null}
+        {selected ? <AgentProfileCard item={selected} selfInviterLabel={selfInviterLabel} /> : null}
       </BottomSheet>
     </div>
   );

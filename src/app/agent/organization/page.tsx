@@ -4,7 +4,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { CommerceMapTree } from "@/components/CommerceMapTree";
 import { EmptyState, MobilePageHeader, Surface, BigStat } from "@/components/mobile/primitives";
 import { requireAgentPage } from "@/lib/auth/viewer";
-import type { CommerceMap, CommunityMap, CommunityMapNode } from "@/lib/domain/types";
+import type { CommerceMap, CommunityMap, CommunityMapNode, MyInviterProfile } from "@/lib/domain/types";
 
 import { CommunityView, type CommunityTreeNode } from "./CommunityView";
 
@@ -29,9 +29,15 @@ function buildCommunityTree(
 }
 
 async function CommunityTab({ supabase }: { supabase: SupabaseClient }) {
-  const { data } = await supabase.rpc("treemerce_community_map", { p_root_agent_id: null });
+  const [{ data }, { data: inviterData }] = await Promise.all([
+    supabase.rpc("treemerce_community_map", { p_root_agent_id: null }),
+    // 自分の招待元は代理店名だけを返す既存の RPC (0009) で取る。招待元がいなければ found = false
+    supabase.rpc("treemerce_my_inviter_profile"),
+  ]);
   const map = data as CommunityMap | null;
   const roots = map ? buildCommunityTree(map.nodes, map.edges) : [];
+  const inviter = inviterData as MyInviterProfile | null;
+  const selfInviterLabel = inviter?.found ? `紹介者：${inviter.display_name}さん` : "運営からの直接登録";
 
   return (
     <>
@@ -43,7 +49,7 @@ async function CommunityTab({ supabase }: { supabase: SupabaseClient }) {
           <EmptyState title="表示できる代理店がありません" />
         </Surface>
       ) : (
-        <CommunityView roots={roots} />
+        <CommunityView roots={roots} selfInviterLabel={selfInviterLabel} />
       )}
     </>
   );
