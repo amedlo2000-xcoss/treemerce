@@ -9,7 +9,7 @@ const REASONS: Record<string, string> = {
   inactive: "この招待URLは無効化されています。",
   expired: "この招待URLは有効期限が切れています。",
   exhausted: "この招待URLは利用上限に達しています。",
-  inviter_unavailable: "招待元の代理店が現在ご利用いただけません。",
+  inviter_unavailable: "招待元のオブザーバーが現在ご利用いただけません。",
 };
 
 /**
@@ -41,7 +41,7 @@ export default async function InvitePage({ params }: { params: Promise<{ code: s
             {REASONS[resolved?.reason ?? ""] ?? "この招待URLは利用できません。"}
           </Notice>
           <LinkButton href="/onboarding" variant="secondary">
-            代理店登録について
+            オブザーバー登録について
           </LinkButton>
         </div>
       </div>

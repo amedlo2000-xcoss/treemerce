@@ -43,7 +43,7 @@ export function AgentOrderSummaryCard({ summary }: { summary: AgentOrderSummary 
 
       <dl className="divide-y divide-border-soft">
         <div className="flex items-center justify-between gap-3 py-2.5">
-          <dt className="text-[13px] text-text-secondary">傘下代理店の売上 (匿名集計)</dt>
+          <dt className="text-[13px] text-text-secondary">傘下オブザーバーの売上 (匿名集計)</dt>
           <dd>
             <AggregateValue value={summary.subtree} />
           </dd>

@@ -70,7 +70,7 @@ export default async function AgentDashboard() {
             <BigStat label="担当顧客" value={customerCount ?? 0} />
           </Surface>
           <Surface className="!p-4">
-            <BigStat label="傘下代理店" value={downlineCount} />
+            <BigStat label="傘下オブザーバー" value={downlineCount} />
           </Surface>
           <Surface className="!p-4">
             <BigStat label="今月新規" value={newThisMonthCount ?? 0} />

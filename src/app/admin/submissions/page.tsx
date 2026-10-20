@@ -69,7 +69,7 @@ export default async function AdminSubmissionsPage({
     <>
       <PageHeader
         title="持込み申請"
-        description="代理店からの商品の持込み申請を審査します。承認すると生産者と商品が非公開の下書きで作られ、価格・在庫を確定してから公開します。"
+        description="オブザーバーからの商品の持込み申請を審査します。承認すると生産者と商品が非公開の下書きで作られ、価格・在庫を確定してから公開します。"
       />
 
       <nav className="flex flex-wrap gap-2" aria-label="ステータスで絞り込み">
@@ -109,7 +109,7 @@ export default async function AdminSubmissionsPage({
       </form>
       {agentFilter ? (
         <p className="text-[13px] text-text-secondary">
-          代理店 {agentName ?? ""} の申請のみ表示中。{" "}
+          オブザーバー {agentName ?? ""} の申請のみ表示中。{" "}
           <Link href={statusFilter ? `/admin/submissions?status=${statusFilter}` : "/admin/submissions"} className="text-brand hover:underline">
             絞り込みを解除
           </Link>
@@ -121,7 +121,7 @@ export default async function AdminSubmissionsPage({
       {submissions.length === 0 ? (
         <EmptyState title="該当する申請はありません" />
       ) : (
-        <DataTable headers={["申請番号", "商品名", "カテゴリ", "代理店", "生産者", "希望価格", "画像", "状態", "申請日時"]}>
+        <DataTable headers={["申請番号", "商品名", "カテゴリ", "オブザーバー", "生産者", "希望価格", "画像", "状態", "申請日時"]}>
           {submissions.map((s) => (
             <tr key={s.id}>
               <td className={`${TD} whitespace-nowrap`}>

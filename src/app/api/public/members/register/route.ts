@@ -49,7 +49,7 @@ export async function POST(request: Request) {
 
   const body = await readJson<Body>(request);
   if (!body?.agent_public_id?.trim()) {
-    return fail("TREEMERCE_INVALID_INPUT", "登録元の代理店IDが指定されていません。", 400);
+    return fail("TREEMERCE_INVALID_INPUT", "登録元のオブザーバーIDが指定されていません。", 400);
   }
   if (!body.full_name?.trim()) {
     return fail("TREEMERCE_INVALID_INPUT", "氏名は必須です。", 400);
@@ -70,12 +70,12 @@ export async function POST(request: Request) {
   if (applyAgent && !acceptTerms) {
     return fail(
       "TREEMERCE_TERMS_CONSENT_REQUIRED",
-      "代理店登録のお申し込みには代理店規約への同意が必要です。",
+      "オブザーバー登録のお申し込みにはオブザーバー規約への同意が必要です。",
       400,
     );
   }
   if (applyAgent && !body.agent_display_name?.trim()) {
-    return fail("TREEMERCE_INVALID_INPUT", "代理店名は必須です。", 400);
+    return fail("TREEMERCE_INVALID_INPUT", "オブザーバー名は必須です。", 400);
   }
 
   const prefecture =

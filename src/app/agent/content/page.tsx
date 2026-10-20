@@ -105,7 +105,7 @@ export default async function ContentPage() {
           <ContentCard
             icon={Compass}
             title="活動方法"
-            description="登録URLの発行から顧客・代理店案内までの進め方。"
+            description="登録URLの発行から顧客・オブザーバー案内までの進め方。"
           />
           <ContentCard
             icon={LifeBuoy}

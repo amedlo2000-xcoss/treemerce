@@ -39,8 +39,8 @@ export function InvitationPanel({ origin }: { origin: string }) {
   return (
     <div className="space-y-3">
       <p className="text-[13px] leading-5 text-text-secondary">
-        発行した招待URLから登録した代理店は、あなたを招待元として記録されます。
-        招待元は1代理店につき1つで、登録時に一度だけ確定します。
+        発行した招待URLから登録したオブザーバーは、あなたを招待元として記録されます。
+        招待元は1オブザーバーにつき1つで、登録時に一度だけ確定します。
         {origin ? null : ""}
       </p>
       <div className="flex flex-wrap gap-2">

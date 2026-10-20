@@ -176,13 +176,13 @@ export default async function AdminCustomerDetailPage({
           </Card>
 
           <Card
-            title="現在の担当代理店"
-            description="担当代理店は初回登録時に確定します。変更は下部フォームから super_admin が行います。"
+            title="現在の担当オブザーバー"
+            description="担当オブザーバーは初回登録時に確定します。変更は下部フォームから super_admin が行います。"
           >
             {currentAssignment?.agent ? (
               <DetailList>
                 <DetailRow
-                  label="代理店"
+                  label="オブザーバー"
                   value={
                     <Link
                       href={`/admin/agents/${currentAssignment.agent.id}`}
@@ -293,7 +293,7 @@ export default async function AdminCustomerDetailPage({
           </Card>
 
           <Card
-            title="担当代理店を変更する"
+            title="担当オブザーバーを変更する"
             description="この操作は super_admin のみ実行できます。理由の入力は必須です。"
           >
             {currentAssignment?.agent ? (

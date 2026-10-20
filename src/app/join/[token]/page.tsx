@@ -7,14 +7,14 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 import { JoinForm } from "./JoinForm";
 
-export const metadata: Metadata = { title: "代理店登録のお申し込み | TREEMERCE", robots: { index: false } };
+export const metadata: Metadata = { title: "オブザーバー登録のお申し込み | TREEMERCE", robots: { index: false } };
 
 const REASONS: Record<string, string> = {
-  not_found: "この代理店登録リンクは見つかりません。",
-  expired: "この代理店登録リンクは有効期限が切れています。",
-  exhausted: "この代理店登録リンクは利用の上限に達しています。",
-  revoked: "この代理店登録リンクは無効化されています。",
-  unavailable: "この代理店登録リンクは現在ご利用いただけません。",
+  not_found: "このオブザーバー登録リンクは見つかりません。",
+  expired: "このオブザーバー登録リンクは有効期限が切れています。",
+  exhausted: "このオブザーバー登録リンクは利用の上限に達しています。",
+  revoked: "このオブザーバー登録リンクは無効化されています。",
+  unavailable: "このオブザーバー登録リンクは現在ご利用いただけません。",
 };
 
 /**
@@ -40,18 +40,18 @@ export default async function JoinPage({ params }: { params: Promise<{ token: st
         <Link href="/" className="font-mono text-[11px] tracking-widest text-text-secondary">
           TREEMERCE
         </Link>
-        <h1 className="text-[24px] font-bold tracking-tight text-text-primary">代理店登録のお申し込み</h1>
+        <h1 className="text-[24px] font-bold tracking-tight text-text-primary">オブザーバー登録のお申し込み</h1>
 
         {!link?.valid ? (
           <div className="space-y-4 rounded-[24px] border border-border-soft bg-surface p-6 shadow-[var(--shadow-card)]">
             <Notice tone="warning">
-              {REASONS[link?.reason ?? ""] ?? "この代理店登録リンクは利用できません。"}
+              {REASONS[link?.reason ?? ""] ?? "このオブザーバー登録リンクは利用できません。"}
             </Notice>
             <p className="text-[13px] leading-6 text-text-secondary">
-              お手数ですが、リンクを受け取った代理店または運営事務局までお問い合わせください。
+              お手数ですが、リンクを受け取ったオブザーバーまたは運営事務局までお問い合わせください。
             </p>
             <LinkButton href="/onboarding" variant="secondary">
-              代理店登録について
+              オブザーバー登録について
             </LinkButton>
           </div>
         ) : (
@@ -72,8 +72,8 @@ export default async function JoinPage({ params }: { params: Promise<{ token: st
               </p>
               <p className="mt-1 text-[12px] leading-5 text-text-secondary">
                 {link.inviter
-                  ? "承認されると、この代理店の紹介で登録した代理店になります。紹介者はあとから変更できません。"
-                  : "承認されると、運営直下の代理店になります。紹介者はあとから変更できません。"}
+                  ? "承認されると、このオブザーバーの紹介で登録したオブザーバーになります。紹介者はあとから変更できません。"
+                  : "承認されると、運営直下のオブザーバーになります。紹介者はあとから変更できません。"}
               </p>
             </div>
 

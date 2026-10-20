@@ -50,7 +50,7 @@ export default async function OnboardingPage({
         <Link href="/" className="font-mono text-[11px] tracking-widest text-text-secondary">
           TREEMERCE
         </Link>
-        <h1 className="text-[26px] font-bold tracking-tight text-text-primary">代理店登録について</h1>
+        <h1 className="text-[26px] font-bold tracking-tight text-text-primary">オブザーバー登録について</h1>
 
         {viewer.agent ? (
           <Notice tone="warning">
@@ -67,15 +67,15 @@ export default async function OnboardingPage({
         {application?.state === "received" && !viewer.agent ? null : (
           <div className="space-y-4 rounded-[24px] border border-border-soft bg-surface p-6 shadow-[var(--shadow-card)]">
             <p className="text-[14px] leading-7 text-text-primary">
-              代理店登録は、代理店または運営事務局から受け取った代理店登録リンク、もしくは代理店の
+              オブザーバー登録は、オブザーバーまたは運営事務局から受け取ったオブザーバー登録リンク、もしくはオブザーバーの
               紹介リンクの登録フォームからお申し込みいただけます。フォームで同意・誓約事項にチェックしてお申し込みください。
-              運営が確認したうえで、代理店としてご利用いただけるようになります。
+              運営が確認したうえで、オブザーバーとしてご利用いただけるようになります。
             </p>
             {registerHref ? (
               <LinkButton href={registerHref}>登録フォームへ進む</LinkButton>
             ) : (
               <p className="text-[13px] leading-6 text-text-secondary">
-                リンクがお手元にない場合は、紹介を受けた代理店または運営事務局までお問い合わせください。
+                リンクがお手元にない場合は、紹介を受けたオブザーバーまたは運営事務局までお問い合わせください。
               </p>
             )}
           </div>

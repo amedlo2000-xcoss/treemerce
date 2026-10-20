@@ -22,14 +22,14 @@ import { EmptyState, Notice, PageHeader, SectionTitle, Stat, formatDateTime } fr
 import { requireAdminPage } from "@/lib/auth/viewer";
 
 const QUICK_LINKS: { href: string; title: string; description: string; icon: LucideIcon }[] = [
-  { href: "/admin/agents", title: "代理店管理", description: "招待経路・ステータスの確認", icon: Users },
-  { href: "/admin/agent-applications", title: "代理店申請", description: "代理店登録のお申し込みの審査", icon: UserPlus },
-  { href: "/admin/agent-registration-links", title: "代理店登録リンク", description: "運営からの代理店登録リンクの発行・無効化", icon: Link2 },
+  { href: "/admin/agents", title: "オブザーバー管理", description: "招待経路・ステータスの確認", icon: Users },
+  { href: "/admin/agent-applications", title: "オブザーバー申請", description: "オブザーバー登録のお申し込みの審査", icon: UserPlus },
+  { href: "/admin/agent-registration-links", title: "オブザーバー登録リンク", description: "運営からのオブザーバー登録リンクの発行・無効化", icon: Link2 },
   { href: "/admin/customers", title: "商品購入者管理", description: "購入者情報の確認・編集", icon: User },
-  { href: "/admin/assignments", title: "顧客担当管理", description: "担当代理店の確認・変更", icon: ArrowRightLeft },
+  { href: "/admin/assignments", title: "顧客担当管理", description: "担当オブザーバーの確認・変更", icon: ArrowRightLeft },
   { href: "/admin/orders", title: "注文管理", description: "入金確認・発送・キャンセル", icon: ShoppingBag },
   { href: "/admin/products", title: "商品管理", description: "商品の登録・価格・在庫・公開", icon: Package },
-  { href: "/admin/submissions", title: "持込み申請", description: "代理店からの商品持込みの審査", icon: Inbox },
+  { href: "/admin/submissions", title: "持込み申請", description: "オブザーバーからの商品持込みの審査", icon: Inbox },
   { href: "/admin/analytics", title: "客層分析", description: "全体・部分木の匿名集計", icon: BarChart3 },
   { href: "/admin/audit-logs", title: "監査ログ", description: "管理者操作の記録", icon: ClipboardList },
   { href: "/admin/settings", title: "ショップ設定", description: "振込先・特商法表記・注文受付", icon: Settings },
@@ -78,19 +78,19 @@ export default async function AdminDashboard({
     <>
       <PageHeader
         title="管理ダッシュボード"
-        description="代理店の登録経路と、購入者の担当関係は別々のメニューで管理します。"
+        description="オブザーバーの登録経路と、購入者の担当関係は別々のメニューで管理します。"
       />
 
       {error === "super_admin_only" ? (
         <Notice tone="danger">
-          代理店管理・購入者管理・顧客担当管理は super_admin 専用です。この操作を行うには
+          オブザーバー管理・購入者管理・顧客担当管理は super_admin 専用です。この操作を行うには
           super_admin 権限が必要です。
         </Notice>
       ) : null}
 
       <div className="grid gap-3 sm:grid-cols-3 md:gap-4">
         <Stat
-          label="代理店"
+          label="オブザーバー"
           value={agents.count ?? 0}
           hint="登録経路 = invited_by"
           icon={<Users size={18} />}
@@ -112,7 +112,7 @@ export default async function AdminDashboard({
         {pendingApplications !== null ? (
           <Link href="/admin/agent-applications?status=pending" className="block transition-opacity hover:opacity-90">
             <Stat
-              label="承認待ちの代理店申請"
+              label="承認待ちのオブザーバー申請"
               value={pendingApplications}
               hint="紹介リンクの登録フォームから"
               icon={<UserPlus size={18} />}
@@ -124,7 +124,7 @@ export default async function AdminDashboard({
             <Stat
               label="審査待ちの持込み申請"
               value={pendingSubmissions}
-              hint="代理店からの商品の持込み"
+              hint="オブザーバーからの商品の持込み"
               icon={<Inbox size={18} />}
             />
           </Link>
@@ -150,7 +150,7 @@ export default async function AdminDashboard({
       <div className="flex items-start gap-3 rounded-[20px] border border-warning/25 bg-warning-soft px-4 py-3.5">
         <ShieldAlert size={18} className="mt-0.5 shrink-0 text-warning" />
         <p className="text-[13px] leading-6 text-text-primary">
-          担当代理店の変更は管理者のみが実行できます。変更前後・理由・実行者・日時は
+          担当オブザーバーの変更は管理者のみが実行できます。変更前後・理由・実行者・日時は
           監査ログと担当変更履歴の両方に必ず記録されます。
         </p>
       </div>

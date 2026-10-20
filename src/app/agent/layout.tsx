@@ -9,7 +9,7 @@ export default async function AgentLayout({ children }: LayoutProps<"/agent">) {
   return (
     <AppShell
       brand="TREEMERCE"
-      subtitle="代理店マイページ"
+      subtitle="オブザーバーマイページ"
       nav={AGENT_NAV}
       identity={`${agent.display_name} (${agent.public_id})`}
     >

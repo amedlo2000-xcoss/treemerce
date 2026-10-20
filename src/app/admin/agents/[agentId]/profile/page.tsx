@@ -30,14 +30,14 @@ export default async function AdminAgentProfileEditPage({ params }: { params: Pr
 
   return (
     <>
-      <BackLink href={`/admin/agents/${agent.id}`}>代理店詳細</BackLink>
+      <BackLink href={`/admin/agents/${agent.id}`}>オブザーバー詳細</BackLink>
       <PageHeader
         title="事業プロフィールの入力・編集"
-        description="代理店から伺った内容を、運営が代わりに入力します。代理店本人のマイページにも表示されます。"
+        description="オブザーバーから伺った内容を、運営が代わりに入力します。オブザーバー本人のマイページにも表示されます。"
       />
 
       <Notice tone="info">
-        対象の代理店: <Mono>{agent.public_id}</Mono> <strong>{agent.display_name}</strong>
+        対象のオブザーバー: <Mono>{agent.public_id}</Mono> <strong>{agent.display_name}</strong>
         <br />
         {profile.found
           ? `最終更新 ${formatDateTime(profile.updated_at)} (${profile.updated_by_role === "super_admin" ? "運営" : "本人"})。変更には理由が必要です。`
@@ -45,7 +45,7 @@ export default async function AdminAgentProfileEditPage({ params }: { params: Pr
       </Notice>
 
       {agent.status === "withdrawn" ? (
-        <Notice tone="warning">退会済みの代理店のプロフィールは編集できません。</Notice>
+        <Notice tone="warning">退会済みのオブザーバーのプロフィールは編集できません。</Notice>
       ) : (
         <Card>
           <AgentProfileForm profile={profile} admin={{ agentId: agent.id }} />

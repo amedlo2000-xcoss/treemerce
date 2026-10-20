@@ -12,9 +12,9 @@ export const AGENT_NAV: NavItem[] = [
 
 export const ADMIN_NAV: NavItem[] = [
   { href: "/admin", label: "ダッシュボード", icon: "home", exact: true },
-  { href: "/admin/agents", label: "代理店管理", icon: "users" },
-  { href: "/admin/agent-applications", label: "代理店申請", icon: "user-plus" },
-  { href: "/admin/agent-registration-links", label: "代理店登録リンク", icon: "link" },
+  { href: "/admin/agents", label: "オブザーバー管理", icon: "users" },
+  { href: "/admin/agent-applications", label: "オブザーバー申請", icon: "user-plus" },
+  { href: "/admin/agent-registration-links", label: "オブザーバー登録リンク", icon: "link" },
   { href: "/admin/customers", label: "購入者管理", icon: "user" },
   { href: "/admin/assignments", label: "担当管理", icon: "arrow-right-left" },
   { href: "/admin/products", label: "商品管理", icon: "package" },

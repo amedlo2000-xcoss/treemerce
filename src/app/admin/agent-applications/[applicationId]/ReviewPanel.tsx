@@ -39,8 +39,8 @@ export function ReviewPanel({
   const [error, setError] = useState<string | null>(null);
 
   const approveSentence = inviterLabel
-    ? `${applicantName}さんを、${inviterLabel}の下に代理店として登録します。`
-    : `${applicantName}さんを、運営直下 (紹介者なし) の代理店として登録します。`;
+    ? `${applicantName}さんを、${inviterLabel}の下にオブザーバーとして登録します。`
+    : `${applicantName}さんを、運営直下 (紹介者なし) のオブザーバーとして登録します。`;
 
   async function submit() {
     setPending(true);
@@ -100,8 +100,8 @@ export function ReviewPanel({
 
       <p className="text-[13px] leading-6 text-text-secondary">
         {action === "approve"
-          ? "承認すると、申請に固定された紹介者の下に代理店が作られ、本人はメールアドレスとパスワードでログインして利用できるようになります。紹介者はここでは変更できません。"
-          : "却下すると代理店は作られません。却下後に本人が改めて申し込んだ場合は、新しい申請として届きます。"}
+          ? "承認すると、申請に固定された紹介者の下にオブザーバーが作られ、本人はメールアドレスとパスワードでログインして利用できるようになります。紹介者はここでは変更できません。"
+          : "却下するとオブザーバーは作られません。却下後に本人が改めて申し込んだ場合は、新しい申請として届きます。"}
       </p>
 
       <Field

@@ -393,7 +393,7 @@ function RegisterFormInner({
       canNext={canSubmit}
       onBack={goBack}
       onNext={handleSubmit}
-      nextLabel={pending ? "送信中…" : applying ? "同意して代理店登録を申し込む" : "登録する"}
+      nextLabel={pending ? "送信中…" : applying ? "同意してオブザーバー登録を申し込む" : "登録する"}
     >
       <div className="space-y-5">
         <div className="flex flex-wrap gap-2">
@@ -405,15 +405,15 @@ function RegisterFormInner({
         </div>
 
         <section className="space-y-3 rounded-2xl border border-border-soft px-4 py-4">
-          <h3 className="text-[15px] font-semibold text-text-primary">代理店登録</h3>
+          <h3 className="text-[15px] font-semibold text-text-primary">オブザーバー登録</h3>
 
           {terms === null ? (
             <p className="text-[13px] leading-6 text-text-secondary">
-              代理店登録のお申し込みは現在準備中です。
+              オブザーバー登録のお申し込みは現在準備中です。
             </p>
           ) : isAgent ? (
             <p className="text-[13px] leading-6 text-text-secondary">
-              代理店としてログインしています。代理店登録のお申し込みは不要です。
+              オブザーバーとしてログインしています。オブザーバー登録のお申し込みは不要です。
             </p>
           ) : application?.state === "received" ? (
             <p className="text-[13px] leading-6 text-text-secondary">{application.message}</p>
@@ -427,9 +427,9 @@ function RegisterFormInner({
                   className="mt-1 h-4 w-4 accent-[var(--brand)]"
                 />
                 <span className="text-[14px] leading-6 text-text-primary">
-                  代理店登録も申し込みますか？
+                  オブザーバー登録も申し込みますか？
                   <span className="block text-[12px] text-text-secondary">
-                    運営が確認したうえで、代理店としてご利用いただけるようになります。
+                    運営が確認したうえで、オブザーバーとしてご利用いただけるようになります。
                   </span>
                 </span>
               </label>
@@ -438,7 +438,7 @@ function RegisterFormInner({
                 !account ? (
                   <div className="space-y-3">
                     <p className="text-[13px] leading-6 text-text-secondary">
-                      代理店登録のお申し込みには、メールアドレスを確認済みのアカウントでのログインが必要です。
+                      オブザーバー登録のお申し込みには、メールアドレスを確認済みのアカウントでのログインが必要です。
                       新しくアカウントを作った場合は、確認メールのリンクを開くとこの登録フォームに戻ります。
                       入力した内容は、このブラウザで 24 時間以内に戻ったときに引き継がれます。
                     </p>
@@ -469,7 +469,7 @@ function RegisterFormInner({
                     ) : null}
 
                     <label className="block space-y-1">
-                      <span className="text-[13px] font-medium text-text-secondary">代理店名</span>
+                      <span className="text-[13px] font-medium text-text-secondary">オブザーバー名</span>
                       <input
                         value={agentDisplayName}
                         onChange={(e) => setAgentDisplayName(e.target.value)}

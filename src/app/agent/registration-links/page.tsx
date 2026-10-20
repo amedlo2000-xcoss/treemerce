@@ -17,14 +17,14 @@ export default async function AgentRegistrationLinksPage() {
   const { supabase, agent } = await requireAgentPage("/agent/registration-links");
 
   const { data, error } = await supabase.rpc("treemerce_my_registration_links");
-  if (error) throw new Error("代理店登録リンクを読み込めませんでした。");
+  if (error) throw new Error("オブザーバー登録リンクを読み込めませんでした。");
   const links = (data ?? []) as MyRegistrationLink[];
 
   return (
     <>
       <MobilePageHeader
-        title="代理店登録リンクの発行"
-        description="代理店として登録したい人に渡すリンクです。リンクから申し込み、運営が承認すると、あなたの紹介で登録した代理店になります。"
+        title="オブザーバー登録リンクの発行"
+        description="オブザーバーとして登録したい人に渡すリンクです。リンクから申し込み、運営が承認すると、あなたの紹介で登録したオブザーバーになります。"
       />
 
       <Notice tone="info">

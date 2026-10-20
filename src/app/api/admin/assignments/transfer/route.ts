@@ -19,7 +19,7 @@ export async function POST(request: Request) {
 
   const body = await readJson<Body>(request);
   if (!body?.customer_id || !body.new_agent_id) {
-    return fail("TREEMERCE_INVALID_INPUT", "顧客IDと変更先の代理店IDは必須です。", 400);
+    return fail("TREEMERCE_INVALID_INPUT", "顧客IDと変更先のオブザーバーIDは必須です。", 400);
   }
   if (!body.reason?.trim()) {
     return fail("TREEMERCE_REASON_REQUIRED", "変更理由は必須です。", 400);

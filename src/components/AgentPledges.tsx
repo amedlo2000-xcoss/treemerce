@@ -51,7 +51,7 @@ export function AgentPledges({
                   rel="noopener noreferrer"
                   className="font-semibold text-brand underline"
                 >
-                  代理店登録および個人情報の取り扱いに関する同意規約
+                  オブザーバー登録および個人情報の取り扱いに関する同意規約
                 </a>
                 」と「プライバシーポリシー」を読み、内容を理解し、同意します。
               </>

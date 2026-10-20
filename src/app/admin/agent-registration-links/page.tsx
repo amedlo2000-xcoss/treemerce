@@ -28,14 +28,14 @@ export default async function AdminAgentRegistrationLinksPage() {
   const { supabase } = await requireSuperAdminPage("/admin/agent-registration-links");
 
   const { data, error } = await supabase.rpc("treemerce_admin_list_registration_links");
-  if (error) throw new Error("代理店登録リンクを読み込めませんでした。");
+  if (error) throw new Error("オブザーバー登録リンクを読み込めませんでした。");
   const links = (data ?? []) as AdminRegistrationLink[];
 
   return (
     <>
       <PageHeader
-        title="代理店登録リンク"
-        description="代理店登録のお申し込みを受け付けるリンクです。ここで発行したリンクから申し込んだ人は、承認すると運営直下 (紹介者なし) の代理店になります。代理店がマイページで発行したリンクから申し込んだ人は、承認するとその代理店の紹介で登録した代理店になります。どちらも会員登録は行いません。発行・無効化は監査ログに記録されます。"
+        title="オブザーバー登録リンク"
+        description="オブザーバー登録のお申し込みを受け付けるリンクです。ここで発行したリンクから申し込んだ人は、承認すると運営直下 (紹介者なし) のオブザーバーになります。オブザーバーがマイページで発行したリンクから申し込んだ人は、承認するとそのオブザーバーの紹介で登録したオブザーバーになります。どちらも会員登録は行いません。発行・無効化は監査ログに記録されます。"
       />
 
       <Card

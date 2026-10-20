@@ -135,7 +135,7 @@ export function ShopSettingsForm({ settings }: { settings: ShopSettingsRow }) {
         </p>
       </Section>
 
-      <Section title="お振込先 (運営の口座)" description="注文完了画面でお客様に表示されます。代理店の報酬受取口座とは別です。">
+      <Section title="お振込先 (運営の口座)" description="注文完了画面でお客様に表示されます。オブザーバーの報酬受取口座とは別です。">
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="金融機関名">{input("bank_name", { placeholder: "例: ○○銀行" })}</Field>
           <Field label="支店名">{input("bank_branch")}</Field>

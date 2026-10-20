@@ -81,7 +81,7 @@ export default async function AdminAgentDetailPage({
 
   return (
     <>
-      <BackLink href="/admin/agents">代理店一覧</BackLink>
+      <BackLink href="/admin/agents">オブザーバー一覧</BackLink>
 
       <ProfileHero
         name={agent.display_name}
@@ -97,7 +97,7 @@ export default async function AdminAgentDetailPage({
             <StatTile label="登録日" value={formatDate(agent.registered_at)} />
             <StatTile label="直接の担当顧客" value={`${rootNode?.customer_count ?? 0}件`} />
             <StatTile label="直接の招待" value={`${directInvitees.length}件`} />
-            <StatTile label="傘下代理店 (全体)" value={`${Math.max(map.agents.length - 1, 0)}件`} />
+            <StatTile label="傘下オブザーバー (全体)" value={`${Math.max(map.agents.length - 1, 0)}件`} />
           </div>
         }
       />
@@ -106,7 +106,7 @@ export default async function AdminAgentDetailPage({
         <div className="space-y-5">
           <Card title="基本情報">
             <DetailList>
-              <DetailRow label="代理店ID" value={agent.public_id} mono />
+              <DetailRow label="オブザーバーID" value={agent.public_id} mono />
               <DetailRow label="法人名" value={agent.legal_name ?? "—"} />
               <DetailRow label="メール" value={agent.email} />
               <DetailRow label="電話番号" value={agent.phone ?? "—"} />
@@ -120,8 +120,8 @@ export default async function AdminAgentDetailPage({
             title="事業プロフィール"
             description={
               profile?.updated_at
-                ? `最終更新 ${formatDateTime(profile.updated_at)} (${profile.updated_by_role === "super_admin" ? "運営が入力" : "代理店本人が入力"})。super_admin のみ閲覧できます。`
-                : "代理店本人または運営が入力する項目です。super_admin のみ閲覧できます。"
+                ? `最終更新 ${formatDateTime(profile.updated_at)} (${profile.updated_by_role === "super_admin" ? "運営が入力" : "オブザーバー本人が入力"})。super_admin のみ閲覧できます。`
+                : "オブザーバー本人または運営が入力する項目です。super_admin のみ閲覧できます。"
             }
           >
             {!profile ? (
@@ -144,7 +144,7 @@ export default async function AdminAgentDetailPage({
 
           <Card
             title="持込み申請"
-            description="運営が代行作成した申請は「代行」と表示されます。代理店本人の下書きは表示されません。"
+            description="運営が代行作成した申請は「代行」と表示されます。オブザーバー本人の下書きは表示されません。"
           >
             {submissions.length === 0 ? (
               <p className="text-[13px] text-text-secondary">まだ申請はありません。</p>
@@ -181,7 +181,7 @@ export default async function AdminAgentDetailPage({
                   代行して申請を作成
                 </Link>
               ) : (
-                <p className="text-[12px] text-text-secondary">稼働中の代理店のみ申請を代行できます。</p>
+                <p className="text-[12px] text-text-secondary">稼働中のオブザーバーのみ申請を代行できます。</p>
               )}
               <Link
                 href={`/admin/submissions?agent=${agent.id}`}
@@ -194,7 +194,7 @@ export default async function AdminAgentDetailPage({
 
           <Card
             title="招待経緯 (登録経路)"
-            description="登録経路 (invited_by) は購入者の担当代理店とは別データです。"
+            description="登録経路 (invited_by) は購入者の担当オブザーバーとは別データです。"
           >
             <DetailList>
               <DetailRow
@@ -216,7 +216,7 @@ export default async function AdminAgentDetailPage({
             </DetailList>
 
             <p className="mb-2 mt-4 text-[12px] font-semibold text-text-secondary">
-              この代理店の招待で登録した代理店 ({directInvitees.length}件)
+              このオブザーバーの招待で登録したオブザーバー ({directInvitees.length}件)
             </p>
             {directInvitees.length === 0 ? (
               <p className="text-[13px] text-text-secondary">まだいません。</p>
@@ -247,7 +247,7 @@ export default async function AdminAgentDetailPage({
 
         <Card
           title="傘下ツリー・担当顧客"
-          description="この代理店を根とする部分木です。super_admin のため、傘下の他代理店が担当する顧客の実データも表示されます。"
+          description="このオブザーバーを根とする部分木です。super_admin のため、傘下の他オブザーバーが担当する顧客の実データも表示されます。"
         >
           {map.agents.length === 0 ? (
             <EmptyState title="データがありません" />

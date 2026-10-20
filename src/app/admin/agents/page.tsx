@@ -73,13 +73,13 @@ export default async function AdminAgentsPage({
   return (
     <>
       <PageHeader
-        title="代理店管理"
-        description="全代理店を横断して検索し、登録経路 (招待元) と利用開始状態を確認します。各行から詳細・プロフィール編集・持込み申請の代行へ移動できます。"
+        title="オブザーバー管理"
+        description="全オブザーバーを横断して検索し、登録経路 (招待元) と利用開始状態を確認します。各行から詳細・プロフィール編集・持込み申請の代行へ移動できます。"
       />
 
       <Notice tone="warning">
-        招待元は1代理店につき1つで、一度確定すると変更できません。
-        招待元は代理店の登録経路を表すもので、購入者の担当代理店とは別のデータです。
+        招待元は1オブザーバーにつき1つで、一度確定すると変更できません。
+        招待元はオブザーバーの登録経路を表すもので、購入者の担当オブザーバーとは別のデータです。
       </Notice>
 
       <FilterPanel>
@@ -87,7 +87,7 @@ export default async function AdminAgentsPage({
           method="get"
           className="grid gap-3 sm:grid-cols-2 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)_auto] lg:items-end"
         >
-          <Field label="検索 (名前・email・電話・代理店ID)">
+          <Field label="検索 (名前・email・電話・オブザーバーID)">
             <input
               type="text"
               name="q"
@@ -133,13 +133,13 @@ export default async function AdminAgentsPage({
         </form>
       </FilterPanel>
 
-      <SectionTitle count={agents.length}>代理店一覧</SectionTitle>
+      <SectionTitle count={agents.length}>オブザーバー一覧</SectionTitle>
 
       {agents.length === 0 ? (
-        <EmptyState title="該当する代理店がありません" />
+        <EmptyState title="該当するオブザーバーがありません" />
       ) : (
         <DataTable
-          headers={["代理店ID", "代理店名", "連絡先", "招待元 (登録経路)", "プロフィール", "持込み", "状態", "登録日", "操作"]}
+          headers={["オブザーバーID", "オブザーバー名", "連絡先", "招待元 (登録経路)", "プロフィール", "持込み", "状態", "登録日", "操作"]}
         >
           {agents.map((agent) => {
             const inviter = agent.invited_by ? byId.get(agent.invited_by) : null;

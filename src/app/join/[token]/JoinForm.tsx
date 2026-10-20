@@ -83,26 +83,26 @@ export function JoinForm({ token, terms }: Props) {
           <Link href="/login?next=/agent" className="font-medium text-brand underline-offset-2 hover:underline">
             ログイン
           </Link>
-          すると、代理店のマイページをご利用いただけます。
+          すると、オブザーバーのマイページをご利用いただけます。
         </p>
       </div>
     );
   }
 
   if (terms === null) {
-    return <p className="text-[14px] leading-6 text-text-secondary">代理店登録のお申し込みは現在準備中です。</p>;
+    return <p className="text-[14px] leading-6 text-text-secondary">オブザーバー登録のお申し込みは現在準備中です。</p>;
   }
 
   return (
     <form onSubmit={handleSubmit} className="space-y-5">
       <p className="text-[13px] leading-6 text-text-secondary">
         送信するとアカウントが作成され、お申し込みが運営に届きます。運営が確認・承認したあと、
-        ここで設定したメールアドレスとパスワードでログインして代理店としてご利用いただけます。
+        ここで設定したメールアドレスとパスワードでログインしてオブザーバーとしてご利用いただけます。
         このフォームでは会員 (購入者) の登録は行いません。
       </p>
 
       <label className="block space-y-1">
-        <span className="text-[13px] font-medium text-text-secondary">代理店名</span>
+        <span className="text-[13px] font-medium text-text-secondary">オブザーバー名</span>
         <input
           required
           value={agentDisplayName}
@@ -168,7 +168,7 @@ export function JoinForm({ token, terms }: Props) {
       {error ? <p className="text-[13px] text-danger">{error}</p> : null}
 
       <PrimaryButton type="submit" disabled={!canSubmit}>
-        {pending ? "送信中…" : "同意して代理店登録を申し込む"}
+        {pending ? "送信中…" : "同意してオブザーバー登録を申し込む"}
       </PrimaryButton>
     </form>
   );

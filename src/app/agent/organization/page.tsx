@@ -42,11 +42,11 @@ async function CommunityTab({ supabase }: { supabase: SupabaseClient }) {
   return (
     <>
       <p className="px-1 text-[13px] leading-6 text-text-secondary">
-        招待経路でつながった代理店のみを表示します（自分＋傘下）。商品購入者はここには含まれません。完全に閲覧専用です。ノードをタップすると詳細が開きます。
+        招待経路でつながったオブザーバーのみを表示します（自分＋傘下）。商品購入者はここには含まれません。完全に閲覧専用です。ノードをタップすると詳細が開きます。
       </p>
       {roots.length === 0 ? (
         <Surface>
-          <EmptyState title="表示できる代理店がありません" />
+          <EmptyState title="表示できるオブザーバーがありません" />
         </Surface>
       ) : (
         <CommunityView roots={roots} selfInviterLabel={selfInviterLabel} />
@@ -66,7 +66,7 @@ async function CommerceTab({ supabase }: { supabase: SupabaseClient }) {
     <>
       <div className="grid grid-cols-3 gap-3">
         <Surface className="!p-4">
-          <BigStat label="傘下代理店" value={map?.agents.length ?? 0} />
+          <BigStat label="傘下オブザーバー" value={map?.agents.length ?? 0} />
         </Surface>
         <Surface className="!p-4">
           <BigStat label="自分の担当" value={namedCount} hint="実名表示" />
@@ -78,7 +78,7 @@ async function CommerceTab({ supabase }: { supabase: SupabaseClient }) {
 
       <Surface>
         <p className="mb-4 text-[13px] leading-6 text-text-secondary">
-          自分が担当する購入者は実名・購入商品を表示します。傘下の他代理店が担当する購入者は件数のみの匿名ノードです。招待元や別系統の代理店は表示されません。この画面は閲覧専用です。
+          自分が担当する購入者は実名・購入商品を表示します。傘下の他オブザーバーが担当する購入者は件数のみの匿名ノードです。招待元や別系統のオブザーバーは表示されません。この画面は閲覧専用です。
         </p>
         {!map || map.agents.length === 0 ? (
           <EmptyState title="表示できるデータがありません" />
@@ -107,7 +107,7 @@ export default async function OrganizationPage({
     <>
       <MobilePageHeader
         title="組織"
-        description="代理店同士のつながりと、担当顧客の広がりを確認できます。"
+        description="オブザーバー同士のつながりと、担当顧客の広がりを確認できます。"
       />
 
       <div className="flex gap-2 px-1">
@@ -119,7 +119,7 @@ export default async function OrganizationPage({
               : "border-border-soft bg-surface text-text-primary"
           }`}
         >
-          代理店コミュニティ
+          オブザーバーコミュニティ
         </Link>
         <Link
           href="/agent/organization?tab=commerce"

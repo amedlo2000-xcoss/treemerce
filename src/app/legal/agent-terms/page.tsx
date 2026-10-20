@@ -5,7 +5,7 @@ import { formatDate } from "@/components/ui";
 import type { AgentTerms } from "@/lib/domain/types";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
-export const metadata: Metadata = { title: "代理店規約 | TREEMERCE" };
+export const metadata: Metadata = { title: "オブザーバー規約 | TREEMERCE" };
 
 /**
  * 代理店規約 (公開ページ)。現行の版を表示する。版の公開は DB 管理者が行う (0027)。
@@ -23,7 +23,7 @@ export default async function AgentTermsPage() {
           TREEMERCE
         </Link>
         <h1 className="text-[24px] font-bold tracking-tight text-text-primary">
-          {terms.available ? terms.title : "代理店規約"}
+          {terms.available ? terms.title : "オブザーバー規約"}
         </h1>
 
         <section className="rounded-[20px] border border-border-soft bg-surface p-5 shadow-[var(--shadow-card)] md:p-6">
@@ -37,7 +37,7 @@ export default async function AgentTermsPage() {
               </div>
             </>
           ) : (
-            <p className="text-[14px] leading-6 text-text-secondary">代理店規約は現在準備中です。</p>
+            <p className="text-[14px] leading-6 text-text-secondary">オブザーバー規約は現在準備中です。</p>
           )}
         </section>
       </div>

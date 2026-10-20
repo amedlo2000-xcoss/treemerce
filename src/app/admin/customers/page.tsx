@@ -148,12 +148,12 @@ function renderPage(
     <>
       <PageHeader
         title="商品購入者管理"
-        description="全購入者を横断して検索し、購入内容・購入額・現在の担当代理店を確認します。"
+        description="全購入者を横断して検索し、購入内容・購入額・現在の担当オブザーバーを確認します。"
       />
 
       <Notice tone="info">
         この画面では購入者の実名・連絡先・購入内容を匿名化せずに表示します(super_admin 専用)。
-        代理店同士の招待経路とは別のデータです。担当の変更は各顧客の詳細ページから行います。
+        オブザーバー同士の招待経路とは別のデータです。担当の変更は各顧客の詳細ページから行います。
       </Notice>
 
       <FilterPanel>
@@ -177,7 +177,7 @@ function renderPage(
               ))}
             </select>
           </Field>
-          <Field label="担当代理店">
+          <Field label="担当オブザーバー">
             <select name="agent_id" defaultValue={agentId ?? ""} className={FIELD_CLASS}>
               <option value="">すべて</option>
               {agentOptions.map((a) => (
@@ -219,7 +219,7 @@ function renderPage(
       {customers.length === 0 ? (
         <EmptyState title="該当する購入者がいません" />
       ) : (
-        <DataTable headers={["氏名", "連絡先", "属性", "現在の担当代理店", "登録日", ""]}>
+        <DataTable headers={["氏名", "連絡先", "属性", "現在の担当オブザーバー", "登録日", ""]}>
           {customers.map((customer) => {
             const active = customer.assignments?.find((a) => a.status === "active");
             return (

@@ -152,7 +152,7 @@ export function SubmissionImagesEditor({
       </ul>
       <p className="text-[12px] text-text-secondary">
         {images.length} / {SUBMISSION_IMAGE_MAX_COUNT} 枚・JPEG / PNG / WebP、1 枚 5MB まで。
-        {proxy ? "画像は名義の代理店本人と運営だけが見られます。" : "画像はあなたと運営だけが見られます。"}
+        {proxy ? "画像は名義のオブザーバー本人と運営だけが見られます。" : "画像はあなたと運営だけが見られます。"}
       </p>
       {error ? <p role="alert" className="text-[13px] text-danger">{error}</p> : null}
     </div>

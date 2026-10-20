@@ -24,7 +24,7 @@ type Body = {
  */
 const RECEIVED = {
   application_status: "received",
-  application_message: "代理店登録のお申し込みを受け付けました。内容を確認のうえ、運営事務局よりご連絡します。",
+  application_message: "オブザーバー登録のお申し込みを受け付けました。内容を確認のうえ、運営事務局よりご連絡します。",
 } as const;
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -72,17 +72,17 @@ export async function POST(request: Request) {
   const termsVersion = body?.agent_terms_version?.trim() || null;
 
   if (!token) {
-    return fail("TREEMERCE_REGISTRATION_LINK_UNAVAILABLE", "この代理店登録リンクは利用できません。", 409);
+    return fail("TREEMERCE_REGISTRATION_LINK_UNAVAILABLE", "このオブザーバー登録リンクは利用できません。", 409);
   }
   if (body?.accept_agent_terms !== true) {
     return fail(
       "TREEMERCE_TERMS_CONSENT_REQUIRED",
-      "代理店登録のお申し込みには代理店規約への同意が必要です。",
+      "オブザーバー登録のお申し込みにはオブザーバー規約への同意が必要です。",
       400,
     );
   }
   if (!agentDisplayName || agentDisplayName.length > 100) {
-    return fail("TREEMERCE_INVALID_INPUT", "代理店名を 100 文字以内で入力してください。", 400);
+    return fail("TREEMERCE_INVALID_INPUT", "オブザーバー名を 100 文字以内で入力してください。", 400);
   }
   if (!fullName || fullName.length > 100) {
     return fail("TREEMERCE_INVALID_INPUT", "氏名を 100 文字以内で入力してください。", 400);
@@ -108,18 +108,18 @@ export async function POST(request: Request) {
   if (!(linkData as { valid?: boolean } | null)?.valid) {
     return fail(
       "TREEMERCE_REGISTRATION_LINK_UNAVAILABLE",
-      "この代理店登録リンクは利用できません。有効期限が切れたか、利用の上限に達した可能性があります。",
+      "このオブザーバー登録リンクは利用できません。有効期限が切れたか、利用の上限に達した可能性があります。",
       409,
     );
   }
   const terms = (termsData as AgentTerms | null) ?? { available: false };
   if (!terms.available) {
-    return fail("TREEMERCE_TERMS_NOT_AVAILABLE", "代理店規約を準備中のため、現在お申し込みを受け付けていません。", 409);
+    return fail("TREEMERCE_TERMS_NOT_AVAILABLE", "オブザーバー規約を準備中のため、現在お申し込みを受け付けていません。", 409);
   }
   if (terms.version !== termsVersion) {
     return fail(
       "TREEMERCE_TERMS_VERSION_MISMATCH",
-      "代理店規約が更新されています。最新の規約をご確認のうえ、改めて同意してください。",
+      "オブザーバー規約が更新されています。最新の規約をご確認のうえ、改めて同意してください。",
       409,
     );
   }

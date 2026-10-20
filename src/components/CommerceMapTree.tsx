@@ -38,7 +38,7 @@ function CustomerNode({ customer }: { customer: CommerceMapCustomer }) {
         <span className="font-mono text-[12px] text-text-secondary">{customer.label}</span>
         <Badge tone="neutral">匿名</Badge>
         <span className="text-[11px] text-text-secondary">
-          他代理店の担当のため詳細は表示されません
+          他オブザーバーの担当のため詳細は表示されません
         </span>
       </li>
     );
@@ -211,7 +211,7 @@ export function CommerceMapTree({ map }: { map: CommerceMap }) {
               ) : null}
             </dl>
             <p className="text-[12px] leading-5 text-text-secondary">
-              傘下の他代理店が担当する顧客は、氏名・連絡先・購入明細を含まない匿名件数のみです。
+              傘下の他オブザーバーが担当する顧客は、氏名・連絡先・購入明細を含まない匿名件数のみです。
             </p>
           </div>
         ) : null}

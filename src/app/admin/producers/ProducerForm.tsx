@@ -116,7 +116,7 @@ export function ProducerForm({ producer }: { producer?: ProducerAdminRow }) {
 
       <fieldset className="space-y-4">
         <legend className="mb-1 text-[14px] font-semibold text-text-primary">
-          非公開項目 <span className="text-[12px] font-normal text-text-secondary">(super_admin のみ閲覧。商品ページ・代理店には表示されません)</span>
+          非公開項目 <span className="text-[12px] font-normal text-text-secondary">(super_admin のみ閲覧。商品ページ・オブザーバーには表示されません)</span>
         </legend>
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="発送依頼の送り先メール (未設定なら発送依頼書をコピーして手動で依頼)" className="sm:col-span-2">

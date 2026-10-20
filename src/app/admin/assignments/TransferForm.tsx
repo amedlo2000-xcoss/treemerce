@@ -83,7 +83,7 @@ export function TransferForm({
         </Field>
       )}
 
-      <Field label="変更先の代理店">
+      <Field label="変更先のオブザーバー">
         <select
           required
           value={newAgentId}

@@ -47,7 +47,7 @@ export default async function AdminAnalyticsPage({
     <>
       <PageHeader
         title="客層分析"
-        description="全代理店横断の集計と、特定の代理店を根とする部分木の集計を確認できます。"
+        description="全オブザーバー横断の集計と、特定のオブザーバーを根とする部分木の集計を確認できます。"
       />
 
       <Notice tone="info">
@@ -80,7 +80,7 @@ export default async function AdminAnalyticsPage({
               : "border border-border-soft bg-surface text-text-secondary hover:bg-surface-muted hover:text-text-primary"
           }`}
         >
-          全代理店
+          全オブザーバー
         </Link>
         {rootAgent ? (
           <span className="rounded-full bg-brand px-3 py-1.5 text-[12px] font-medium text-brand-foreground">
@@ -91,7 +91,7 @@ export default async function AdminAnalyticsPage({
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Stat label="集計対象の購入者" value={stats?.total_customers ?? 0} />
-        <Stat label="集計対象の代理店" value={stats?.scope_agent_count ?? 0} />
+        <Stat label="集計対象のオブザーバー" value={stats?.scope_agent_count ?? 0} />
         <Stat label="購入した人" value={stats?.purchasing_customers ?? 0} hint="入金確認済み以降" />
         <Stat
           label="売上合計"
@@ -116,7 +116,7 @@ export default async function AdminAnalyticsPage({
       )}
 
       <section className="space-y-3">
-        <h2 className="px-1 text-[15px] font-semibold text-text-primary">代理店を指定して集計</h2>
+        <h2 className="px-1 text-[15px] font-semibold text-text-primary">オブザーバーを指定して集計</h2>
         <div className="flex flex-wrap gap-2">
           {agents.map((a) => (
             <Link

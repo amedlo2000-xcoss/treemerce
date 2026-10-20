@@ -178,12 +178,12 @@ export default async function AgentCustomerDetailPage({
               <div className="mb-2 flex items-start gap-2.5 rounded-2xl bg-surface-muted px-3 py-2.5">
                 <Lock size={16} className="mt-0.5 shrink-0 text-text-secondary" />
                 <p className="text-[12px] leading-5 text-text-secondary">
-                  担当代理店は初回登録時に確定し、以後変更されません。
+                  担当オブザーバーは初回登録時に確定し、以後変更されません。
                 </p>
               </div>
               <dl className="divide-y divide-border-soft">
                 <InfoRow
-                  label="担当代理店"
+                  label="担当オブザーバー"
                   value={
                     <span className="inline-flex items-center gap-1.5">
                       {agent.display_name}
@@ -191,7 +191,7 @@ export default async function AgentCustomerDetailPage({
                     </span>
                   }
                 />
-                <InfoRow label="代理店ID" value={agent.public_id} mono />
+                <InfoRow label="オブザーバーID" value={agent.public_id} mono />
                 <InfoRow label="担当開始日" value={formatDate(assignment.assigned_at)} />
                 <InfoRow
                   label="確定経路"

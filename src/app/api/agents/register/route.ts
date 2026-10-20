@@ -28,7 +28,7 @@ export async function POST(request: Request) {
   if (!viewer.isAdmin || viewer.adminRole !== "super_admin") {
     return fail(
       "TREEMERCE_AGENT_APPLICATION_REQUIRED",
-      "代理店登録は、紹介リンクの登録フォームからお申し込みください。運営の確認後に代理店としてご利用いただけます。",
+      "オブザーバー登録は、紹介リンクの登録フォームからお申し込みください。運営の確認後にオブザーバーとしてご利用いただけます。",
       403,
     );
   }
@@ -38,7 +38,7 @@ export async function POST(request: Request) {
     return fail("TREEMERCE_INVALID_INPUT", "対象のアカウントを指定してください。", 400);
   }
   if (!body.display_name?.trim()) {
-    return fail("TREEMERCE_INVALID_INPUT", "代理店名は必須です。", 400);
+    return fail("TREEMERCE_INVALID_INPUT", "オブザーバー名は必須です。", 400);
   }
   if (!body.email?.trim()) {
     return fail("TREEMERCE_INVALID_INPUT", "メールアドレスは必須です。", 400);
@@ -54,7 +54,7 @@ export async function POST(request: Request) {
   ) {
     return fail(
       "TREEMERCE_INVITER_REQUIRED",
-      "招待元を指定してください (代理店を指定するか、招待元なしを明示)。",
+      "招待元を指定してください (オブザーバーを指定するか、招待元なしを明示)。",
       400,
     );
   }

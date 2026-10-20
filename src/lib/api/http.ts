@@ -24,7 +24,7 @@ const ERROR_MAP: Record<string, { status: number; message: string }> = {
   TREEMERCE_SUPER_ADMIN_ONLY: { status: 403, message: "この操作は super_admin のみ実行できます。" },
   TREEMERCE_ASSIGNMENT_IMMUTABLE: {
     status: 403,
-    message: "担当代理店の変更・解除・移管はできません。",
+    message: "担当オブザーバーの変更・解除・移管はできません。",
   },
   TREEMERCE_ASSIGNMENT_WRITE_DENIED: {
     status: 403,
@@ -35,7 +35,7 @@ const ERROR_MAP: Record<string, { status: number; message: string }> = {
   TREEMERCE_AUDIT_APPEND_ONLY: { status: 403, message: "監査ログは変更・削除できません。" },
   TREEMERCE_INVITED_BY_ALREADY_SET: {
     status: 409,
-    message: "この代理店の招待元は既に確定しています。変更はできません。",
+    message: "このオブザーバーの招待元は既に確定しています。変更はできません。",
   },
   TREEMERCE_INVITE_CYCLE: { status: 409, message: "招待経路が循環しています。" },
   TREEMERCE_INVITE_CHAIN_TOO_DEEP: { status: 409, message: "招待経路が深すぎます。" },
@@ -47,8 +47,8 @@ const ERROR_MAP: Record<string, { status: number; message: string }> = {
     status: 400,
     message: "招待コードの利用上限に達しています。",
   },
-  TREEMERCE_AGENT_NOT_FOUND: { status: 404, message: "指定の代理店が見つかりません。" },
-  TREEMERCE_AGENT_NOT_ACTIVE: { status: 400, message: "対象の代理店が稼働状態ではありません。" },
+  TREEMERCE_AGENT_NOT_FOUND: { status: 404, message: "指定のオブザーバーが見つかりません。" },
+  TREEMERCE_AGENT_NOT_ACTIVE: { status: 400, message: "対象のオブザーバーが稼働状態ではありません。" },
   TREEMERCE_CUSTOMER_NOT_FOUND: { status: 404, message: "対象の購入者が見つかりません。" },
   TREEMERCE_ASSIGNMENT_NOT_FOUND: { status: 404, message: "有効な担当が見つかりません。" },
   TREEMERCE_IDENTIFIER_REQUIRED: {
@@ -128,14 +128,14 @@ const ERROR_MAP: Record<string, { status: number; message: string }> = {
     status: 409,
     message: "画面を開いた後にプロフィールが更新されています。開き直してから編集してください。",
   },
-  TREEMERCE_AGENT_WITHDRAWN: { status: 409, message: "退会済みの代理店は編集できません。" },
+  TREEMERCE_AGENT_WITHDRAWN: { status: 409, message: "退会済みのオブザーバーは編集できません。" },
   TREEMERCE_SUBMISSION_NOT_PROXY: {
     status: 403,
-    message: "代理店本人が作成した申請は運営が編集できません。",
+    message: "オブザーバー本人が作成した申請は運営が編集できません。",
   },
   TREEMERCE_SUBMISSION_AGENT_MISMATCH: {
     status: 409,
-    message: "申請の代理店と指定の代理店が一致しません。画面を開き直してください。",
+    message: "申請のオブザーバーと指定のオブザーバーが一致しません。画面を開き直してください。",
   },
 
   // 商品カテゴリ・販売状態 (0022〜0025)
@@ -157,19 +157,19 @@ const ERROR_MAP: Record<string, { status: number; message: string }> = {
   // 原則6: 申請者本人への応答は中立に保つ (重複・既に代理店であることは DB 側で受付と同じ文面になる)
   TREEMERCE_AGENT_APPLICATION_REQUIRED: {
     status: 403,
-    message: "代理店登録は、紹介リンクの登録フォームからお申し込みください。",
+    message: "オブザーバー登録は、紹介リンクの登録フォームからお申し込みください。",
   },
   TREEMERCE_TERMS_CONSENT_REQUIRED: {
     status: 400,
-    message: "代理店登録のお申し込みには代理店規約への同意が必要です。",
+    message: "オブザーバー登録のお申し込みにはオブザーバー規約への同意が必要です。",
   },
   TREEMERCE_TERMS_NOT_AVAILABLE: {
     status: 409,
-    message: "代理店規約を準備中のため、現在お申し込みを受け付けていません。",
+    message: "オブザーバー規約を準備中のため、現在お申し込みを受け付けていません。",
   },
   TREEMERCE_TERMS_VERSION_MISMATCH: {
     status: 409,
-    message: "代理店規約が更新されています。最新の規約をご確認のうえ、改めて同意してください。",
+    message: "オブザーバー規約が更新されています。最新の規約をご確認のうえ、改めて同意してください。",
   },
   TREEMERCE_APPLICANT_EMAIL_MISMATCH: {
     status: 400,
@@ -183,28 +183,28 @@ const ERROR_MAP: Record<string, { status: number; message: string }> = {
   },
   TREEMERCE_INVITER_REQUIRED: {
     status: 400,
-    message: "招待元を指定してください (代理店を指定するか、招待元なしを明示)。",
+    message: "招待元を指定してください (オブザーバーを指定するか、招待元なしを明示)。",
   },
   TREEMERCE_INVITER_UNAVAILABLE: {
     status: 409,
-    message: "招待元の代理店が稼働中ではないため承認できません。",
+    message: "招待元のオブザーバーが稼働中ではないため承認できません。",
   },
-  TREEMERCE_AGENT_ALREADY_EXISTS: { status: 409, message: "このアカウントは既に代理店です。" },
-  TREEMERCE_AGENT_EMAIL_TAKEN: { status: 409, message: "このメールアドレスの代理店が既に存在します。" },
+  TREEMERCE_AGENT_ALREADY_EXISTS: { status: 409, message: "このアカウントは既にオブザーバーです。" },
+  TREEMERCE_AGENT_EMAIL_TAKEN: { status: 409, message: "このメールアドレスのオブザーバーが既に存在します。" },
   TREEMERCE_EMAIL_MISMATCH: { status: 400, message: "メールアドレスが対象アカウントと一致しません。" },
-  TREEMERCE_AGENT_CREATE_DENIED: { status: 403, message: "代理店は運営の承認処理でのみ作成できます。" },
-  TREEMERCE_INVITED_BY_CREATE_ONLY: { status: 409, message: "招待元は代理店の作成時にのみ設定できます。" },
+  TREEMERCE_AGENT_CREATE_DENIED: { status: 403, message: "オブザーバーは運営の承認処理でのみ作成できます。" },
+  TREEMERCE_INVITED_BY_CREATE_ONLY: { status: 409, message: "招待元はオブザーバーの作成時にのみ設定できます。" },
 
   // 運営の代理店登録リンク (0030)
   TREEMERCE_REGISTRATION_LINK_UNAVAILABLE: {
     status: 409,
-    message: "この代理店登録リンクは利用できません。有効期限が切れたか、利用の上限に達した可能性があります。",
+    message: "このオブザーバー登録リンクは利用できません。有効期限が切れたか、利用の上限に達した可能性があります。",
   },
-  TREEMERCE_REGISTRATION_LINK_NOT_FOUND: { status: 404, message: "代理店登録リンクが見つかりません。" },
+  TREEMERCE_REGISTRATION_LINK_NOT_FOUND: { status: 404, message: "オブザーバー登録リンクが見つかりません。" },
   TREEMERCE_REGISTRATION_LINK_NOT_ACTIVE: { status: 409, message: "このリンクは既に無効化されています。" },
-  TREEMERCE_REGISTRATION_LINK_WRITE_DENIED: { status: 403, message: "代理店登録リンクへの直接書込みはできません。" },
+  TREEMERCE_REGISTRATION_LINK_WRITE_DENIED: { status: 403, message: "オブザーバー登録リンクへの直接書込みはできません。" },
   TREEMERCE_REGISTRATION_LINK_IMMUTABLE: { status: 403, message: "発行済みのリンクの内容は変更できません。" },
-  TREEMERCE_REGISTRATION_LINK_DELETE_DENIED: { status: 403, message: "代理店登録リンクは削除できません (無効化で扱います)。" },
+  TREEMERCE_REGISTRATION_LINK_DELETE_DENIED: { status: 403, message: "オブザーバー登録リンクは削除できません (無効化で扱います)。" },
 
   // 代理店が発行する代理店登録リンク (0031)
   TREEMERCE_APPLICATION_INVITER_MISMATCH: {
@@ -279,7 +279,7 @@ export async function requireAgentApi() {
     return { error: fail("UNAUTHENTICATED", "ログインが必要です。", 401) } as const;
   }
   if (!ctx.viewer.agent) {
-    return { error: fail("NOT_AN_AGENT", "代理店アカウントではありません。", 403) } as const;
+    return { error: fail("NOT_AN_AGENT", "オブザーバーアカウントではありません。", 403) } as const;
   }
   if (ctx.viewer.agent.status !== "active") {
     return { error: fail("AGENT_NOT_ACTIVE", "アカウントが稼働状態ではありません。", 403) } as const;

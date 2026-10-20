@@ -30,7 +30,7 @@ export default async function AgentProfileEditPage() {
       <div className="flex items-start gap-2.5 rounded-2xl bg-surface-muted px-3.5 py-3">
         <Lock size={14} className="mt-0.5 shrink-0 text-text-secondary" />
         <p className="text-[12px] leading-5 text-text-secondary">
-          このプロフィールは、あなたと運営だけが見られます。招待元や傘下の代理店など、ほかの代理店には表示されません。
+          このプロフィールは、あなたと運営だけが見られます。招待元や傘下のオブザーバーなど、ほかのオブザーバーには表示されません。
         </p>
       </div>
 

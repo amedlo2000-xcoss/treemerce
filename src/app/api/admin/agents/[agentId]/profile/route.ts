@@ -13,7 +13,7 @@ export async function PUT(request: Request, context: { params: Promise<{ agentId
   if ("error" in guard) return guard.error;
 
   const { agentId } = await context.params;
-  if (!UUID.test(agentId)) return fail("TREEMERCE_AGENT_NOT_FOUND", "指定の代理店が見つかりません。", 404);
+  if (!UUID.test(agentId)) return fail("TREEMERCE_AGENT_NOT_FOUND", "指定のオブザーバーが見つかりません。", 404);
 
   const body = await readJson<Record<string, unknown>>(request);
   const parsed = parseAgentProfileInput(body);

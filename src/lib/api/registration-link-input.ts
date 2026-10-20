@@ -35,7 +35,7 @@ export async function readIssueLinkInput(request: Request) {
 export async function readRevokeLinkInput(request: Request, linkId: string) {
   if (!UUID.test(linkId)) {
     return {
-      error: fail("TREEMERCE_REGISTRATION_LINK_NOT_FOUND", "代理店登録リンクが見つかりません。", 404),
+      error: fail("TREEMERCE_REGISTRATION_LINK_NOT_FOUND", "オブザーバー登録リンクが見つかりません。", 404),
     } as const;
   }
   const body = await readJson<{ reason?: unknown }>(request);

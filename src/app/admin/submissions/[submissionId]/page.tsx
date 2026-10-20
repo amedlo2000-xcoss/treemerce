@@ -53,7 +53,7 @@ function ProxyEditor({
   return (
     <div className="space-y-5">
       <Notice tone="warning">
-        「{agentLabel}」の名義で代行作成した申請です。承認すると持込み元はこの代理店として記録され、あとから変更できません。
+        「{agentLabel}」の名義で代行作成した申請です。承認すると持込み元はこのオブザーバーとして記録され、あとから変更できません。
         {submission.status === "returned" ? " 差し戻しの内容を直して、もう一度申請してください。" : ""}
       </Notice>
       {submission.status === "returned" && submission.review_reason ? (
@@ -212,7 +212,7 @@ export default async function AdminSubmissionDetailPage({
             </Card>
             <Card
               title="生産者"
-              description="連絡先は申請した代理店と super_admin だけが見られます (監査ログには値を記録しません)。"
+              description="連絡先は申請したオブザーバーと super_admin だけが見られます (監査ログには値を記録しません)。"
             >
               <SubmissionProducerDetails submission={submission} />
             </Card>
@@ -220,10 +220,10 @@ export default async function AdminSubmissionDetailPage({
         )}
 
         <div className="space-y-5">
-          <Card title={proxy ? "名義の代理店 (持込み元)" : "申請した代理店"}>
+          <Card title={proxy ? "名義のオブザーバー (持込み元)" : "申請したオブザーバー"}>
             <DetailList>
               <DetailRow
-                label="代理店"
+                label="オブザーバー"
                 value={
                   <Link href={`/admin/agents/${submission.agent.id}`} className="font-medium text-brand hover:underline">
                     <Mono>{submission.agent.public_id}</Mono> {submission.agent.display_name}
@@ -236,7 +236,7 @@ export default async function AdminSubmissionDetailPage({
                   (AGENT_STATUS_LABELS as Record<string, string>)[submission.agent.status] ?? submission.agent.status
                 }
               />
-              <DetailRow label="作成" value={proxy ? "運営が代行作成 (本人は閲覧のみ)" : "代理店本人"} />
+              <DetailRow label="作成" value={proxy ? "運営が代行作成 (本人は閲覧のみ)" : "オブザーバー本人"} />
               <DetailRow label="申請回数" value={`${submission.revision} 回`} />
               <DetailRow label="最終申請" value={formatDateTime(submission.submitted_at)} />
             </DetailList>

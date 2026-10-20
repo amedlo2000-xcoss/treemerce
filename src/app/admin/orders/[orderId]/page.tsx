@@ -140,18 +140,18 @@ export default async function AdminOrderDetailPage({
           </Card>
 
           <Card
-            title="代理店"
-            description="帰属代理店は注文時点の担当で確定し、担当変更があっても変わりません。"
+            title="オブザーバー"
+            description="帰属オブザーバーは注文時点の担当で確定し、担当変更があっても変わりません。"
           >
             <DetailList>
-              <DetailRow label="帰属代理店" value={<AgentLink agent={detail.agent} />} />
+              <DetailRow label="帰属オブザーバー" value={<AgentLink agent={detail.agent} />} />
               <DetailRow label="現在の担当" value={<AgentLink agent={detail.current_agent} />} />
               <DetailRow label="経由した紹介リンク" value={<AgentLink agent={detail.referral_agent} />} />
             </DetailList>
             {transferred || viaOtherLink ? (
               <ul className="mt-3 space-y-1 text-[12px] leading-5 text-text-secondary">
-                {transferred ? <li>・注文後に担当変更があったため、帰属代理店と現在の担当が異なります。</li> : null}
-                {viaOtherLink ? <li>・担当代理店以外の紹介リンクから注文されました (紹介元は管理者のみ閲覧できます)。</li> : null}
+                {transferred ? <li>・注文後に担当変更があったため、帰属オブザーバーと現在の担当が異なります。</li> : null}
+                {viaOtherLink ? <li>・担当オブザーバー以外の紹介リンクから注文されました (紹介元は管理者のみ閲覧できます)。</li> : null}
               </ul>
             ) : null}
           </Card>

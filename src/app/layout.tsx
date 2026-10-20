@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "TREEMERCE",
-  description: "代理店と商品購入者を分離して管理するシステム",
+  description: "オブザーバーと商品購入者を分離して管理するシステム",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

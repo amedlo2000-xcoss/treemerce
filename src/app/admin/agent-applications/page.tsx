@@ -44,7 +44,7 @@ export default async function AdminAgentApplicationsPage({
   const { data, error } = await supabase.rpc("treemerce_admin_list_agent_applications", {
     p_status: statusFilter,
   });
-  if (error) throw new Error("代理店申請を読み込めませんでした。");
+  if (error) throw new Error("オブザーバー申請を読み込めませんでした。");
   const applications = (data ?? []) as AdminAgentApplication[];
 
   const tabs: { key: string; label: string; active: boolean }[] = [
@@ -59,8 +59,8 @@ export default async function AdminAgentApplicationsPage({
   return (
     <>
       <PageHeader
-        title="代理店申請"
-        description="紹介リンクの登録フォームと、代理店登録リンク (運営・代理店が発行) から届いた代理店登録のお申し込みを審査します。承認すると、紹介者の下に代理店が作られます (紹介者は申し込みの時点で確定しており、変更できません)。承認・却下の理由は監査ログに記録され、申請者本人には表示されません。"
+        title="オブザーバー申請"
+        description="紹介リンクの登録フォームと、オブザーバー登録リンク (運営・オブザーバーが発行) から届いたオブザーバー登録のお申し込みを審査します。承認すると、紹介者の下にオブザーバーが作られます (紹介者は申し込みの時点で確定しており、変更できません)。承認・却下の理由は監査ログに記録され、申請者本人には表示されません。"
       />
 
       <nav className="flex flex-wrap gap-2" aria-label="状態で絞り込み">
@@ -82,7 +82,7 @@ export default async function AdminAgentApplicationsPage({
       {applications.length === 0 ? (
         <EmptyState title="該当する申請はありません" />
       ) : (
-        <DataTable headers={["紹介者 (紐づけ先)", "申請日時", "代理店名 / 氏名", "メールアドレス", "経路", "状態", "審査日時"]}>
+        <DataTable headers={["紹介者 (紐づけ先)", "申請日時", "オブザーバー名 / 氏名", "メールアドレス", "経路", "状態", "審査日時"]}>
           {applications.map((a) => (
             <tr key={a.id}>
               <td className="px-4 py-3 align-top">

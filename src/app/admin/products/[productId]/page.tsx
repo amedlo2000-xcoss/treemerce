@@ -44,11 +44,11 @@ export default async function AdminProductEditPage({
       {created ? <Notice tone="info">商品を登録しました。</Notice> : null}
       {source ? (
         <Notice tone={product.is_published ? "info" : "warning"}>
-          持込み商品です (持込み代理店: <Mono>{source.agent_public_id}</Mono> {source.agent_display_name} / 申請{" "}
+          持込み商品です (持込みオブザーバー: <Mono>{source.agent_public_id}</Mono> {source.agent_display_name} / 申請{" "}
           <Link href={`/admin/submissions/${source.id}`} className="font-semibold text-brand hover:underline">
             {source.submission_no}
           </Link>
-          )。持込み代理店はショップには表示されません。
+          )。持込みオブザーバーはショップには表示されません。
           {product.is_published
             ? null
             : " 価格・在庫を確定してから公開してください (公開できるのは super_admin のみで、監査ログに記録されます)。"}

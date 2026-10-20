@@ -69,7 +69,7 @@ export default async function AgentCustomersPage() {
     <>
       <MobilePageHeader
         title="顧客"
-        description="あなたが担当している商品購入者です。他の代理店の担当者は表示されません。"
+        description="あなたが担当している商品購入者です。他のオブザーバーの担当者は表示されません。"
       />
 
       {items.length === 0 ? (

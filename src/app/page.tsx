@@ -14,31 +14,31 @@ export default async function Home() {
       <main className="w-full max-w-xl">
         <p className="font-mono text-[11px] tracking-widest text-text-secondary">TREEMERCE</p>
         <h1 className="mt-3 text-[32px] font-bold tracking-tight text-text-primary">
-          代理店と商品購入者を、
+          オブザーバーと商品購入者を、
           <br />
           分離して管理する。
         </h1>
         <p className="mt-4 text-[15px] leading-7 text-text-secondary">
-          代理店の登録経路と、購入者の担当代理店は別々のデータとして扱われます。
-          担当代理店は最初の登録時に確定し、以後は管理者以外が変更することはできません。
-          他の代理店が担当する購入者の情報が画面や API に出ることはありません。
+          オブザーバーの登録経路と、購入者の担当オブザーバーは別々のデータとして扱われます。
+          担当オブザーバーは最初の登録時に確定し、以後は管理者以外が変更することはできません。
+          他のオブザーバーが担当する購入者の情報が画面や API に出ることはありません。
         </p>
 
         <div className="mt-8 flex flex-wrap gap-3">
           <LinkButton href="/login">ログイン</LinkButton>
           <LinkButton href="/onboarding" variant="secondary">
-            代理店登録のお申し込みについて
+            オブザーバー登録のお申し込みについて
           </LinkButton>
         </div>
         <p className="mt-3 text-[13px] leading-6 text-text-secondary">
-          代理店登録は、代理店から受け取った紹介リンク、または運営事務局からご案内した代理店登録リンクからお申し込みください。
+          オブザーバー登録は、オブザーバーから受け取った紹介リンク、または運営事務局からご案内したオブザーバー登録リンクからお申し込みください。
         </p>
 
         <dl className="mt-12 grid gap-4 border-t border-border-soft pt-8 text-sm sm:grid-cols-2">
           <div>
             <dt className="font-medium text-text-primary">商流マップ</dt>
             <dd className="mt-1 text-[13px] leading-6 text-text-secondary">
-              自分を根とした傘下の広がりを確認できます。自分の担当顧客は実名、傘下の他代理店が担当する顧客は匿名ノードで表示されます。
+              自分を根とした傘下の広がりを確認できます。自分の担当顧客は実名、傘下の他オブザーバーが担当する顧客は匿名ノードで表示されます。
             </dd>
           </div>
           <div>

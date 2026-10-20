@@ -29,14 +29,14 @@ export default async function AdminProxySubmissionNewPage({ params }: { params: 
 
   return (
     <>
-      <BackLink href={`/admin/agents/${agent.id}`}>代理店詳細</BackLink>
+      <BackLink href={`/admin/agents/${agent.id}`}>オブザーバー詳細</BackLink>
       <PageHeader
         title="持込み申請を代行で作成"
-        description="代理店から伺った商品を、その代理店の名義で申請します。下書き保存のあとに画像を追加し、申請・審査へ進めます。"
+        description="オブザーバーから伺った商品を、そのオブザーバーの名義で申請します。下書き保存のあとに画像を追加し、申請・審査へ進めます。"
       />
 
       <div className="rounded-[20px] border-2 border-brand bg-brand-soft px-5 py-4">
-        <p className="text-[12px] font-semibold text-text-secondary">名義の代理店 (持込み元になります)</p>
+        <p className="text-[12px] font-semibold text-text-secondary">名義のオブザーバー (持込み元になります)</p>
         <p className="mt-1 text-[20px] font-bold text-text-primary">{agent.display_name}</p>
         <p className="mt-0.5 text-[13px] text-text-secondary">
           <Mono>{agent.public_id}</Mono>・{AGENT_STATUS_LABELS[agent.status] ?? agent.status}
@@ -44,12 +44,12 @@ export default async function AdminProxySubmissionNewPage({ params }: { params: 
       </div>
 
       {agent.status !== "active" ? (
-        <Notice tone="warning">稼働中の代理店のみ申請を代行できます。</Notice>
+        <Notice tone="warning">稼働中のオブザーバーのみ申請を代行できます。</Notice>
       ) : (
         <>
           <Notice tone="warning">
-            承認すると持込み元はこの代理店として記録され、あとから変更できません。名義の代理店が正しいか確認してください。
-            この申請は代理店本人のマイページに「運営が代行作成」として表示されます (本人は閲覧のみ)。
+            承認すると持込み元はこのオブザーバーとして記録され、あとから変更できません。名義のオブザーバーが正しいか確認してください。
+            この申請はオブザーバー本人のマイページに「運営が代行作成」として表示されます (本人は閲覧のみ)。
           </Notice>
           <Card>
             <SubmissionForm

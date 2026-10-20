@@ -307,7 +307,7 @@ export function ReviewPanel({
             </div>
           </fieldset>
 
-          <Field label="承認理由 (任意・代理店にも表示されます)">
+          <Field label="承認理由 (任意・オブザーバーにも表示されます)">
             <textarea rows={2} value={reason} onChange={(e) => setReason(e.target.value)} maxLength={1000} className={FIELD_CLASS} />
           </Field>
 
@@ -320,10 +320,10 @@ export function ReviewPanel({
         <form onSubmit={handleReview} className="space-y-4">
           <p className="text-[13px] leading-5 text-text-secondary">
             {action === "return"
-              ? "差し戻すと、代理店が内容を修正して再申請できます。"
+              ? "差し戻すと、オブザーバーが内容を修正して再申請できます。"
               : "却下すると、この申請は再申請できなくなります。"}
           </p>
-          <Field label={`${action === "return" ? "差し戻し" : "却下"}の理由 (必須・代理店にも表示されます)`}>
+          <Field label={`${action === "return" ? "差し戻し" : "却下"}の理由 (必須・オブザーバーにも表示されます)`}>
             <textarea
               required
               rows={4}

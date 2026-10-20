@@ -319,7 +319,7 @@ export const AGENT_APPLICATION_AUDIT_LABELS: Record<string, string> = {
 export const AGENT_APPLICATION_SOURCE_LABELS: Record<string, string> = {
   referral_link: "紹介リンク",
   admin_link: "運営の登録リンク",
-  agent_link: "代理店の登録リンク",
+  agent_link: "オブザーバーの登録リンク",
 };
 
 /** 一覧での表示用 (DB の app.registration_link_state と同じ判定) */

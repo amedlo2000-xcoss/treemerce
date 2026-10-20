@@ -45,7 +45,7 @@ export default async function AdminAgentApplicationPage({
   });
   if (error) {
     if (`${error.message}`.includes("TREEMERCE_APPLICATION_NOT_FOUND")) notFound();
-    throw new Error("代理店申請を読み込めませんでした。");
+    throw new Error("オブザーバー申請を読み込めませんでした。");
   }
   const a = data as AdminAgentApplicationDetail;
   const applicantName = a.applicant_name ?? a.display_name;
@@ -56,10 +56,10 @@ export default async function AdminAgentApplicationPage({
 
   return (
     <>
-      <BackLink href="/admin/agent-applications">代理店申請の一覧</BackLink>
+      <BackLink href="/admin/agent-applications">オブザーバー申請の一覧</BackLink>
       <PageHeader
         title={a.display_name}
-        description="代理店登録のお申し込み"
+        description="オブザーバー登録のお申し込み"
         action={
           <Badge tone={AGENT_APPLICATION_STATUS_BADGE[a.status]}>{AGENT_APPLICATION_STATUS_LABELS[a.status]}</Badge>
         }
@@ -77,7 +77,7 @@ export default async function AdminAgentApplicationPage({
         <Card title="申請内容">
           <DetailList>
             <DetailRow label="経路" value={linkLabel} />
-            <DetailRow label="代理店名" value={a.display_name} />
+            <DetailRow label="オブザーバー名" value={a.display_name} />
             <DetailRow label="氏名" value={a.applicant_name ?? "—"} />
             <DetailRow label="メールアドレス" value={a.email} />
             <DetailRow label="電話番号" value={a.phone ?? "—"} />
@@ -88,15 +88,15 @@ export default async function AdminAgentApplicationPage({
 
         <Card
           title="紹介者 (招待元)"
-          description="申請の時点で確定しています。紹介リンク・代理店が発行した代理店登録リンクからの申請はリンクの代理店、運営の代理店登録リンクからの申請は紹介者なし (運営直接) です。承認するとそのまま招待元 (invited_by) になり、あとから変更・追加できません。会員としての担当代理店とは別のデータです。"
+          description="申請の時点で確定しています。紹介リンク・オブザーバーが発行したオブザーバー登録リンクからの申請はリンクのオブザーバー、運営のオブザーバー登録リンクからの申請は紹介者なし (運営直接) です。承認するとそのまま招待元 (invited_by) になり、あとから変更・追加できません。会員としての担当オブザーバーとは別のデータです。"
         >
           {a.inviter ? (
             <DetailList>
               <DetailRow
-                label="代理店"
+                label="オブザーバー"
                 value={<TextLink href={`/admin/agents/${a.inviter.id}`}>{a.inviter.display_name}</TextLink>}
               />
-              <DetailRow label="代理店ID" value={<Mono>{a.inviter.public_id}</Mono>} />
+              <DetailRow label="オブザーバーID" value={<Mono>{a.inviter.public_id}</Mono>} />
               <DetailRow label="状態" value={AGENT_STATUS_LABELS[a.inviter.status]} />
             </DetailList>
           ) : (
@@ -105,14 +105,14 @@ export default async function AdminAgentApplicationPage({
           {a.status === "pending" && a.inviter && a.inviter.status !== "active" ? (
             <div className="mt-3">
               <Notice tone="warning">
-                招待元の代理店が稼働中ではないため、この申請は承認できません
-                (招待元を別の代理店に置き換えることもできません)。
+                招待元のオブザーバーが稼働中ではないため、この申請は承認できません
+                (招待元を別のオブザーバーに置き換えることもできません)。
               </Notice>
             </div>
           ) : null}
         </Card>
 
-        <Card title="代理店規約への同意">
+        <Card title="オブザーバー規約への同意">
           {a.terms ? (
             <DetailList>
               <DetailRow label="規約" value={`${a.terms.title} (第 ${a.terms.version} 版)`} />
@@ -135,10 +135,10 @@ export default async function AdminAgentApplicationPage({
             <DetailRow label="状態" value={AGENT_APPLICATION_STATUS_LABELS[a.status]} />
             <DetailRow label="審査日時" value={formatDateTime(a.reviewed_at)} />
             <DetailRow
-              label="作成された代理店"
+              label="作成されたオブザーバー"
               value={
                 a.created_agent_id ? (
-                  <TextLink href={`/admin/agents/${a.created_agent_id}`}>代理店の詳細</TextLink>
+                  <TextLink href={`/admin/agents/${a.created_agent_id}`}>オブザーバーの詳細</TextLink>
                 ) : (
                   "—"
                 )

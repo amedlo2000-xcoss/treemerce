@@ -139,7 +139,7 @@ export function SubmissionForm({
   async function handleSubmit() {
     if (!submission) return;
     const message = proxy
-      ? `「${proxy.agentLabel}」の名義で申請します。承認すると持込み元はこの代理店になり、あとから変更できません。申請中は内容を編集できません。よろしいですか？`
+      ? `「${proxy.agentLabel}」の名義で申請します。承認すると持込み元はこのオブザーバーになり、あとから変更できません。申請中は内容を編集できません。よろしいですか？`
       : "この内容で申請します。申請中は内容を編集できません。よろしいですか？";
     if (!window.confirm(message)) return;
     setPending("submit");
@@ -282,8 +282,8 @@ export function SubmissionForm({
           <Lock size={14} className="mt-0.5 shrink-0 text-text-secondary" />
           <p className="text-[12px] leading-5 text-text-secondary">
             {proxy
-              ? "連絡先は、名義の代理店本人と運営 (super_admin) だけが見られます。監査ログには値を記録しません。"
-              : "連絡先は、あなたと運営 (super_admin) だけが見られます。ほかの代理店や商品ページには表示されません。"}
+              ? "連絡先は、名義のオブザーバー本人と運営 (super_admin) だけが見られます。監査ログには値を記録しません。"
+              : "連絡先は、あなたと運営 (super_admin) だけが見られます。ほかのオブザーバーや商品ページには表示されません。"}
             電話番号かメールのどちらかが申請時に必須です。
           </p>
         </div>

@@ -152,7 +152,7 @@ export default async function AdminOrdersPage({
       {orders.length === 0 ? (
         <EmptyState title="該当する注文はありません" />
       ) : (
-        <DataTable headers={["注文番号", "注文者", "帰属代理店", "合計", "状態", "支払期限", "注文日時", ""]}>
+        <DataTable headers={["注文番号", "注文者", "帰属オブザーバー", "合計", "状態", "支払期限", "注文日時", ""]}>
           {orders.map((o) => (
             <tr key={o.id}>
               <td className={TD}>

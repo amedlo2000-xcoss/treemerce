@@ -84,7 +84,7 @@ export function SubmissionImageGallery({ images }: { images: SubmissionImageView
 }
 
 const ACTOR_LABELS: Record<string, string> = {
-  agent: "代理店",
+  agent: "オブザーバー",
   super_admin: "運営",
   system: "システム",
 };

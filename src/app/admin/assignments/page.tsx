@@ -97,13 +97,13 @@ export default async function AdminAssignmentsPage({
     <>
       <PageHeader
         title="顧客担当管理"
-        description="購入者ごとの担当代理店を確認し、必要な場合のみ管理者権限で変更します。"
+        description="購入者ごとの担当オブザーバーを確認し、必要な場合のみ管理者権限で変更します。"
       />
 
       <Notice tone="warning">
-        担当代理店は初回登録時に確定します。ここでの変更は例外的な運用であり、
+        担当オブザーバーは初回登録時に確定します。ここでの変更は例外的な運用であり、
         変更前後・理由・実行者・日時が担当変更履歴と監査ログの両方に必ず記録されます。
-        代理店自身がこの操作を行うことはできません。
+        オブザーバー自身がこの操作を行うことはできません。
       </Notice>
 
       <Card
@@ -125,7 +125,7 @@ export default async function AdminAssignmentsPage({
         {assignments.length === 0 ? (
           <EmptyState title="担当関係がありません" />
         ) : (
-          <DataTable headers={["購入者", "担当代理店", "状態", "確定経路", "担当開始"]}>
+          <DataTable headers={["購入者", "担当オブザーバー", "状態", "確定経路", "担当開始"]}>
             {assignments.map((a) => (
               <tr key={a.id}>
                 <td className={TD_STRONG}>{a.customer?.full_name ?? "—"}</td>

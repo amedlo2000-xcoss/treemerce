@@ -36,11 +36,11 @@ export default async function AgentAnalyticsPage({
     <>
       <MobilePageHeader
         title="客層分析"
-        description="あなたと傘下代理店全員が担当する購入者を、属性値のみで集計しています。"
+        description="あなたと傘下オブザーバー全員が担当する購入者を、属性値のみで集計しています。"
       />
 
       <Notice tone="info">
-        傘下の他代理店が担当する購入者については、氏名・連絡先・購入明細などの個人情報は使用せず、
+        傘下の他オブザーバーが担当する購入者については、氏名・連絡先・購入明細などの個人情報は使用せず、
         年代・性別・地域・顧客タイプ・購入カテゴリ・購入金額帯の属性値のみを匿名のまま合算しています。
         購入カテゴリと購入金額は、入金確認済み以降の注文 (と完了済みの購入) だけを集計し、購入者の人数で数えます。
         該当件数が {stats?.k_threshold ?? 5} 件未満のセグメントは「該当データ少数」にまとめています。
@@ -68,14 +68,14 @@ export default async function AgentAnalyticsPage({
           <BigStat
             label="集計対象の購入者"
             value={stats?.total_customers ?? 0}
-            hint="自分 + 傘下代理店の担当合計"
+            hint="自分 + 傘下オブザーバーの担当合計"
           />
         </Surface>
         <Surface className="!p-4">
           <BigStat
-            label="集計対象の代理店"
+            label="集計対象のオブザーバー"
             value={stats?.scope_agent_count ?? 0}
-            hint="自分を含む部分木の代理店数"
+            hint="自分を含む部分木のオブザーバー数"
           />
         </Surface>
         <Surface className="!p-4">

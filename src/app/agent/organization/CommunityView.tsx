@@ -58,7 +58,7 @@ function AgentProfileCard({ item, selfInviterLabel }: { item: FlatAgent; selfInv
           <div className="space-y-3">
             <div className="grid grid-cols-2 gap-2">
               <StatTile label="登録日" value={formatDate(node.registered_at)} />
-              <StatTile label="傘下代理店" value={item.descendantCount} />
+              <StatTile label="傘下オブザーバー" value={item.descendantCount} />
             </div>
             <div className="rounded-2xl border border-border-soft px-3 py-2.5">
               <p className="text-[12px] text-text-secondary">招待元 (登録経路)</p>

@@ -114,8 +114,8 @@ export default async function AgentSourcedSalesPage({
       <div className="flex items-start gap-2.5 rounded-2xl bg-surface-muted px-3.5 py-3">
         <Info size={14} className="mt-0.5 shrink-0 text-text-secondary" />
         <p className="text-[12px] leading-5 text-text-secondary">
-          購入者の情報や、どの代理店から売れたかは表示されません。注文が{sales.k_threshold}件未満の商品や、
-          ほかの代理店のお客様の注文が{sales.k_threshold}件未満の商品は「該当データ少数」と表示します。
+          購入者の情報や、どのオブザーバーから売れたかは表示されません。注文が{sales.k_threshold}件未満の商品や、
+          ほかのオブザーバーのお客様の注文が{sales.k_threshold}件未満の商品は「該当データ少数」と表示します。
           集計時刻 {formatDateTime(sales.generated_at)}
         </p>
       </div>

@@ -123,7 +123,7 @@ export default async function AgentMyPage({
                   <GitBranch size={18} />
                 </div>
                 <dl className="min-w-0 flex-1">
-                  <dt className="text-[12px] text-text-secondary">招待元の代理店</dt>
+                  <dt className="text-[12px] text-text-secondary">招待元のオブザーバー</dt>
                   <dd className="truncate text-[15px] font-semibold text-text-primary">
                     {agent.invited_by ? (inviterName ?? "紹介リンク経由") : "招待元なし"}
                   </dd>
@@ -169,7 +169,7 @@ export default async function AgentMyPage({
               <div className="mt-3 flex items-start gap-2.5 rounded-2xl bg-surface-muted px-3 py-2.5">
                 <Lock size={14} className="mt-0.5 shrink-0 text-text-secondary" />
                 <p className="text-[12px] leading-5 text-text-secondary">
-                  あなたと運営だけが見られます。ほかの代理店には表示されません。
+                  あなたと運営だけが見られます。ほかのオブザーバーには表示されません。
                 </p>
               </div>
               <div className="mt-3">
@@ -192,7 +192,7 @@ export default async function AgentMyPage({
 
           <Surface padded={false} className="divide-y divide-border-soft px-3">
             <LinkRow icon={UserPlus} label="登録URL・ショップの紹介リンク" href="/agent/invitations" />
-            <LinkRow icon={Link2} label="代理店登録リンクの発行" href="/agent/registration-links" />
+            <LinkRow icon={Link2} label="オブザーバー登録リンクの発行" href="/agent/registration-links" />
             <LinkRow icon={PackagePlus} label="商品の持込み申請" href="/agent/submissions" />
             <LinkRow icon={TrendingUp} label="持込み商品の売れ行き" href="/agent/sourced-sales" />
             <LinkRow icon={ShoppingBag} label="担当顧客の注文" href="/agent/orders" />

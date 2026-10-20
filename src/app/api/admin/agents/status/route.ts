@@ -13,7 +13,7 @@ export async function POST(request: Request) {
 
   const body = await readJson<Body>(request);
   if (!body?.agent_id) {
-    return fail("TREEMERCE_INVALID_INPUT", "代理店IDは必須です。", 400);
+    return fail("TREEMERCE_INVALID_INPUT", "オブザーバーIDは必須です。", 400);
   }
   if (!body.status || !(AGENT_STATUSES as readonly string[]).includes(body.status)) {
     return fail("TREEMERCE_INVALID_INPUT", "ステータスの指定が不正です。", 400);
