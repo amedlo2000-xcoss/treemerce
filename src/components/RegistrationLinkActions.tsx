@@ -6,8 +6,15 @@ import { useState } from "react";
 import { CopyField } from "@/app/agent/invitations/InvitationPanel";
 import { BUTTON_CLASS, FIELD_CLASS, Field, FormMessage } from "@/components/ui";
 
+/**
+ * 代理店登録リンクの発行・無効化 (運営の画面と代理店のマイページで共通)。
+ * endpoint は運営なら /api/admin/agent-registration-links、代理店なら /api/agent/registration-links。
+ * 紐づけ先 (紹介者) はサーバー側で決まる (運営 = なし、代理店 = 発行した本人) ため、ここでは送らない。
+ */
+type Endpoint = "/api/admin/agent-registration-links" | "/api/agent/registration-links";
+
 /** 代理店登録リンクの発行。発行した URL はこの画面でだけ表示する (再表示はできない)。 */
-export function IssueLinkForm() {
+export function IssueLinkForm({ endpoint }: { endpoint: Endpoint }) {
   const router = useRouter();
   const [note, setNote] = useState("");
   const [maxUses, setMaxUses] = useState("");
@@ -22,7 +29,7 @@ export function IssueLinkForm() {
     setError(null);
     setIssuedUrl(null);
 
-    const response = await fetch("/api/admin/agent-registration-links", {
+    const response = await fetch(endpoint, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
@@ -95,7 +102,7 @@ export function IssueLinkForm() {
 }
 
 /** 代理店登録リンクの無効化 (理由必須)。以後の申し込みを受け付けない。 */
-export function RevokeLinkButton({ linkId }: { linkId: string }) {
+export function RevokeLinkButton({ endpoint, linkId }: { endpoint: Endpoint; linkId: string }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [reason, setReason] = useState("");
@@ -107,7 +114,7 @@ export function RevokeLinkButton({ linkId }: { linkId: string }) {
     setPending(true);
     setError(null);
 
-    const response = await fetch(`/api/admin/agent-registration-links/${linkId}/revoke`, {
+    const response = await fetch(`${endpoint}/${linkId}/revoke`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ reason }),

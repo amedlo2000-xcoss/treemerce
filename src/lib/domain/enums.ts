@@ -310,6 +310,8 @@ export const AGENT_APPLICATION_AUDIT_LABELS: Record<string, string> = {
   "agent_application.submit": "申し込み",
   "agent_application.approve": "承認",
   "agent_application.reject": "却下",
+  "registration_link.create": "リンクの発行",
+  "registration_link.revoke": "リンクの無効化",
 };
 
 // ---- 代理店申請の経路・運営の代理店登録リンク (0030) ---------------------------
@@ -317,6 +319,7 @@ export const AGENT_APPLICATION_AUDIT_LABELS: Record<string, string> = {
 export const AGENT_APPLICATION_SOURCE_LABELS: Record<string, string> = {
   referral_link: "紹介リンク",
   admin_link: "運営の登録リンク",
+  agent_link: "代理店の登録リンク",
 };
 
 /** 一覧での表示用 (DB の app.registration_link_state と同じ判定) */
@@ -325,6 +328,7 @@ export const REGISTRATION_LINK_STATE_LABELS: Record<string, string> = {
   expired: "期限切れ",
   exhausted: "上限に到達",
   revoked: "無効化済み",
+  issuer_inactive: "発行元が停止中",
 };
 
 export const REGISTRATION_LINK_STATE_BADGE: Record<string, "green" | "amber" | "neutral" | "red"> = {
@@ -332,4 +336,5 @@ export const REGISTRATION_LINK_STATE_BADGE: Record<string, "green" | "amber" | "
   expired: "neutral",
   exhausted: "amber",
   revoked: "red",
+  issuer_inactive: "amber",
 };

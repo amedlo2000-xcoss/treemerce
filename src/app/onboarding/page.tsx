@@ -12,7 +12,8 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
  *
  * 代理店は紹介リンクの登録フォームから申し込み、運営 (super_admin) の承認でだけ作られる。
  * このページでは代理店を作らない。ログイン中なら本人の申請状況を中立的な文面だけで表示する
- * (却下の理由・招待元は表示しない)。旧来の招待URL (?invite=) は発行元の登録フォームへ案内する。
+ * (却下の理由・招待元は表示しない)。承認前の申込者が代理店のマイページを開くとここへ転送され、
+ * 「審査中です」とだけ表示する。旧来の招待URL (?invite=) は発行元の登録フォームへ案内する。
  */
 export default async function OnboardingPage({
   searchParams,
@@ -56,24 +57,29 @@ export default async function OnboardingPage({
             現在のアカウント状態は「{AGENT_STATUS_LABELS[viewer.agent.status]}」です。
             詳しくは運営事務局までお問い合わせください。
           </Notice>
+        ) : application?.state === "received" ? (
+          <Notice tone="info">審査中です。</Notice>
         ) : application && application.state !== "none" && application.message ? (
           <Notice tone="info">{application.message}</Notice>
         ) : null}
 
-        <div className="space-y-4 rounded-[24px] border border-border-soft bg-surface p-6 shadow-[var(--shadow-card)]">
-          <p className="text-[14px] leading-7 text-text-primary">
-            代理店登録は、代理店から受け取った紹介リンクの登録フォーム、または運営事務局からご案内した
-            代理店登録リンクからお申し込みいただけます。フォームで同意・誓約事項にチェックしてお申し込みください。
-            運営が確認したうえで、代理店としてご利用いただけるようになります。
-          </p>
-          {registerHref ? (
-            <LinkButton href={registerHref}>登録フォームへ進む</LinkButton>
-          ) : (
-            <p className="text-[13px] leading-6 text-text-secondary">
-              リンクがお手元にない場合は、紹介を受けた代理店または運営事務局までお問い合わせください。
+        {/* 承認前の申込者には「審査中です」だけを表示する */}
+        {application?.state === "received" && !viewer.agent ? null : (
+          <div className="space-y-4 rounded-[24px] border border-border-soft bg-surface p-6 shadow-[var(--shadow-card)]">
+            <p className="text-[14px] leading-7 text-text-primary">
+              代理店登録は、代理店または運営事務局から受け取った代理店登録リンク、もしくは代理店の
+              紹介リンクの登録フォームからお申し込みいただけます。フォームで同意・誓約事項にチェックしてお申し込みください。
+              運営が確認したうえで、代理店としてご利用いただけるようになります。
             </p>
-          )}
-        </div>
+            {registerHref ? (
+              <LinkButton href={registerHref}>登録フォームへ進む</LinkButton>
+            ) : (
+              <p className="text-[13px] leading-6 text-text-secondary">
+                リンクがお手元にない場合は、紹介を受けた代理店または運営事務局までお問い合わせください。
+              </p>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

@@ -765,10 +765,15 @@ export type RegisterMemberResult = {
 export type AdminAgentApplication = {
   id: string;
   status: AgentApplicationStatus;
-  /** 申請の経路 (0030)。referral_link = 紹介リンク (招待元あり)、admin_link = 運営の登録リンク (招待元なし) */
-  source: "referral_link" | "admin_link";
+  /**
+   * 申請の経路。referral_link = 紹介リンク (招待元あり)、admin_link = 運営の登録リンク (招待元なし・0030)、
+   * agent_link = 代理店が発行した登録リンク (招待元 = 発行した代理店・0031)
+   */
+  source: "referral_link" | "admin_link" | "agent_link";
   auth_user_id: string;
   display_name: string;
+  /** 申込者の氏名 (代理店登録リンクからの申し込み。0031 より前の申請は null) */
+  applicant_name: string | null;
   email: string;
   phone: string | null;
   created_at: string;
@@ -776,7 +781,7 @@ export type AdminAgentApplication = {
   reviewed_by: string | null;
   created_agent_id: string | null;
   inviter: { id: string; public_id: string; display_name: string; status: AgentStatus } | null;
-  registration_link: { id: string; note: string | null; state: string } | null;
+  registration_link: { id: string; note: string | null; issuer_agent_id: string | null; state: string } | null;
   terms: {
     version: string;
     title: string;
@@ -792,12 +797,35 @@ export type AdminAgentApplicationDetail = AdminAgentApplication & {
   audit: { action: string; actor_user_id: string | null; actor_role: string; reason: string | null; created_at: string }[];
 };
 
-/** treemerce_admin_list_registration_links (super_admin。トークンは含まない) */
+/** 代理店登録リンクの状態 (DB の app.registration_link_state と同じ) */
+export type RegistrationLinkState = "active" | "expired" | "exhausted" | "revoked" | "issuer_inactive";
+
+/** treemerce_resolve_registration_link (公開)。紹介者は代理店名と代理店IDだけ。運営のリンクは inviter = null */
+export type RegistrationLinkResolution =
+  | { valid: true; inviter: { public_id: string; display_name: string } | null }
+  | { valid: false; reason: "not_found" | "expired" | "exhausted" | "revoked" | "unavailable" };
+
+/** treemerce_my_registration_links (代理店本人。自分が発行したリンクだけ。申し込んだ人の情報は含まない) */
+export type MyRegistrationLink = {
+  id: string;
+  note: string | null;
+  status: "active" | "revoked";
+  state: RegistrationLinkState;
+  max_uses: number | null;
+  used_count: number;
+  expires_at: string | null;
+  created_at: string;
+  revoked_at: string | null;
+};
+
+/** treemerce_admin_list_registration_links (super_admin。トークンは含まない。代理店が発行したリンクも含む) */
 export type AdminRegistrationLink = {
   id: string;
   note: string | null;
   status: "active" | "revoked";
-  state: "active" | "expired" | "exhausted" | "revoked";
+  state: RegistrationLinkState;
+  /** 発行した代理店 (= 紹介者)。運営が発行したリンクは null */
+  issuer: { id: string; public_id: string; display_name: string; status: AgentStatus } | null;
   max_uses: number | null;
   used_count: number;
   expires_at: string | null;

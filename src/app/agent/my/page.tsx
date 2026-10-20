@@ -3,6 +3,7 @@ import {
   Briefcase,
   ChevronRight,
   GitBranch,
+  Link2,
   Lock,
   PackagePlus,
   Settings,
@@ -191,6 +192,7 @@ export default async function AgentMyPage({
 
           <Surface padded={false} className="divide-y divide-border-soft px-3">
             <LinkRow icon={UserPlus} label="登録URL・ショップの紹介リンク" href="/agent/invitations" />
+            <LinkRow icon={Link2} label="代理店登録リンクの発行" href="/agent/registration-links" />
             <LinkRow icon={PackagePlus} label="商品の持込み申請" href="/agent/submissions" />
             <LinkRow icon={TrendingUp} label="持込み商品の売れ行き" href="/agent/sourced-sales" />
             <LinkRow icon={ShoppingBag} label="担当顧客の注文" href="/agent/orders" />

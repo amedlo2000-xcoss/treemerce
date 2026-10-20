@@ -23,7 +23,8 @@ import type { AdminAgentApplication } from "@/lib/domain/types";
 
 /**
  * 代理店申請の一覧 (super_admin 専用。RPC 側でも判定)。既定は承認待ち。
- * 招待元は申請に使われたリンクの代理店で、申請時点で固定されている (承認時に変更できない)。
+ * 紹介者 (紐づけ先) は申請に使われたリンクの代理店 (運営のリンクは運営直接) で、申請時点で固定されている
+ * (承認時に変更できない)。承認の判断で最も重要な情報なので、一覧の先頭の列に出す。
  */
 export default async function AdminAgentApplicationsPage({
   searchParams,
@@ -59,7 +60,7 @@ export default async function AdminAgentApplicationsPage({
     <>
       <PageHeader
         title="代理店申請"
-        description="紹介リンクの登録フォームと、運営の代理店登録リンクから届いた代理店登録のお申し込みを審査します。承認すると代理店が作られ、却下した場合は会員のままです。承認・却下の理由は監査ログに記録され、申請者本人には表示されません。"
+        description="紹介リンクの登録フォームと、代理店登録リンク (運営・代理店が発行) から届いた代理店登録のお申し込みを審査します。承認すると、紹介者の下に代理店が作られます (紹介者は申し込みの時点で確定しており、変更できません)。承認・却下の理由は監査ログに記録され、申請者本人には表示されません。"
       />
 
       <nav className="flex flex-wrap gap-2" aria-label="状態で絞り込み">
@@ -81,14 +82,27 @@ export default async function AdminAgentApplicationsPage({
       {applications.length === 0 ? (
         <EmptyState title="該当する申請はありません" />
       ) : (
-        <DataTable headers={["申請日時", "代理店名", "メールアドレス", "経路", "招待元", "状態", "審査日時"]}>
+        <DataTable headers={["紹介者 (紐づけ先)", "申請日時", "代理店名 / 氏名", "メールアドレス", "経路", "状態", "審査日時"]}>
           {applications.map((a) => (
             <tr key={a.id}>
+              <td className="px-4 py-3 align-top">
+                {a.inviter ? (
+                  <>
+                    <div className="text-[14px] font-bold text-text-primary">{a.inviter.display_name}さん</div>
+                    <Mono>{a.inviter.public_id}</Mono>
+                  </>
+                ) : (
+                  <div className="text-[14px] font-bold text-text-primary">運営直接</div>
+                )}
+              </td>
               <td className={`${TD} whitespace-nowrap`}>{formatDateTime(a.created_at)}</td>
               <td className={TD_STRONG}>
                 <Link href={`/admin/agent-applications/${a.id}`} className="hover:text-brand">
                   {a.display_name}
                 </Link>
+                {a.applicant_name ? (
+                  <div className="text-[12px] font-normal text-text-secondary">{a.applicant_name}</div>
+                ) : null}
               </td>
               <td className={TD}>{a.email}</td>
               <td className={TD}>
@@ -96,16 +110,6 @@ export default async function AdminAgentApplicationsPage({
                 {a.registration_link?.note ? (
                   <div className="text-[12px] text-text-secondary">{a.registration_link.note}</div>
                 ) : null}
-              </td>
-              <td className={TD}>
-                {a.inviter ? (
-                  <>
-                    <Mono>{a.inviter.public_id}</Mono>
-                    <div className="text-text-primary">{a.inviter.display_name}</div>
-                  </>
-                ) : (
-                  "なし (運営からの直接登録)"
-                )}
               </td>
               <td className={TD}>
                 <Badge tone={AGENT_APPLICATION_STATUS_BADGE[a.status]}>

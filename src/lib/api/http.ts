@@ -205,6 +205,12 @@ const ERROR_MAP: Record<string, { status: number; message: string }> = {
   TREEMERCE_REGISTRATION_LINK_WRITE_DENIED: { status: 403, message: "代理店登録リンクへの直接書込みはできません。" },
   TREEMERCE_REGISTRATION_LINK_IMMUTABLE: { status: 403, message: "発行済みのリンクの内容は変更できません。" },
   TREEMERCE_REGISTRATION_LINK_DELETE_DENIED: { status: 403, message: "代理店登録リンクは削除できません (無効化で扱います)。" },
+
+  // 代理店が発行する代理店登録リンク (0031)
+  TREEMERCE_APPLICATION_INVITER_MISMATCH: {
+    status: 409,
+    message: "申請の紹介者はリンクの発行元と一致しなければなりません。",
+  },
 };
 
 /** DB 側の具体的な理由 (「商品名は必須です」等) をそのまま画面に返すコード */

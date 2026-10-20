@@ -28,7 +28,8 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
  * 代理店申請の詳細と審査 (super_admin 専用。RPC 側でも判定)。
- * 招待元は申請時点で固定されており、ここでは変更できない。審査の履歴 (理由を含む) は運営にだけ表示する。
+ * 紹介者 (紐づけ先) は申請時点で固定されており、ここでは変更できない。承認の判断で最も重要な情報なので、
+ * ページの一番上に、どのリンクから来たかと合わせて表示する。審査の履歴 (理由を含む) は運営にだけ表示する。
  */
 export default async function AdminAgentApplicationPage({
   params,
@@ -47,6 +48,11 @@ export default async function AdminAgentApplicationPage({
     throw new Error("代理店申請を読み込めませんでした。");
   }
   const a = data as AdminAgentApplicationDetail;
+  const applicantName = a.applicant_name ?? a.display_name;
+  const inviterLabel = a.inviter ? `${a.inviter.display_name}さん（${a.inviter.public_id}）` : null;
+  const linkLabel = a.registration_link
+    ? `${AGENT_APPLICATION_SOURCE_LABELS[a.source] ?? a.source}「${a.registration_link.note ?? "メモなし"}」`
+    : (AGENT_APPLICATION_SOURCE_LABELS[a.source] ?? a.source);
 
   return (
     <>
@@ -59,14 +65,20 @@ export default async function AdminAgentApplicationPage({
         }
       />
 
+      <section className="rounded-[20px] border-2 border-brand/40 bg-brand-soft px-5 py-4">
+        <p className="text-[12px] font-semibold text-text-secondary">紹介者 (承認するとこの下に登録されます)</p>
+        <p className="mt-1 text-[22px] font-bold leading-8 text-text-primary">
+          {inviterLabel ? `紹介者：${inviterLabel}` : "運営直接"}
+        </p>
+        <p className="mt-1 text-[13px] leading-5 text-text-secondary">申し込みの経路：{linkLabel}</p>
+      </section>
+
       <div className="grid gap-4 lg:grid-cols-2">
         <Card title="申請内容">
           <DetailList>
-            <DetailRow label="経路" value={AGENT_APPLICATION_SOURCE_LABELS[a.source] ?? a.source} />
-            {a.registration_link ? (
-              <DetailRow label="代理店登録リンク" value={a.registration_link.note ?? "(メモなし)"} />
-            ) : null}
+            <DetailRow label="経路" value={linkLabel} />
             <DetailRow label="代理店名" value={a.display_name} />
+            <DetailRow label="氏名" value={a.applicant_name ?? "—"} />
             <DetailRow label="メールアドレス" value={a.email} />
             <DetailRow label="電話番号" value={a.phone ?? "—"} />
             <DetailRow label="申請日時" value={formatDateTime(a.created_at)} />
@@ -75,8 +87,8 @@ export default async function AdminAgentApplicationPage({
         </Card>
 
         <Card
-          title="招待元"
-          description="申請の時点で確定しています。紹介リンクからの申請はリンクの代理店、運営の代理店登録リンクからの申請は招待元なし (運営からの直接登録) です。承認するとそのまま招待元 (invited_by) になり、あとから変更・追加できません。会員としての担当代理店とは別のデータです。"
+          title="紹介者 (招待元)"
+          description="申請の時点で確定しています。紹介リンク・代理店が発行した代理店登録リンクからの申請はリンクの代理店、運営の代理店登録リンクからの申請は紹介者なし (運営直接) です。承認するとそのまま招待元 (invited_by) になり、あとから変更・追加できません。会員としての担当代理店とは別のデータです。"
         >
           {a.inviter ? (
             <DetailList>
@@ -88,7 +100,7 @@ export default async function AdminAgentApplicationPage({
               <DetailRow label="状態" value={AGENT_STATUS_LABELS[a.inviter.status]} />
             </DetailList>
           ) : (
-            <p className="text-[14px] text-text-secondary">なし (運営からの直接登録)</p>
+            <p className="text-[14px] text-text-secondary">なし (運営直接)</p>
           )}
           {a.status === "pending" && a.inviter && a.inviter.status !== "active" ? (
             <div className="mt-3">
@@ -162,7 +174,12 @@ export default async function AdminAgentApplicationPage({
           title="承認・却下"
           description="理由は必須です。監査ログに記録され、申請者本人には表示されません (本人には中立的な文面だけが表示されます)。"
         >
-          <ReviewPanel applicationId={a.id} />
+          <ReviewPanel
+            applicationId={a.id}
+            applicantName={applicantName}
+            inviterLabel={inviterLabel}
+            canApprove={!a.inviter || a.inviter.status === "active"}
+          />
         </Card>
       ) : null}
     </>

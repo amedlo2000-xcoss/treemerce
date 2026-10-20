@@ -12,7 +12,8 @@ function requireEnv(name: string): string {
 /**
  * リクエストごとに作る Supabase クライアント。
  * anon key + ユーザーセッションで動くため、全てのクエリに RLS が適用される。
- * service_role キーは意図的に一切使わない (RLS を迂回する経路を作らないため)。
+ * service_role キーは使わない (RLS を迂回する経路を作らないため)。唯一の例外は代理店登録リンクの
+ * 申し込みでのアカウント作成で、src/lib/supabase/admin.ts に閉じ込めている (Auth の管理 API のみ)。
  */
 export async function createSupabaseServerClient() {
   const cookieStore = await cookies();
