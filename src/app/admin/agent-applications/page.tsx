@@ -21,6 +21,8 @@ import {
 } from "@/lib/domain/enums";
 import type { AdminAgentApplication } from "@/lib/domain/types";
 
+import { QuickApprove } from "./QuickApprove";
+
 /**
  * 代理店申請の一覧 (super_admin 専用。RPC 側でも判定)。既定は承認待ち。
  * 紹介者 (紐づけ先) は申請に使われたリンクの代理店 (運営のリンクは運営直接) で、申請時点で固定されている
@@ -82,7 +84,7 @@ export default async function AdminAgentApplicationsPage({
       {applications.length === 0 ? (
         <EmptyState title="該当する申請はありません" />
       ) : (
-        <DataTable headers={["紹介者 (紐づけ先)", "申請日時", "オブザーバー名 / 氏名", "メールアドレス", "経路", "状態", "審査日時"]}>
+        <DataTable headers={["紹介者 (紐づけ先)", "申請日時", "オブザーバー名 / 氏名", "メールアドレス", "経路", "状態", "審査日時", "操作"]}>
           {applications.map((a) => (
             <tr key={a.id}>
               <td className="px-4 py-3 align-top">
@@ -117,6 +119,17 @@ export default async function AdminAgentApplicationsPage({
                 </Badge>
               </td>
               <td className={`${TD} whitespace-nowrap`}>{formatDateTime(a.reviewed_at)}</td>
+              <td className={TD}>
+                {/* 承認だけを一覧から行える。却下は理由が必須のため詳細ページで行う */}
+                {a.status === "pending" ? (
+                  <QuickApprove
+                    applicationId={a.id}
+                    applicantName={a.applicant_name ?? a.display_name}
+                    inviterLabel={a.inviter ? `${a.inviter.display_name}さん（${a.inviter.public_id}）` : null}
+                    canApprove={!a.inviter || a.inviter.status === "active"}
+                  />
+                ) : null}
+              </td>
             </tr>
           ))}
         </DataTable>
