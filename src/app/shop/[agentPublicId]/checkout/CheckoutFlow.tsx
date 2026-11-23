@@ -24,7 +24,9 @@ import {
 } from "@/lib/domain/enums";
 import type { PlaceOrderResult, ShopProduct } from "@/lib/domain/types";
 import { useCart } from "@/lib/shop/cart";
+import type { ShopMember } from "@/lib/shop/member";
 
+import { MembershipGate } from "../MembershipGate";
 import { ProductImage } from "../ShopParts";
 import { formatLongDate } from "@/lib/datetime";
 
@@ -70,19 +72,25 @@ export function CheckoutFlow({
   products,
   shippingFee,
   acceptingOrders,
+  member,
 }: {
   agentPublicId: string;
   products: ShopProduct[];
   shippingFee: number;
   acceptingOrders: boolean;
+  /** ログイン中の会員。未ログインなら null (注文手続きに進めず、会員登録・ログインの案内を出す) */
+  member: ShopMember | null;
 }) {
   const { lines, setQuantity, clear } = useCart(agentPublicId);
   const [step, setStep] = useState<Step>("cart");
+  // 会員情報にお名前があれば「お客様情報」を飛ばして、お届け先だけ入力すればよい
+  const skipCustomer = Boolean(member?.full_name);
   const [form, setForm] = useState<FormState>({
-    full_name: "",
-    full_name_kana: "",
-    email: "",
-    phone: "",
+    full_name: member?.full_name ?? "",
+    full_name_kana: member?.full_name_kana ?? "",
+    // 連絡先のメールアドレスはログイン中のアカウントのもの (変更できない。API でも上書きする)
+    email: member?.email ?? "",
+    phone: member?.phone ?? "",
     age_group: "",
     gender: "",
     postal_code: "",
@@ -235,7 +243,8 @@ export function CheckoutFlow({
   }
 
   /* ----------------------------------------------------------- 手続き */
-  const stepIndex = STEPS.indexOf(step);
+  const visibleSteps: readonly Step[] = skipCustomer ? STEPS.filter((s) => s !== "customer") : STEPS;
+  const stepIndex = Math.max(visibleSteps.indexOf(step), 0);
 
   if (lines.length === 0) {
     return (
@@ -251,7 +260,7 @@ export function CheckoutFlow({
 
   return (
     <div className="mx-auto max-w-xl space-y-5">
-      <ProgressBar step={stepIndex + 1} total={STEPS.length} />
+      <ProgressBar step={stepIndex + 1} total={visibleSteps.length} />
 
       {!acceptingOrders ? (
         <Notice tone="warning">現在ご注文の受付を停止しております。</Notice>
@@ -345,13 +354,21 @@ export function CheckoutFlow({
               送料は 1 回のご注文につき {formatAmount(shippingFee)} のままです。
             </p>
           ) : null}
-          <PrimaryButton
-            type="button"
-            disabled={!acceptingOrders || items.length === 0 || overStock}
-            onClick={() => setStep("customer")}
-          >
-            ご注文手続きへ
-          </PrimaryButton>
+          {member ? (
+            <PrimaryButton
+              type="button"
+              disabled={!acceptingOrders || items.length === 0 || overStock}
+              onClick={() => setStep(skipCustomer ? "shipping" : "customer")}
+            >
+              ご注文手続きへ
+            </PrimaryButton>
+          ) : (
+            <MembershipGate
+              agentPublicId={agentPublicId}
+              returnPath={`/shop/${encodeURIComponent(agentPublicId)}/checkout`}
+              lines={items.map((x) => x.line)}
+            />
+          )}
           <PrimaryButton href={`/shop/${agentPublicId}`} variant="ghost">
             買い物を続ける
           </PrimaryButton>
@@ -360,7 +377,7 @@ export function CheckoutFlow({
 
       {step === "customer" ? (
         <>
-          <MobilePageHeader title="お客様情報" description="ご連絡先はメールアドレスか電話番号のどちらか一方が必須です。" />
+          <MobilePageHeader title="お客様情報" description="会員情報から入力しています。必要に応じて修正してください。" />
           <Surface className="space-y-4">
             <TextField label="お名前 (必須)">
               <input value={form.full_name} onChange={(e) => set("full_name", e.target.value)} className={INPUT} autoComplete="name" />
@@ -368,8 +385,8 @@ export function CheckoutFlow({
             <TextField label="フリガナ">
               <input value={form.full_name_kana} onChange={(e) => set("full_name_kana", e.target.value)} className={INPUT} />
             </TextField>
-            <TextField label="メールアドレス">
-              <input type="email" value={form.email} onChange={(e) => set("email", e.target.value)} className={INPUT} autoComplete="email" inputMode="email" />
+            <TextField label="メールアドレス (ログイン中のアカウント)">
+              <input type="email" value={form.email} readOnly className={`${INPUT} bg-surface-muted text-text-secondary`} />
             </TextField>
             <TextField label="電話番号">
               <input type="tel" value={form.phone} onChange={(e) => set("phone", e.target.value)} className={INPUT} autoComplete="tel" inputMode="tel" />
@@ -409,7 +426,7 @@ export function CheckoutFlow({
             <PrimaryButton type="button" variant="secondary" onClick={() => setStep("cart")}>
               戻る
             </PrimaryButton>
-            <PrimaryButton type="button" disabled={!customerOk} onClick={() => setStep("shipping")}>
+            <PrimaryButton type="button" disabled={!customerOk || !member} onClick={() => setStep("shipping")}>
               次へ
             </PrimaryButton>
           </div>
@@ -419,6 +436,20 @@ export function CheckoutFlow({
       {step === "shipping" ? (
         <>
           <MobilePageHeader title="お届け先" />
+          <Surface className="flex items-start justify-between gap-3 text-[14px]">
+            <div className="min-w-0 space-y-0.5">
+              <p className="text-[12px] font-semibold text-text-secondary">ご注文者 (会員情報)</p>
+              <p className="font-semibold text-text-primary">{form.full_name} 様</p>
+              <p className="break-all text-text-secondary">{[form.email, form.phone].filter(Boolean).join(" / ")}</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setStep("customer")}
+              className="shrink-0 text-[13px] font-semibold text-brand hover:underline"
+            >
+              変更する
+            </button>
+          </Surface>
           <Surface className="space-y-4">
             <TextField label="郵便番号">
               <input value={form.postal_code} onChange={(e) => set("postal_code", e.target.value)} className={INPUT} autoComplete="postal-code" inputMode="numeric" placeholder="例: 100-0001" />
@@ -441,7 +472,7 @@ export function CheckoutFlow({
             </TextField>
           </Surface>
           <div className="flex gap-2">
-            <PrimaryButton type="button" variant="secondary" onClick={() => setStep("customer")}>
+            <PrimaryButton type="button" variant="secondary" onClick={() => setStep(skipCustomer ? "cart" : "customer")}>
               戻る
             </PrimaryButton>
             <PrimaryButton type="button" disabled={!shippingOk} onClick={() => setStep("confirm")}>
@@ -496,7 +527,7 @@ export function CheckoutFlow({
             <PrimaryButton type="button" variant="secondary" onClick={() => setStep("shipping")} disabled={pending}>
               戻る
             </PrimaryButton>
-            <PrimaryButton type="button" onClick={submit} disabled={pending || !acceptingOrders || overStock}>
+            <PrimaryButton type="button" onClick={submit} disabled={pending || !acceptingOrders || overStock || !member}>
               {pending ? "送信中…" : "注文を確定する"}
             </PrimaryButton>
           </div>

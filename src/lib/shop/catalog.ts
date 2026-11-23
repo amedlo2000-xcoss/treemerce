@@ -23,3 +23,15 @@ export async function fetchShopCatalog(
   if (error || !data) return { valid: false };
   return data as ShopCatalog;
 }
+
+/**
+ * ショップの上部に出す、紹介リンクのオブザーバーの表示名 (公開プロフィールの RPC、表示名と公開IDのみ)。
+ * 見つからなければ null。
+ */
+export async function fetchShopOwnerName(agentPublicId: string): Promise<string | null> {
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase.rpc("treemerce_agent_public_profile", { p_public_id: agentPublicId });
+  if (error || !data) return null;
+  const profile = data as { found?: boolean; display_name?: string };
+  return profile.found && profile.display_name ? profile.display_name : null;
+}

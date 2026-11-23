@@ -6,6 +6,7 @@ import { Notice, formatAmount } from "@/components/ui";
 import { StatusPill, Surface } from "@/components/mobile/primitives";
 import { UNDECIDED, productFieldLabels } from "@/lib/domain/product-labels";
 import { fetchShopCatalog } from "@/lib/shop/catalog";
+import { getShopMember } from "@/lib/shop/member";
 
 import { InvalidShopLink, ProductImage, StockLabel } from "../../ShopParts";
 import { AddToCart } from "./AddToCart";
@@ -13,7 +14,8 @@ import { AddToCart } from "./AddToCart";
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
- * 公開ショップ: 商品詳細 (未ログイン可)。非公開の商品は表示されない。
+ * 紹介リンクのショップ: 商品詳細 (未ログインで閲覧できる)。非公開の商品は表示されない。
+ * カートに入れられるのは会員 (ログイン中) だけ。未ログインなら会員登録・ログインの案内を出す。
  * 準備中の商品は価格を「未定」と表示し、カートに入れるボタンを出さない (注文受付の RPC でも拒否される)。
  * サービスは「内容量→提供単位」「発送目安→予約方法」に切り替え、発送情報を表示しない。
  */
@@ -25,7 +27,10 @@ export default async function ShopProductPage({
   const { agentPublicId, productId } = await params;
   if (!UUID.test(productId)) notFound();
 
-  const catalog = await fetchShopCatalog(agentPublicId, productId, { includePreparing: true });
+  const [catalog, member] = await Promise.all([
+    fetchShopCatalog(agentPublicId, productId, { includePreparing: true }),
+    getShopMember(),
+  ]);
   if (!catalog.valid) return <InvalidShopLink />;
 
   const product = catalog.products[0];
@@ -103,6 +108,7 @@ export default async function ShopProductPage({
                 productId={product.id}
                 maxQuantity={product.max_quantity}
                 disabled={!product.in_stock}
+                signedIn={member !== null}
               />
             </Surface>
           ) : (

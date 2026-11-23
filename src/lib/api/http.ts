@@ -175,6 +175,10 @@ const ERROR_MAP: Record<string, { status: number; message: string }> = {
     status: 400,
     message: "メールアドレスがログイン中のアカウント (確認済み) と一致しません。",
   },
+  TREEMERCE_ORDER_EMAIL_MISMATCH: {
+    status: 400,
+    message: "連絡先のメールアドレスはログイン中のアカウントと同じにしてください。",
+  },
   TREEMERCE_APPLICATION_NOT_FOUND: { status: 404, message: "申請が見つかりません。" },
   TREEMERCE_APPLICATION_NOT_PENDING: { status: 409, message: "この申請は既に審査済みです。" },
   TREEMERCE_TERMS_ACCEPTANCE_MISSING: {

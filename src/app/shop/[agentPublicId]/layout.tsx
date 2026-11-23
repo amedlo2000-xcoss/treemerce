@@ -1,10 +1,13 @@
 import Link from "next/link";
+import { Suspense } from "react";
 
 import { CartLink } from "./CartLink";
+import { CartRestore } from "./CartRestore";
 
 /**
- * 公開ショップの外枠。紹介した代理店の名前はどこにも表示しない
- * (購入者に「誰の担当になるか」を示さない。原則6)。
+ * 紹介リンクのショップ (商品を紹介するページ) の外枠。閲覧はログイン不要、購入は会員のみ。
+ * 一覧の上部に「○○さんのショップ」(リンクのオブザーバーの表示名) を出すが、
+ * 購入者の担当が誰かは表示しない (既存の会員の担当は最初の登録のまま変わらない。原則4・6)。
  */
 export default async function ShopLayout({
   children,
@@ -28,6 +31,10 @@ export default async function ShopLayout({
           <CartLink agentPublicId={agentPublicId} />
         </div>
       </header>
+
+      <Suspense fallback={null}>
+        <CartRestore agentPublicId={agentPublicId} />
+      </Suspense>
 
       <main className="mx-auto w-full max-w-5xl flex-1 space-y-5 px-4 py-5 md:px-8 md:py-8">
         {children}

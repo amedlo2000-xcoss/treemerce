@@ -87,7 +87,22 @@ export function useCart(publicId: string) {
 
   const clear = useCallback(() => write(publicId, []), [publicId]);
 
+  /** 会員登録・ログインから戻ったときに、URL に載せたカートの中身を合わせる (多いほうの数量を残す) */
+  const merge = useCallback(
+    (incoming: CartLine[]) => {
+      const current = parse(readRaw(publicId));
+      const next = [...current];
+      for (const line of incoming) {
+        const index = next.findIndex((l) => l.product_id === line.product_id);
+        if (index === -1) next.push(line);
+        else next[index] = { ...next[index], quantity: Math.max(next[index].quantity, line.quantity) };
+      }
+      write(publicId, next.slice(0, 20));
+    },
+    [publicId],
+  );
+
   const count = lines.reduce((sum, l) => sum + l.quantity, 0);
 
-  return { lines, count, add, setQuantity, clear };
+  return { lines, count, add, setQuantity, clear, merge };
 }

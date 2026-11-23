@@ -3,12 +3,13 @@ import Link from "next/link";
 import { Notice, formatAmount } from "@/components/ui";
 import { EmptyState, MobilePageHeader } from "@/components/mobile/primitives";
 import { UNDECIDED } from "@/lib/domain/product-labels";
-import { fetchShopCatalog } from "@/lib/shop/catalog";
+import { fetchShopCatalog, fetchShopOwnerName } from "@/lib/shop/catalog";
 
 import { InvalidShopLink, ProductImage, StockLabel } from "./ShopParts";
 
 /**
- * 公開ショップ: 商品一覧 (未ログイン可)。
+ * 紹介リンクのショップ: 商品一覧 (未ログインで閲覧できる。購入は会員のみ)。
+ * 上部にリンクのオブザーバーの表示名だけを出す (購入者・他のオブザーバーの情報は出さない)。
  * 公開中に加えて「準備中」(価格未定・注文不可) の商品も表示する。カテゴリで絞り込める (?category=キー)。
  */
 export default async function ShopPage({
@@ -20,7 +21,10 @@ export default async function ShopPage({
 }) {
   const { agentPublicId } = await params;
   const { category } = await searchParams;
-  const catalog = await fetchShopCatalog(agentPublicId, null, { includePreparing: true });
+  const [catalog, ownerName] = await Promise.all([
+    fetchShopCatalog(agentPublicId, null, { includePreparing: true }),
+    fetchShopOwnerName(agentPublicId),
+  ]);
 
   if (!catalog.valid) return <InvalidShopLink />;
 
@@ -41,7 +45,7 @@ export default async function ShopPage({
 
   return (
     <>
-      <MobilePageHeader title="商品一覧" />
+      <MobilePageHeader title={ownerName ? `${ownerName}さんのショップ` : "ショップ"} description="商品一覧" />
 
       {!catalog.accepting_orders ? (
         <Notice tone="warning">現在ご注文の受付を停止しております。</Notice>
@@ -97,6 +101,12 @@ export default async function ShopPage({
                     <span className="line-clamp-1 text-[11px] text-text-secondary">
                       {p.producer.name}
                       {p.producer.origin ? ` ・ ${p.producer.origin}` : ""}
+                    </span>
+                  ) : null}
+                  {p.item_kind === "goods" && p.producer?.ship_from_prefecture ? (
+                    <span className="line-clamp-1 text-[11px] text-text-secondary">
+                      {p.producer.ship_from_prefecture}から発送
+                      {p.producer.ship_lead_time ? ` ・ ${p.producer.ship_lead_time}` : ""}
                     </span>
                   ) : null}
                   {p.content_volume ? (

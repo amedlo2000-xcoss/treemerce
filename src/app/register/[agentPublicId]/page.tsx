@@ -1,26 +1,33 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { AgentTerms, MyAgentApplication } from "@/lib/domain/types";
+import { isShopPath } from "@/lib/shop/return-to";
 
 import { CustomerRegisterForm } from "./CustomerRegisterForm";
+import { ShopMemberSignup } from "./ShopMemberSignup";
 
 /**
  * 紹介リンクからの登録フォーム (公開ページ)。
  * 登録した人は全員「会員 (購入者)」になり、「代理店登録も申し込む」「代理店規約に同意する」の
  * 両方にチェックした人だけ代理店申請になる。申し込む場合はログイン (メール確認済み) が必要。
  * 代理店規約が未登録の間は「準備中」と表示し、申し込みのチェックは出さない。
+ *
+ * ショップの「会員登録（無料）」から来たとき (?next=/shop/{このオブザーバーの公開ID}...) は、
+ * 購入のための会員登録 (ログイン用アカウントの作成を含む) だけを出し、登録後にショップへ戻す。
+ * ログイン中ならそのままショップへ戻す。
  */
 export default async function CustomerRegisterPage({
   params,
   searchParams,
 }: {
   params: Promise<{ agentPublicId: string }>;
-  searchParams: Promise<{ apply?: string }>;
+  searchParams: Promise<{ apply?: string; next?: string }>;
 }) {
   const { agentPublicId } = await params;
-  const { apply } = await searchParams;
+  const { apply, next } = await searchParams;
+  const shopNext = isShopPath(agentPublicId, next) ? next : null;
   const supabase = await createSupabaseServerClient();
 
   const [{ data }, { data: termsData }, { data: userData }] = await Promise.all([
@@ -33,6 +40,7 @@ export default async function CustomerRegisterPage({
 
   const terms = (termsData as AgentTerms | null) ?? { available: false };
   const user = userData.user;
+  if (shopNext && user) redirect(shopNext);
 
   // ログイン中なら、本人の申請状況 (中立的な文面のみ) と代理店かどうかだけを見る
   let application: MyAgentApplication | null = null;
@@ -58,6 +66,9 @@ export default async function CustomerRegisterPage({
         </p>
 
         <div className="rounded-[24px] border border-border-soft bg-surface p-5 shadow-[var(--shadow-card)] sm:p-6">
+          {shopNext ? (
+            <ShopMemberSignup agentPublicId={agentPublicId} next={shopNext} />
+          ) : (
           <CustomerRegisterForm
             agentPublicId={agentPublicId}
             terms={terms.available ? { version: terms.version, title: terms.title } : null}
@@ -66,6 +77,7 @@ export default async function CustomerRegisterPage({
             isAgent={isAgent}
             resumeApply={apply === "1"}
           />
+          )}
         </div>
       </div>
     </div>

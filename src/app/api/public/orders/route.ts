@@ -31,14 +31,19 @@ function pick<T extends string>(value: unknown, allowed: readonly T[]): T | null
 }
 
 /**
- * 注文受付 (未ログイン可)。紹介リンク (代理店の公開ID) 経由でのみ受け付ける。
+ * 注文受付 (会員のみ。ログインが必要)。紹介リンク (オブザーバーの公開ID) 経由でのみ受け付ける。
+ * 連絡先のメールアドレスは、ログイン中のアカウントのメールアドレスで上書きする
+ * (他人のメールアドレスで注文できないようにする。DB 側でも 0036 で同じ確認を行う)。
  *
  * 帰属代理店・在庫・金額・既存顧客の照合はすべて DB 側 (treemerce_place_order) で決まり、
  * クライアントから受け取った価格や代理店は一切使わない。
  * 原則6: 応答は新規/既存顧客で同じ形で、担当代理店が誰かは含まれない。
  */
 export async function POST(request: Request) {
-  const { supabase } = await getApiContext();
+  const { supabase, viewer } = await getApiContext();
+  if (!viewer.userId || !viewer.email) {
+    return fail("TREEMERCE_UNAUTHENTICATED", "ご購入には会員登録（無料）またはログインが必要です。", 401);
+  }
   const body = await readJson<Body>(request);
 
   if (!body?.agent_public_id?.trim()) {
@@ -47,15 +52,8 @@ export async function POST(request: Request) {
   if (!body.full_name?.trim()) {
     return fail("TREEMERCE_INVALID_INPUT", "お名前は必須です。", 400);
   }
-  const email = body.email?.trim() || null;
+  const email = viewer.email;
   const phone = body.phone?.trim() || null;
-  if (!email && !phone) {
-    return fail(
-      "TREEMERCE_IDENTIFIER_REQUIRED",
-      "メールアドレスまたは電話番号のいずれかが必要です。",
-      400,
-    );
-  }
 
   const prefecture = pick(body.prefecture, PREFECTURES);
   const address = body.address?.trim() || "";
