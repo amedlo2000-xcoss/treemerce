@@ -1,10 +1,10 @@
 -- ============================================================================
--- TREEMERCE 受け入れテスト  CASE1 - CASE92
+-- TREEMERCE 受け入れテスト  CASE1 - CASE93
 -- ----------------------------------------------------------------------------
 -- Supabase SQL Editor にそのまま貼り付けて実行する。
 -- 全体が 1 トランザクションで、最後に ROLLBACK するため本番データは残らない。
 -- 途中で失敗した CASE があれば例外で停止する。全て通れば最後に
--- 「ALL 92 CASES PASSED」が NOTICE として出力される。
+-- 「ALL 93 CASES PASSED」が NOTICE として出力される。
 --
 -- 木構造:
 --            R  (root)
@@ -8160,6 +8160,179 @@ begin
   raise notice 'CASE92 OK: 注文は会員のみ (anon 不可・ログイン必須・メール確認済み・本人のメールアドレスのみ)。別のショップで買っても担当・帰属は元のまま';
 end $$;
 
+-- ============================================================================
+-- CASE93 : どのオブザーバーにも紐づかないショップ (/shop) と運営直接の会員 (0037)
+--          ・商品一覧は公開IDなし (NULL) で見られる。無効な公開IDは従来どおり無効
+--          ・/shop からの会員登録は担当を作らない。重複は中立メッセージのみ
+--          ・運営直接の会員があとから紹介リンクで登録し直しても担当は付かない
+--          ・運営直接の会員の注文は帰属 NULL (運営)。どのショップから買っても同じ
+--          ・担当のいる会員が /shop で買っても帰属は元の担当のまま。紹介元は NULL
+-- ============================================================================
+
+insert into auth.users (instance_id, id, aud, role, email, encrypted_password,
+                        email_confirmed_at, created_at, updated_at)
+values
+  ('00000000-0000-0000-0000-000000000000', 'b0b0b0b0-0000-4000-8000-000000000931',
+   'authenticated', 'authenticated', 'tm-case93-direct@treemerce.test', '', now(), now(), now()),
+  ('00000000-0000-0000-0000-000000000000', 'b0b0b0b0-0000-4000-8000-000000000932',
+   'authenticated', 'authenticated', 'tm-case93-nocustomer@treemerce.test', '', now(), now(), now()),
+  ('00000000-0000-0000-0000-000000000000', 'b0b0b0b0-0000-4000-8000-000000000933',
+   'authenticated', 'authenticated', 'tm-case93-assigned@treemerce.test', '', now(), now(), now());
+
+select set_config('tm.case93_assign', (select count(*)::text from public.customer_assignments), true);
+select set_config('tm.case93_hist', (select count(*)::text from public.customer_assignment_history), true);
+select set_config('tm.case93_x_assigned',
+  (select ca.assigned_agent_id::text from public.customer_assignments ca
+     join public.customers c on c.id = ca.customer_id
+   where c.email_normalized = 'tm-test-x@treemerce.test' and ca.status = 'active'), true);
+
+do $$
+declare v_sig constant text := 'public.treemerce_register_direct_member(text, text, text, text, public.customer_kind)';
+begin
+  if not has_function_privilege('anon', v_sig, 'execute') then
+    raise exception 'CASE93 FAILED: anon が /shop からの会員登録を実行できない';
+  end if;
+  if has_function_privilege('anon', 'app.register_direct_customer(text, text, text, text, public.customer_kind, text, text, public.customer_age_group, public.customer_gender, text)', 'execute')
+     or has_function_privilege('authenticated', 'app.register_direct_customer(text, text, text, text, public.customer_kind, text, text, public.customer_age_group, public.customer_gender, text)', 'execute') then
+    raise exception 'CASE93 FAILED: 内部の登録処理を直接実行できる';
+  end if;
+  -- 担当を持つ会員を 1 人、S の紹介リンクで登録しておく
+  perform public.treemerce_register_customer('TM-TEST-S', '担当 一郎', 'tm-case93-assigned@treemerce.test');
+  -- 在庫のある商品
+  perform set_config('tm.case93_p',
+    app.tm_rw_sourced_product(current_setting('tm.rw_sn')::uuid, 'CASE93 商品', 1000)::text, true);
+end $$;
+
+select set_config('request.jwt.claims', '', true);
+select set_config('request.jwt.claim.sub', '', true);
+set local role anon;
+do $$
+declare v_res jsonb; v_cat jsonb;
+begin
+  -- 商品一覧: NULL = 運営のショップ。無効な公開ID・空文字は無効のまま
+  v_cat := public.treemerce_shop_products(null, null, true);
+  if not (v_cat ->> 'valid')::boolean or jsonb_array_length(v_cat -> 'products') = 0 then
+    raise exception 'CASE93 FAILED: 運営のショップの商品一覧が見られない (%)', v_cat ->> 'valid';
+  end if;
+  if (public.treemerce_shop_products('TM-NO-SUCH-AGENT') ->> 'valid')::boolean
+     or (public.treemerce_shop_products('') ->> 'valid')::boolean then
+    raise exception 'CASE93 FAILED: 無効な公開IDで商品一覧が見られる';
+  end if;
+  if v_cat::text like '%TM-TEST-%' then
+    raise exception 'CASE93 FAILED: 運営のショップの応答にオブザーバーの情報が含まれる';
+  end if;
+
+  -- /shop からの会員登録 (新規)
+  v_res := public.treemerce_register_direct_member('直接 花子', 'tm-case93-direct@treemerce.test', '080-9300-9300');
+  if v_res ->> 'member_status' <> 'registered' or v_res ? 'customer_id' then
+    raise exception 'CASE93 FAILED: 運営直接の会員登録の応答が不正 (%)', v_res;
+  end if;
+
+  -- 既存の会員 (X、担当あり) が /shop から登録 → 中立メッセージのみ
+  v_res := public.treemerce_register_direct_member('山田太郎', 'tm-test-x@treemerce.test');
+  if v_res ->> 'member_status' <> 'duplicate' or v_res::text like '%TM-TEST-%'
+     or v_res ->> 'member_message' not like '%担当オブザーバーの変更は行われません%' then
+    raise exception 'CASE93 FAILED: 重複時の応答が中立でない (%)', v_res;
+  end if;
+
+  -- 運営直接の会員が、あとから S の紹介リンクで登録し直す → 既に登録済み (担当は付かない)
+  v_res := public.treemerce_register_customer('TM-TEST-S', '直接 花子', 'tm-case93-direct@treemerce.test');
+  if v_res ->> 'status' <> 'duplicate' then
+    raise exception 'CASE93 FAILED: 紹介リンクでの登録し直しで担当が作られた (%)', v_res;
+  end if;
+end $$;
+reset role;
+
+set local role authenticated;
+do $$
+declare v_res jsonb; v_items jsonb := jsonb_build_array(jsonb_build_object('product_id', current_setting('tm.case93_p'), 'quantity', 1));
+begin
+  -- 運営直接の会員が /shop で注文
+  perform set_config('request.jwt.claim.sub', 'b0b0b0b0-0000-4000-8000-000000000931', true);
+  v_res := public.treemerce_place_order(null, v_items, '直接 花子', '東京都テスト9-3', 'tm-case93-direct@treemerce.test');
+  if v_res ->> 'status' <> 'received' or v_res ? 'agent_id' or v_res ? 'customer_id' then
+    raise exception 'CASE93 FAILED: /shop の注文を受け付けない (%)', v_res;
+  end if;
+  perform set_config('tm.case93_o1', v_res ->> 'order_no', true);
+
+  -- 同じ会員が S のショップで注文しても運営直接のまま
+  v_res := public.treemerce_place_order('TM-TEST-S', v_items, '直接 花子', '東京都テスト9-3', 'tm-case93-direct@treemerce.test');
+  perform set_config('tm.case93_o2', v_res ->> 'order_no', true);
+
+  -- 顧客の行が無いアカウントが /shop で注文 → 担当なしで登録される
+  perform set_config('request.jwt.claim.sub', 'b0b0b0b0-0000-4000-8000-000000000932', true);
+  v_res := public.treemerce_place_order(null, v_items, '未登録 次郎', '大阪府テスト9-3', 'tm-case93-nocustomer@treemerce.test');
+  perform set_config('tm.case93_o3', v_res ->> 'order_no', true);
+
+  -- 担当のいる会員が /shop で注文 → 帰属は元の担当
+  perform set_config('request.jwt.claim.sub', 'b0b0b0b0-0000-4000-8000-000000000933', true);
+  v_res := public.treemerce_place_order(null, v_items, '担当 一郎', '京都府テスト9-3', 'tm-case93-assigned@treemerce.test');
+  perform set_config('tm.case93_o4', v_res ->> 'order_no', true);
+
+  perform set_config('request.jwt.claim.sub', '', true);
+end $$;
+reset role;
+
+do $$
+declare
+  v_s uuid := (select id from public.agents where public_id = 'TM-TEST-S');
+  v_o public.orders%rowtype;
+begin
+  -- 担当の行は「担当のいる会員」の 1 件だけ増え、運営直接の会員には作られていない
+  if (select count(*) from public.customer_assignments) <> current_setting('tm.case93_assign')::int + 1
+     or (select count(*) from public.customer_assignment_history) <> current_setting('tm.case93_hist')::int + 1 then
+    raise exception 'CASE93 FAILED: 運営直接の会員に担当が作られた';
+  end if;
+  if exists (select 1 from public.customer_assignments ca join public.customers c on c.id = ca.customer_id
+             where c.email_normalized in ('tm-case93-direct@treemerce.test', 'tm-case93-nocustomer@treemerce.test')) then
+    raise exception 'CASE93 FAILED: 運営直接の会員に担当がある';
+  end if;
+  if (select count(*) from public.customers
+      where email_normalized in ('tm-case93-direct@treemerce.test', 'tm-case93-nocustomer@treemerce.test')) <> 2 then
+    raise exception 'CASE93 FAILED: 運営直接の会員が登録されていない';
+  end if;
+  if (select ca.assigned_agent_id::text from public.customer_assignments ca
+        join public.customers c on c.id = ca.customer_id
+      where c.email_normalized = 'tm-test-x@treemerce.test' and ca.status = 'active')
+     is distinct from current_setting('tm.case93_x_assigned') then
+    raise exception 'CASE93 FAILED: /shop からの登録で既存の会員の担当が変わった';
+  end if;
+
+  select * into v_o from public.orders where order_no = current_setting('tm.case93_o1');
+  if v_o.agent_id is not null or v_o.referral_agent_id is not null then
+    raise exception 'CASE93 FAILED: /shop の注文の帰属・紹介元が NULL でない';
+  end if;
+  select * into v_o from public.orders where order_no = current_setting('tm.case93_o2');
+  if v_o.agent_id is not null or v_o.referral_agent_id is distinct from v_s then
+    raise exception 'CASE93 FAILED: 運営直接の会員がオブザーバーのショップで買った注文の帰属が運営でない';
+  end if;
+  select * into v_o from public.orders where order_no = current_setting('tm.case93_o3');
+  if v_o.agent_id is not null or v_o.referral_agent_id is not null then
+    raise exception 'CASE93 FAILED: 未登録のアカウントの /shop の注文の帰属が運営でない';
+  end if;
+  select * into v_o from public.orders where order_no = current_setting('tm.case93_o4');
+  if v_o.agent_id is distinct from v_s or v_o.referral_agent_id is not null then
+    raise exception 'CASE93 FAILED: 担当のいる会員が /shop で買った注文の帰属が元の担当でない';
+  end if;
+
+  -- 帰属 NULL の注文も、帰属の変更はできない (postgres の直接操作でも)
+  begin
+    update public.orders set agent_id = v_s where order_no = current_setting('tm.case93_o1');
+    raise exception 'CASE93 FAILED: 運営直接の注文の帰属を変更できた';
+  exception when others then
+    if sqlerrm not like 'TREEMERCE_ORDER_IMMUTABLE%' then raise; end if;
+  end;
+
+  -- 担当のいない注文では、オブザーバー宛ての通知を作らない
+  if exists (select 1 from public.notifications n
+             where n.agent_id is not null
+               and (n.body like '%' || current_setting('tm.case93_o1') || '%'
+                 or n.body like '%' || current_setting('tm.case93_o3') || '%')) then
+    raise exception 'CASE93 FAILED: 運営直接の注文でオブザーバーに通知された';
+  end if;
+  raise notice 'CASE93 OK: /shop (運営のショップ) は公開IDなしで閲覧でき、会員登録は担当なし (運営直接)。運営直接の注文は帰属 NULL、担当のいる会員は元の担当のまま';
+end $$;
+
 drop function app.tm_rw_entry(uuid, uuid, public.reward_recipient_role);
 drop function app.tm_rw_pay_and_ship(uuid, int);
 drop function app.tm_rw_order(jsonb, text);
@@ -8178,7 +8351,7 @@ drop role tm_test_session;
 do $$
 begin
   raise notice '==========================================';
-  raise notice '  TREEMERCE: ALL 92 CASES PASSED (+EXTRA)';
+  raise notice '  TREEMERCE: ALL 93 CASES PASSED (+EXTRA)';
   raise notice '==========================================';
 end $$;
 

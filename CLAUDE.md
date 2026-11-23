@@ -64,6 +64,7 @@
 | 本人の申請状況 | `public.treemerce_my_agent_application()` (状態と中立的な文面のみ。却下理由・招待元は返さない) |
 | 代理店規約 | `public.treemerce_current_agent_terms()` (公開・STABLE)。版は `agent_terms_versions` (公開は DB 管理者が SQL で行う)、同意は `agent_terms_acceptances` (追記専用) |
 | 顧客登録 | `public.treemerce_register_customer()` |
+| 運営直接の会員登録 (/shop) | `public.treemerce_register_direct_member()` (0037)。担当を作らない (customer_assignments に行が無い = 運営直接)。重複は中立メッセージのみ。担当は最初の登録で決まるため、あとから紹介リンクで登録し直しても担当は付かない |
 | 重複検知 | `public.treemerce_check_customer_duplicate()` |
 | 担当変更 | `public.treemerce_admin_transfer_customer()` (ADMIN のみ) |
 | 商流マップ | `public.treemerce_commerce_map()` |
@@ -73,9 +74,9 @@
 | 生産者一覧 (連絡先を含む) | `public.treemerce_admin_list_producers()` (super_admin) |
 | 商品の登録・編集 | `public.treemerce_admin_save_product()` (0023、super_admin。販売状態・カテゴリ・オブザーバー特典付き・物品/サービス。旧 `treemerce_admin_upsert_product` は 0026 で削除予定) |
 | 商品カテゴリ | `public.treemerce_catalog_categories()` (公開・STABLE) / `treemerce_admin_list_categories()` / `treemerce_admin_upsert_category()` / `treemerce_admin_set_category_active()` / `treemerce_admin_reorder_categories()` (super_admin、0022。削除不可・名称変更と有効/無効は理由必須) |
-| 公開商品一覧 | `public.treemerce_shop_products()` (0023 で準備中・カテゴリ・物品/サービスを追加。準備中は価格を返さない) |
+| 公開商品一覧 | `public.treemerce_shop_products()` (0023 で準備中・カテゴリ・物品/サービスを追加。準備中は価格を返さない。0037 で公開ID = NULL を運営のショップ /shop として扱う) |
 | オブザーバー特典付き製品一覧 | `public.treemerce_observer_products()` (0025、公開・STABLE。代理店 ID を受け取らない) |
-| 注文受付 | `public.treemerce_place_order()` (0015 で生産者ごとの発送記録を作成。0023 で準備中・サービスを拒否し、注文時点のカテゴリを明細に保存。0036 で会員 (ログイン中・メール確認済み) のみ・連絡先のメールアドレスはログイン中のアカウントのものだけ、anon は実行不可) |
+| 注文受付 | `public.treemerce_place_order()` (0015 で生産者ごとの発送記録を作成。0023 で準備中・サービスを拒否し、注文時点のカテゴリを明細に保存。0036 で会員 (ログイン中・メール確認済み) のみ・連絡先のメールアドレスはログイン中のアカウントのものだけ、anon は実行不可。0037 で公開ID = NULL (/shop、紹介元なし) を受け付け、担当のいない会員の注文は帰属 `orders.agent_id` = NULL (運営)) |
 | 注文ステータス変更 | `public.treemerce_admin_set_order_status()` (super_admin、0015 で発送記録と連動) |
 | 注文詳細 (ADMIN) | `public.treemerce_admin_get_order()` (super_admin、0015 で発送記録を追加) |
 | 発送登録・訂正 | `public.treemerce_admin_ship_shipment()` (super_admin、全発送で注文を自動で発送済み) |

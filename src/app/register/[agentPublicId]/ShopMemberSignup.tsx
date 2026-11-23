@@ -19,6 +19,9 @@ const INPUT =
  *      オブザーバーで確定し、既存の会員なら担当は変わらない)
  *   2. ログイン用のアカウントを作る (Supabase Auth。確認メールのリンクから next へ戻る)
  *
+ * 運営のショップ (/shop) から来た人 (/register?next=/shop...、agentPublicId = null) は、
+ * 1 を treemerce_register_direct_member で行う (担当なし = 運営直接。既存の会員なら何も変わらない。0037)。
+ *
  * 原則6: 新規・既存の会員、既存のアカウントのどの場合も、完了の表示は同じ文面にする
  * (既存の会員かどうかを推測できないようにする)。
  */
@@ -26,8 +29,9 @@ export function ShopMemberSignup({
   agentPublicId,
   next,
 }: {
-  agentPublicId: string;
-  /** 戻り先 (このオブザーバーのショップ内のパス。カートの中身を含む) */
+  /** null は運営のショップ (担当なしで登録する) */
+  agentPublicId: string | null;
+  /** 戻り先 (このショップ内のパス。カートの中身を含む) */
   next: string;
 }) {
   const router = useRouter();
@@ -47,18 +51,17 @@ export function ShopMemberSignup({
     const email = form.email.trim();
 
     // 1. 会員登録 (新規・既存のどちらでも先へ進む。応答の違いは画面に出さない)
-    const response = await fetch("/api/public/members/register", {
+    const member = {
+      full_name: form.full_name,
+      full_name_kana: form.full_name_kana || null,
+      email,
+      phone: form.phone || null,
+      customer_type: "individual",
+    };
+    const response = await fetch(agentPublicId ? "/api/public/members/register" : "/api/public/members/direct", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        agent_public_id: agentPublicId,
-        full_name: form.full_name,
-        full_name_kana: form.full_name_kana || null,
-        email,
-        phone: form.phone || null,
-        customer_type: "individual",
-        apply_agent: false,
-      }),
+      body: JSON.stringify(agentPublicId ? { ...member, agent_public_id: agentPublicId, apply_agent: false } : member),
     });
     if (!response.ok) {
       const body = await response.json().catch(() => null);

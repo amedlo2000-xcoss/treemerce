@@ -8,7 +8,7 @@ import {
 } from "@/lib/domain/enums";
 
 type Body = {
-  agent_public_id?: string;
+  agent_public_id?: string | null;
   items?: { product_id?: unknown; quantity?: unknown }[];
   full_name?: string;
   full_name_kana?: string | null;
@@ -31,7 +31,8 @@ function pick<T extends string>(value: unknown, allowed: readonly T[]): T | null
 }
 
 /**
- * 注文受付 (会員のみ。ログインが必要)。紹介リンク (オブザーバーの公開ID) 経由でのみ受け付ける。
+ * 注文受付 (会員のみ。ログインが必要)。紹介リンク (オブザーバーの公開ID) のショップ、または
+ * 公開IDなし (null) の運営のショップ (/shop、紹介元なし。0037) から受け付ける。
  * 連絡先のメールアドレスは、ログイン中のアカウントのメールアドレスで上書きする
  * (他人のメールアドレスで注文できないようにする。DB 側でも 0036 で同じ確認を行う)。
  *
@@ -45,9 +46,17 @@ export async function POST(request: Request) {
     return fail("TREEMERCE_UNAUTHENTICATED", "ご購入には会員登録（無料）またはログインが必要です。", 401);
   }
   const body = await readJson<Body>(request);
+  if (!body) {
+    return fail("TREEMERCE_INVALID_INPUT", "ご注文の内容が不正です。", 400);
+  }
 
-  if (!body?.agent_public_id?.trim()) {
-    return fail("TREEMERCE_INVALID_INPUT", "紹介リンクが無効です。", 400);
+  // null (未指定) = 運営のショップ。文字列なら紹介リンクのオブザーバー (空文字は無効なリンクとして扱う)
+  let agentPublicId: string | null = null;
+  if (body.agent_public_id !== undefined && body.agent_public_id !== null) {
+    if (typeof body.agent_public_id !== "string" || !body.agent_public_id.trim()) {
+      return fail("TREEMERCE_INVALID_INPUT", "紹介リンクが無効です。", 400);
+    }
+    agentPublicId = body.agent_public_id.trim();
   }
   if (!body.full_name?.trim()) {
     return fail("TREEMERCE_INVALID_INPUT", "お名前は必須です。", 400);
@@ -76,7 +85,7 @@ export async function POST(request: Request) {
   }
 
   const { data, error } = await supabase.rpc("treemerce_place_order", {
-    p_agent_public_id: body.agent_public_id.trim(),
+    p_agent_public_id: agentPublicId,
     p_items: items,
     p_full_name: body.full_name.trim(),
     p_ship_address: `${prefecture}${address}`,

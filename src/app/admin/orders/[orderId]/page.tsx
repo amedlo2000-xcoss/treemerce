@@ -146,7 +146,7 @@ export default async function AdminOrderDetailPage({
           >
             <DetailList>
               <DetailRow label="帰属オブザーバー" value={<AgentLink agent={detail.agent} empty="運営直接" />} />
-              <DetailRow label="現在の担当" value={<AgentLink agent={detail.current_agent} empty="なし (運営直接)" />} />
+              <DetailRow label="現在の担当" value={<AgentLink agent={detail.current_agent} empty="運営直接" />} />
               <DetailRow label="経由した紹介リンク" value={<AgentLink agent={detail.referral_agent} empty="なし (/shop)" />} />
             </DetailList>
             {transferred || viaOtherLink ? (

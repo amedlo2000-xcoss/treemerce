@@ -131,7 +131,7 @@ export default async function AdminCustomerDetailPage({
             {currentAssignment?.agent ? (
               <Badge tone="green">担当: {currentAssignment.agent.display_name}</Badge>
             ) : (
-              <Badge tone="amber">担当なし</Badge>
+              <Badge tone="amber">運営直接</Badge>
             )}
           </>
         }
@@ -205,7 +205,7 @@ export default async function AdminCustomerDetailPage({
                 />
               </DetailList>
             ) : (
-              <p className="text-[13px] text-text-secondary">現在の担当がありません。</p>
+              <p className="text-[13px] text-text-secondary">運営直接 (担当オブザーバーなし)</p>
             )}
           </Card>
         </div>
@@ -310,7 +310,7 @@ export default async function AdminCustomerDetailPage({
               />
             ) : (
               <p className="text-[13px] text-text-secondary">
-                現在の担当がないため、担当変更を実行できません。
+                運営直接の会員 (担当オブザーバーなし) のため、担当変更は実行できません。
               </p>
             )}
           </Card>

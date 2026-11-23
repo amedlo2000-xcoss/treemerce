@@ -255,7 +255,7 @@ function renderPage(
                       </span>
                     </>
                   ) : (
-                    <span className="text-text-secondary">担当なし</span>
+                    <span className="text-text-secondary">運営直接</span>
                   )}
                 </td>
                 <td className={TD}>{formatDate(customer.created_at)}</td>
