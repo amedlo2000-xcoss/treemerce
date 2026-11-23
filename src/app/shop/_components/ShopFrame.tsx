@@ -1,33 +1,46 @@
 import Link from "next/link";
 import { Suspense } from "react";
 
+import { getShopMember } from "@/lib/shop/member";
 import { shopBasePath } from "@/lib/shop/return-to";
 
 import { CartLink } from "./CartLink";
 import { CartRestore } from "./CartRestore";
+import { ShopAccountNav } from "./ShopAccountNav";
 
 /**
  * ショップの外枠 (ヘッダー・カート・フッター)。閲覧はログイン不要、購入は会員のみ。
  * agentPublicId = null は、どのオブザーバーにも紐づかない運営のショップ (/shop)。
  */
-export function ShopFrame({
+export async function ShopFrame({
   agentPublicId,
   children,
 }: {
   agentPublicId: string | null;
   children: React.ReactNode;
 }) {
+  // ヘッダーのログイン状態 (会員名、なければメールアドレス)
+  const member = await getShopMember();
+  const memberLabel = member ? member.full_name || member.email : null;
+
   return (
     <div className="flex min-h-full flex-1 flex-col bg-app-bg">
       <header className="sticky top-0 z-30 border-b border-border-soft bg-surface/95 backdrop-blur">
-        <div className="mx-auto flex max-w-5xl items-center justify-between gap-3 px-4 py-3 md:px-8">
+        <div className="mx-auto flex max-w-5xl items-center justify-between gap-2 px-4 py-3 md:px-8">
           <Link
             href={shopBasePath(agentPublicId)}
-            className="text-[16px] font-bold tracking-tight text-text-primary"
+            className="shrink-0 text-[15px] font-bold tracking-tight text-text-primary sm:text-[16px]"
           >
-            TREEMERCE <span className="font-medium text-text-secondary">SHOP</span>
+            TREEMERCE <span className="hidden font-medium text-text-secondary min-[400px]:inline">SHOP</span>
           </Link>
-          <CartLink agentPublicId={agentPublicId} />
+          <div className="flex min-w-0 items-center gap-1.5 sm:gap-2">
+            <Suspense fallback={null}>
+              <ShopAccountNav agentPublicId={agentPublicId} memberLabel={memberLabel} />
+            </Suspense>
+            <div className="shrink-0">
+              <CartLink agentPublicId={agentPublicId} />
+            </div>
+          </div>
         </div>
       </header>
 
