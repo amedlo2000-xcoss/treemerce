@@ -75,7 +75,7 @@
 | 商品カテゴリ | `public.treemerce_catalog_categories()` (公開・STABLE) / `treemerce_admin_list_categories()` / `treemerce_admin_upsert_category()` / `treemerce_admin_set_category_active()` / `treemerce_admin_reorder_categories()` (super_admin、0022。削除不可・名称変更と有効/無効は理由必須) |
 | 公開商品一覧 | `public.treemerce_shop_products()` (0023 で準備中・カテゴリ・物品/サービスを追加。準備中は価格を返さない) |
 | オブザーバー特典付き製品一覧 | `public.treemerce_observer_products()` (0025、公開・STABLE。代理店 ID を受け取らない) |
-| 注文受付 | `public.treemerce_place_order()` (0015 で生産者ごとの発送記録を作成。0023 で準備中・サービスを拒否し、注文時点のカテゴリを明細に保存) |
+| 注文受付 | `public.treemerce_place_order()` (0015 で生産者ごとの発送記録を作成。0023 で準備中・サービスを拒否し、注文時点のカテゴリを明細に保存。0036 で会員 (ログイン中・メール確認済み) のみ・連絡先のメールアドレスはログイン中のアカウントのものだけ、anon は実行不可) |
 | 注文ステータス変更 | `public.treemerce_admin_set_order_status()` (super_admin、0015 で発送記録と連動) |
 | 注文詳細 (ADMIN) | `public.treemerce_admin_get_order()` (super_admin、0015 で発送記録を追加) |
 | 発送登録・訂正 | `public.treemerce_admin_ship_shipment()` (super_admin、全発送で注文を自動で発送済み) |

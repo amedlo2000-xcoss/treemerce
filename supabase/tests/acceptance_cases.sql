@@ -1,10 +1,10 @@
 -- ============================================================================
--- TREEMERCE 受け入れテスト  CASE1 - CASE91
+-- TREEMERCE 受け入れテスト  CASE1 - CASE92
 -- ----------------------------------------------------------------------------
 -- Supabase SQL Editor にそのまま貼り付けて実行する。
 -- 全体が 1 トランザクションで、最後に ROLLBACK するため本番データは残らない。
 -- 途中で失敗した CASE があれば例外で停止する。全て通れば最後に
--- 「ALL 91 CASES PASSED」が NOTICE として出力される。
+-- 「ALL 92 CASES PASSED」が NOTICE として出力される。
 --
 -- 木構造:
 --            R  (root)
@@ -24,6 +24,69 @@
 begin;
 
 set local client_min_messages to notice;
+
+-- ----------------------------------------------------------------------------
+-- テスト用: 「会員としてログインして注文する」(0036 で注文は会員のみ)。
+-- p_email のアカウント (メール確認済み) が無ければ作り、そのアカウントでログインした状態で
+-- treemerce_place_order を呼ぶ。p_email が無いときは別のアカウントでログインする
+-- (連絡先の不一致として拒否されることを確かめる)。終わったらログイン状態を元に戻す。
+-- 該当のアカウントが無いときは、テスト用の共用アカウントのメールアドレスを一時的に p_email にして使い、
+-- 終わったら元に戻す (後の CASE が同じメールアドレスのアカウントを作れるように)。
+-- ----------------------------------------------------------------------------
+create or replace function public.tm_test_buyer_place_order(
+  p_agent_public_id  text,
+  p_items            jsonb,
+  p_full_name        text,
+  p_ship_address     text,
+  p_email            text default null,
+  p_phone            text default null,
+  p_ship_postal_code text default null,
+  p_full_name_kana   text default null,
+  p_age_group        public.customer_age_group default null,
+  p_gender           public.customer_gender    default null,
+  p_prefecture       text default null,
+  p_customer_type    public.customer_kind      default 'individual',
+  p_note             text default null
+)
+returns jsonb
+language plpgsql
+volatile
+security definer
+set search_path = public, app, pg_temp
+as $fn$
+declare
+  v_login text := coalesce(nullif(lower(btrim(coalesce(p_email, ''))), ''), 'tm-buyer-noemail@treemerce.test');
+  v_uid   uuid;
+  v_prev  text := current_setting('request.jwt.claim.sub', true);
+  v_res   jsonb;
+  v_shared constant uuid := 'b0b0b0b0-0000-4000-8000-000000000000';
+  v_temp  boolean := false;
+begin
+  select u.id into v_uid from auth.users u where lower(u.email) = v_login;
+  if v_uid is null then
+    v_temp := true;
+    v_uid := v_shared;
+    insert into auth.users (instance_id, id, aud, role, email, encrypted_password,
+                            email_confirmed_at, created_at, updated_at)
+    values ('00000000-0000-0000-0000-000000000000', v_shared, 'authenticated', 'authenticated',
+            v_login, '', now(), now(), now())
+    on conflict (id) do update set email = excluded.email;
+  end if;
+  perform set_config('request.jwt.claim.sub', v_uid::text, true);
+  v_res := public.treemerce_place_order(
+    p_agent_public_id, p_items, p_full_name, p_ship_address, p_email, p_phone, p_ship_postal_code,
+    p_full_name_kana, p_age_group, p_gender, p_prefecture, p_customer_type, p_note);
+  perform set_config('request.jwt.claim.sub', coalesce(v_prev, ''), true);
+  if v_temp then
+    update auth.users set email = 'tm-buyer-idle@treemerce.test' where id = v_shared;
+  end if;
+  return v_res;
+end;
+$fn$;
+grant execute on function public.tm_test_buyer_place_order(
+  text, jsonb, text, text, text, text, text, text,
+  public.customer_age_group, public.customer_gender, text, public.customer_kind, text)
+  to anon, authenticated;
 
 -- ============================================================================
 -- SETUP (postgres として実行)
@@ -1251,7 +1314,7 @@ end $$;
 do $$
 declare v_res jsonb;
 begin
-  v_res := public.treemerce_place_order(
+  v_res := public.tm_test_buyer_place_order(
     current_setting('tm.agent_b_public'),
     jsonb_build_array(jsonb_build_object('product_id', current_setting('tm.p1'), 'quantity', 2)),
     '新規花子', '東京都千代田区テスト1-1', 'tm-test-n@treemerce.test', '090-7777-8888', '100-0001');
@@ -1318,7 +1381,7 @@ set local role anon;
 do $$
 declare v_res jsonb; v_keys text;
 begin
-  v_res := public.treemerce_place_order(
+  v_res := public.tm_test_buyer_place_order(
     'TM-TEST-S',
     jsonb_build_array(jsonb_build_object('product_id', current_setting('tm.p1'), 'quantity', 1)),
     '別人太郎', '北海道テスト市1-1', 'tm-test-x@treemerce.test', null);
@@ -1384,7 +1447,7 @@ begin
   -- anon は orders を数えられないので SECURITY DEFINER の公開RPCの結果だけで判定する
   v_ok := false;
   begin
-    perform public.treemerce_place_order(current_setting('tm.agent_b_public'),
+    perform public.tm_test_buyer_place_order(current_setting('tm.agent_b_public'),
       jsonb_build_array(jsonb_build_object('product_id', current_setting('tm.p2'), 'quantity', 2)),
       '在庫太郎', '大阪府テスト1-1', 'tm-test-stock@treemerce.test');
   exception when invalid_parameter_value then v_ok := true; end;
@@ -1392,7 +1455,7 @@ begin
 
   v_ok := false;
   begin
-    perform public.treemerce_place_order(current_setting('tm.agent_b_public'),
+    perform public.tm_test_buyer_place_order(current_setting('tm.agent_b_public'),
       jsonb_build_array(jsonb_build_object('product_id', current_setting('tm.p3'), 'quantity', 1)),
       '非公開太郎', '大阪府テスト1-1', 'tm-test-hidden@treemerce.test');
   exception when invalid_parameter_value then v_ok := true; end;
@@ -1400,7 +1463,7 @@ begin
 
   v_ok := false;
   begin
-    perform public.treemerce_place_order(current_setting('tm.agent_b_public'),
+    perform public.tm_test_buyer_place_order(current_setting('tm.agent_b_public'),
       jsonb_build_array(jsonb_build_object('product_id', current_setting('tm.p1'), 'quantity', 100)),
       '大量太郎', '大阪府テスト1-1', 'tm-test-bulk@treemerce.test');
   exception when invalid_parameter_value then v_ok := true; end;
@@ -1408,7 +1471,7 @@ begin
 
   v_ok := false;
   begin
-    perform public.treemerce_place_order(current_setting('tm.agent_b_public'),
+    perform public.tm_test_buyer_place_order(current_setting('tm.agent_b_public'),
       jsonb_build_array(jsonb_build_object('product_id', current_setting('tm.p1'), 'quantity', 1)),
       '名前だけ太郎', '大阪府テスト1-1', null, null);
   exception when invalid_parameter_value then v_ok := true; end;
@@ -1416,7 +1479,7 @@ begin
 
   v_ok := false;
   begin
-    perform public.treemerce_place_order('TM-TEST-NOPE',
+    perform public.tm_test_buyer_place_order('TM-TEST-NOPE',
       jsonb_build_array(jsonb_build_object('product_id', current_setting('tm.p1'), 'quantity', 1)),
       'リンク太郎', '大阪府テスト1-1', 'tm-test-link@treemerce.test');
   exception when invalid_parameter_value then v_ok := true; end;
@@ -1778,7 +1841,7 @@ do $$
 declare i int;
 begin
   for i in 1..3 loop
-    perform public.treemerce_place_order(
+    perform public.tm_test_buyer_place_order(
       current_setting('tm.agent_c_public'),
       jsonb_build_array(jsonb_build_object('product_id', current_setting('tm.p1'), 'quantity', 1)),
       '鈴木一郎', '東京都テスト1-1', 'tm-test-z@treemerce.test');
@@ -1812,7 +1875,7 @@ do $$
 declare i int;
 begin
   for i in 1..2 loop
-    perform public.treemerce_place_order(
+    perform public.tm_test_buyer_place_order(
       current_setting('tm.agent_c_public'),
       jsonb_build_array(jsonb_build_object('product_id', current_setting('tm.p1'), 'quantity', 1)),
       '鈴木一郎', '東京都テスト1-1', 'tm-test-z@treemerce.test');
@@ -1918,7 +1981,7 @@ end $$;
 
 -- 未入金のまま残す注文: N が美容液 (beauty) を 1 点
 set local role anon;
-select public.treemerce_place_order(current_setting('tm.agent_b_public'),
+select public.tm_test_buyer_place_order(current_setting('tm.agent_b_public'),
   jsonb_build_array(jsonb_build_object('product_id', current_setting('tm.p2'), 'quantity', 1)),
   '新規花子', '東京都千代田区テスト1-1', 'tm-test-n@treemerce.test');
 reset role;
@@ -2090,24 +2153,24 @@ declare
 begin
   -- 新しい連絡先 (初回注文で顧客が作られる)
   for i in 1..3 loop
-    perform public.treemerce_place_order(current_setting('tm.agent_b_public'), v_items,
+    perform public.tm_test_buyer_place_order(current_setting('tm.agent_b_public'), v_items,
       '連続太郎', '神奈川県テスト1-1', 'tm-test-rate@treemerce.test');
   end loop;
   v_ok := false;
   begin
-    perform public.treemerce_place_order(current_setting('tm.agent_b_public'), v_items,
+    perform public.tm_test_buyer_place_order(current_setting('tm.agent_b_public'), v_items,
       '連続太郎', '神奈川県テスト1-1', 'tm-test-rate@treemerce.test');
   exception when invalid_parameter_value then v_ok := true; v_msg_new := sqlerrm; end;
   if not v_ok then raise exception 'CASE33 FAILED: 新しい連絡先で 4 件目の未入金注文ができた'; end if;
 
   -- 既存顧客 Y (A の担当) の連絡先
   for i in 1..3 loop
-    perform public.treemerce_place_order('TM-TEST-A', v_items,
+    perform public.tm_test_buyer_place_order('TM-TEST-A', v_items,
       '佐藤花子', '大阪府テスト1-1', 'tm-test-y@treemerce.test');
   end loop;
   v_ok := false;
   begin
-    perform public.treemerce_place_order('TM-TEST-A', v_items,
+    perform public.tm_test_buyer_place_order('TM-TEST-A', v_items,
       '佐藤花子', '大阪府テスト1-1', 'tm-test-y@treemerce.test');
   exception when invalid_parameter_value then v_ok := true; v_msg_existing := sqlerrm; end;
   if not v_ok then raise exception 'CASE33 FAILED: 既存顧客の連絡先で 4 件目の未入金注文ができた'; end if;
@@ -2121,13 +2184,14 @@ begin
   end if;
 
   -- 同一電話番号 (メールアドレスを変えてもすり抜けられない)
+  -- 0036 で注文にはメールアドレス (ログイン中のアカウント) が必須のため、毎回別のアカウントで注文する
   for i in 1..3 loop
-    perform public.treemerce_place_order(current_setting('tm.agent_b_public'), v_items,
-      '電話次郎', '千葉県テスト1-1', null, '080-1234-0000');
+    perform public.tm_test_buyer_place_order(current_setting('tm.agent_b_public'), v_items,
+      '電話次郎', '千葉県テスト1-1', 'tm-test-phone' || i || '@treemerce.test', '080-1234-0000');
   end loop;
   v_ok := false;
   begin
-    perform public.treemerce_place_order(current_setting('tm.agent_b_public'), v_items,
+    perform public.tm_test_buyer_place_order(current_setting('tm.agent_b_public'), v_items,
       '電話次郎', '千葉県テスト1-1', 'tm-test-phone-other@treemerce.test', '08012340000');
   exception when invalid_parameter_value then v_ok := true; v_msg_phone := sqlerrm; end;
   if not v_ok then raise exception 'CASE33 FAILED: 同一電話番号で 4 件目の未入金注文ができた'; end if;
@@ -2166,7 +2230,7 @@ set local role anon;
 do $$
 declare v_res jsonb;
 begin
-  v_res := public.treemerce_place_order(current_setting('tm.agent_b_public'),
+  v_res := public.tm_test_buyer_place_order(current_setting('tm.agent_b_public'),
     jsonb_build_array(jsonb_build_object('product_id', current_setting('tm.p4'), 'quantity', 1)),
     '連続太郎', '神奈川県テスト1-1', 'tm-test-rate@treemerce.test');
   if v_res ->> 'status' <> 'received' then
@@ -2184,13 +2248,13 @@ reset role;
 set local role anon;
 do $$
 begin
-  perform public.treemerce_place_order(current_setting('tm.agent_b_public'),
+  perform public.tm_test_buyer_place_order(current_setting('tm.agent_b_public'),
     jsonb_build_array(jsonb_build_object('product_id', current_setting('tm.p4'), 'quantity', 2)),
     '発送一郎', '埼玉県テスト1-1', 'tm-test-ship1@treemerce.test');
-  perform public.treemerce_place_order(current_setting('tm.agent_b_public'),
+  perform public.tm_test_buyer_place_order(current_setting('tm.agent_b_public'),
     jsonb_build_array(jsonb_build_object('product_id', current_setting('tm.p4'), 'quantity', 3)),
     '発送二郎', '埼玉県テスト1-1', 'tm-test-ship2@treemerce.test');
-  perform public.treemerce_place_order(current_setting('tm.agent_b_public'),
+  perform public.tm_test_buyer_place_order(current_setting('tm.agent_b_public'),
     jsonb_build_array(jsonb_build_object('product_id', current_setting('tm.p4'), 'quantity', 1)),
     '入金三郎', '埼玉県テスト1-1', 'tm-test-ship3@treemerce.test');
 end $$;
@@ -2311,7 +2375,7 @@ reset role;
 set local role anon;
 do $$
 begin
-  perform public.treemerce_place_order(current_setting('tm.agent_b_public'),
+  perform public.tm_test_buyer_place_order(current_setting('tm.agent_b_public'),
     jsonb_build_array(
       jsonb_build_object('product_id', current_setting('tm.px'), 'quantity', 1),
       jsonb_build_object('product_id', current_setting('tm.py'), 'quantity', 1)),
@@ -2552,7 +2616,7 @@ begin
 
   v_ok := false;
   begin
-    perform public.treemerce_place_order(current_setting('tm.agent_b_public'),
+    perform public.tm_test_buyer_place_order(current_setting('tm.agent_b_public'),
       jsonb_build_array(jsonb_build_object('product_id', current_setting('tm.py'), 'quantity', 1)),
       '休止注文', '東京都テスト区1-1', 'tm-test-case38@treemerce.test');
   exception when invalid_parameter_value then v_ok := true; end;
@@ -2582,7 +2646,7 @@ reset role;
 set local role anon;
 do $$
 begin
-  perform public.treemerce_place_order(current_setting('tm.agent_b_public'),
+  perform public.tm_test_buyer_place_order(current_setting('tm.agent_b_public'),
     jsonb_build_array(
       jsonb_build_object('product_id', current_setting('tm.px'), 'quantity', 2),
       jsonb_build_object('product_id', current_setting('tm.py'), 'quantity', 1),
@@ -2729,12 +2793,12 @@ reset role;
 set local role anon;
 do $$
 begin
-  perform public.treemerce_place_order(current_setting('tm.agent_b_public'),
+  perform public.tm_test_buyer_place_order(current_setting('tm.agent_b_public'),
     jsonb_build_array(
       jsonb_build_object('product_id', current_setting('tm.px'), 'quantity', 1),
       jsonb_build_object('product_id', current_setting('tm.py'), 'quantity', 1)),
     '自動発送', '福岡県テスト市1-1', 'tm-test-case40a@treemerce.test');
-  perform public.treemerce_place_order(current_setting('tm.agent_b_public'),
+  perform public.tm_test_buyer_place_order(current_setting('tm.agent_b_public'),
     jsonb_build_array(
       jsonb_build_object('product_id', current_setting('tm.px'), 'quantity', 2),
       jsonb_build_object('product_id', current_setting('tm.py'), 'quantity', 3)),
@@ -3732,7 +3796,7 @@ do $$
 declare i int;
 begin
   for i in 1 .. 5 loop
-    perform public.treemerce_place_order('TM-TEST-A',
+    perform public.tm_test_buyer_place_order('TM-TEST-A',
       jsonb_build_array(jsonb_build_object('product_id', current_setting('tm.case44_product'), 'quantity', 1)),
       'CASE45 購入者A' || i, '福岡県テスト市1-1', 'tm-test-case45-a' || i || '@treemerce.test');
   end loop;
@@ -3773,7 +3837,7 @@ select set_config('request.jwt.claims', '', true);
 set local role anon;
 do $$
 begin
-  perform public.treemerce_place_order('TM-TEST-S',
+  perform public.tm_test_buyer_place_order('TM-TEST-S',
     jsonb_build_array(jsonb_build_object('product_id', current_setting('tm.case44_product'), 'quantity', 1)),
     'CASE45 購入者S1', '福岡県テスト市2-2', 'tm-test-case45-s1@treemerce.test');
 end $$;
@@ -3820,11 +3884,11 @@ do $$
 declare i int;
 begin
   for i in 2 .. 5 loop
-    perform public.treemerce_place_order('TM-TEST-S',
+    perform public.tm_test_buyer_place_order('TM-TEST-S',
       jsonb_build_array(jsonb_build_object('product_id', current_setting('tm.case44_product'), 'quantity', 2)),
       'CASE45 購入者S' || i, '福岡県テスト市2-2', 'tm-test-case45-s' || i || '@treemerce.test');
   end loop;
-  perform public.treemerce_place_order('TM-TEST-S',
+  perform public.tm_test_buyer_place_order('TM-TEST-S',
     jsonb_build_array(jsonb_build_object('product_id', current_setting('tm.case44_product'), 'quantity', 1)),
     'CASE45 未入金', '福岡県テスト市2-2', 'tm-test-case45-unpaid@treemerce.test');
 end $$;
@@ -4834,7 +4898,7 @@ begin
   foreach v_id in array array[current_setting('tm.case50_prep'), current_setting('tm.case50_svc')] loop
     v_ok := false;
     begin
-      perform public.treemerce_place_order(current_setting('tm.agent_b_public'),
+      perform public.tm_test_buyer_place_order(current_setting('tm.agent_b_public'),
         jsonb_build_array(jsonb_build_object('product_id', v_id, 'quantity', 1)),
         'CASE50 購入者', '東京都千代田区テスト50', 'tm-test-case50@treemerce.test');
     exception when invalid_parameter_value then v_ok := true; end;
@@ -4867,7 +4931,7 @@ set local role anon;
 do $$
 declare v_res jsonb;
 begin
-  v_res := public.treemerce_place_order(current_setting('tm.agent_b_public'),
+  v_res := public.tm_test_buyer_place_order(current_setting('tm.agent_b_public'),
     jsonb_build_array(jsonb_build_object('product_id', current_setting('tm.case50_prep'), 'quantity', 1)),
     'CASE50 購入者', '東京都千代田区テスト50', 'tm-test-case50@treemerce.test');
   perform set_config('tm.case50_order', v_res ->> 'order_no', false);
@@ -5138,7 +5202,7 @@ begin
 
   -- 初期登録の商品は注文できない
   begin
-    perform public.treemerce_place_order(current_setting('tm.agent_b_public'),
+    perform public.tm_test_buyer_place_order(current_setting('tm.agent_b_public'),
       jsonb_build_array(jsonb_build_object('product_id',
         (select e ->> 'id' from jsonb_array_elements(v_res -> 'products') e where e ->> 'name' = '梅結び'),
         'quantity', 1)),
@@ -7225,7 +7289,7 @@ as $fn$
 declare v_no text;
 begin
   perform app.tm_rw_as(null);
-  v_no := public.treemerce_place_order('TM-RW-LINK', p_items, 'RW購入者 山田花子',
+  v_no := public.tm_test_buyer_place_order('TM-RW-LINK', p_items, 'RW購入者 山田花子',
             '福岡県テスト市1-1', p_email, '090-0000-0000') ->> 'order_no';
   return (select id from public.orders where order_no = v_no);
 end;
@@ -7985,6 +8049,117 @@ begin
   raise notice 'CASE91 OK: 本人の申請・代行の申請の文言は「オブザーバー」。エラーコードは変わらない';
 end $$;
 
+-- ============================================================================
+-- CASE92 : 注文は会員 (ログイン中・メール確認済み) のみ (0036)。
+--          anon は実行できない。連絡先のメールアドレスはログイン中のアカウントのものだけ。
+--          既存の会員が別のオブザーバーのショップで買っても、担当・注文の帰属は元の担当のまま
+-- ============================================================================
+
+insert into auth.users (instance_id, id, aud, role, email, encrypted_password,
+                        email_confirmed_at, created_at, updated_at)
+values ('00000000-0000-0000-0000-000000000000', 'b0b0b0b0-0000-4000-8000-000000000092',
+        'authenticated', 'authenticated', 'tm-case92-unconfirmed@treemerce.test', '', null, now(), now());
+
+select set_config('tm.case92_items',
+  jsonb_build_array(jsonb_build_object('product_id', current_setting('tm.p1'), 'quantity', 1))::text, true);
+select set_config('tm.case92_x_assigned',
+  (select ca.assigned_agent_id::text from public.customer_assignments ca
+     join public.customers c on c.id = ca.customer_id
+   where c.email_normalized = 'tm-test-x@treemerce.test' and ca.status = 'active'), true);
+select set_config('tm.case92_hist',
+  (select count(*)::text from public.customer_assignment_history), true);
+select set_config('tm.case92_orders', (select count(*)::text from public.orders), true);
+
+do $$
+declare
+  v_sig constant text := 'public.treemerce_place_order(text, jsonb, text, text, text, text, text, text, '
+                         'public.customer_age_group, public.customer_gender, text, public.customer_kind, text)';
+begin
+  if has_function_privilege('anon', v_sig, 'execute') then
+    raise exception 'CASE92 FAILED: anon が treemerce_place_order を実行できる';
+  end if;
+  if not has_function_privilege('authenticated', v_sig, 'execute') then
+    raise exception 'CASE92 FAILED: authenticated が treemerce_place_order を実行できない';
+  end if;
+end $$;
+
+select set_config('request.jwt.claims', '', true);
+select set_config('request.jwt.claim.sub', '', true);
+set local role anon;
+do $$
+begin
+  perform app.tm_expect_error('CASE92 (anon)',
+    format('select public.treemerce_place_order(%L, %L::jsonb, ''CASE92'', ''東京都テスト1-1'', ''tm-test-x@treemerce.test'')',
+           'TM-TEST-S', current_setting('tm.case92_items')),
+    'permission denied');
+end $$;
+reset role;
+
+set local role authenticated;
+do $$
+declare v_res jsonb;
+begin
+  -- ログインなし (authenticated でも uid が無い)
+  perform app.tm_expect_error('CASE92 (uid なし)',
+    format('select public.treemerce_place_order(%L, %L::jsonb, ''CASE92'', ''東京都テスト1-1'', ''tm-test-x@treemerce.test'')',
+           'TM-TEST-S', current_setting('tm.case92_items')),
+    'TREEMERCE_UNAUTHENTICATED: ご購入には会員登録（無料）またはログインが必要です');
+
+  -- メールアドレスが未確認のアカウント
+  perform set_config('request.jwt.claim.sub', 'b0b0b0b0-0000-4000-8000-000000000092', true);
+  perform app.tm_expect_error('CASE92 (メール未確認)',
+    format('select public.treemerce_place_order(%L, %L::jsonb, ''CASE92'', ''東京都テスト1-1'', ''tm-case92-unconfirmed@treemerce.test'')',
+           'TM-TEST-S', current_setting('tm.case92_items')),
+    'TREEMERCE_UNAUTHENTICATED: メールアドレスの確認が済んだアカウントでログインしてください');
+
+  -- X としてログインし、他人 (Y) のメールアドレス・メールアドレスなしで注文 → 拒否
+  perform set_config('request.jwt.claim.sub', '00000000-0000-4000-8000-000000000057', true);
+  perform app.tm_expect_error('CASE92 (他人のメールアドレス)',
+    format('select public.treemerce_place_order(%L, %L::jsonb, ''佐藤花子'', ''大阪府テスト1-1'', ''tm-test-y@treemerce.test'')',
+           'TM-TEST-S', current_setting('tm.case92_items')),
+    'TREEMERCE_ORDER_EMAIL_MISMATCH: 連絡先のメールアドレスはログイン中のアカウントと同じにしてください');
+  perform app.tm_expect_error('CASE92 (メールアドレスなし)',
+    format('select public.treemerce_place_order(%L, %L::jsonb, ''山田太郎'', ''東京都テスト1-1'', null, ''090-1111-2222'')',
+           'TM-TEST-S', current_setting('tm.case92_items')),
+    'TREEMERCE_ORDER_EMAIL_MISMATCH');
+
+  -- X (B の担当) が S のショップで、ログイン中のアカウントのメールアドレス (大文字・空白混じり) で注文 → 受け付ける
+  v_res := public.treemerce_place_order('TM-TEST-S', current_setting('tm.case92_items')::jsonb,
+    '山田太郎', '東京都テスト1-1', ' TM-Test-X@treemerce.test ');
+  if v_res ->> 'status' <> 'received' then
+    raise exception 'CASE92 FAILED: ログイン中の会員の注文を受け付けない (%)', v_res;
+  end if;
+  if v_res ? 'customer_id' or v_res ? 'agent_id' or v_res::text like '%TM-TEST-S%' then
+    raise exception 'CASE92 FAILED: 応答に顧客ID・担当が含まれる (%)', v_res;
+  end if;
+  perform set_config('tm.case92_order_no', v_res ->> 'order_no', true);
+  perform set_config('request.jwt.claim.sub', '', true);
+end $$;
+reset role;
+
+do $$
+declare v_order public.orders%rowtype;
+begin
+  if (select count(*) from public.orders) <> current_setting('tm.case92_orders')::int + 1 then
+    raise exception 'CASE92 FAILED: 拒否された注文が書き込まれている';
+  end if;
+  select * into v_order from public.orders where order_no = current_setting('tm.case92_order_no');
+  if v_order.agent_id::text is distinct from current_setting('tm.case92_x_assigned') then
+    raise exception 'CASE92 FAILED: 注文の帰属が現在の担当ではない';
+  end if;
+  if v_order.referral_agent_id is distinct from (select id from public.agents where public_id = 'TM-TEST-S') then
+    raise exception 'CASE92 FAILED: 紹介元 (ショップのオブザーバー) が記録されていない';
+  end if;
+  if (select ca.assigned_agent_id::text from public.customer_assignments ca
+        join public.customers c on c.id = ca.customer_id
+      where c.email_normalized = 'tm-test-x@treemerce.test' and ca.status = 'active')
+     is distinct from current_setting('tm.case92_x_assigned')
+     or (select count(*) from public.customer_assignment_history) <> current_setting('tm.case92_hist')::int then
+    raise exception 'CASE92 FAILED: 別のショップで買ったことで担当が変わった';
+  end if;
+  raise notice 'CASE92 OK: 注文は会員のみ (anon 不可・ログイン必須・メール確認済み・本人のメールアドレスのみ)。別のショップで買っても担当・帰属は元のまま';
+end $$;
+
 drop function app.tm_rw_entry(uuid, uuid, public.reward_recipient_role);
 drop function app.tm_rw_pay_and_ship(uuid, int);
 drop function app.tm_rw_order(jsonb, text);
@@ -8003,7 +8178,7 @@ drop role tm_test_session;
 do $$
 begin
   raise notice '==========================================';
-  raise notice '  TREEMERCE: ALL 91 CASES PASSED (+EXTRA)';
+  raise notice '  TREEMERCE: ALL 92 CASES PASSED (+EXTRA)';
   raise notice '==========================================';
 end $$;
 

@@ -65,7 +65,7 @@ grant execute on function auth.uid() to anon, authenticated, service_role;
 grant select on auth.users to service_role;
 `;
 
-const EXPECTED_CASES = 91;
+const EXPECTED_CASES = 92;
 const notices = [];
 
 function record(message) {
