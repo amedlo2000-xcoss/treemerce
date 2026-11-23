@@ -1,10 +1,10 @@
 -- ============================================================================
--- TREEMERCE 受け入れテスト  CASE1 - CASE90
+-- TREEMERCE 受け入れテスト  CASE1 - CASE91
 -- ----------------------------------------------------------------------------
 -- Supabase SQL Editor にそのまま貼り付けて実行する。
 -- 全体が 1 トランザクションで、最後に ROLLBACK するため本番データは残らない。
 -- 途中で失敗した CASE があれば例外で停止する。全て通れば最後に
--- 「ALL 90 CASES PASSED」が NOTICE として出力される。
+-- 「ALL 91 CASES PASSED」が NOTICE として出力される。
 --
 -- 木構造:
 --            R  (root)
@@ -7952,6 +7952,39 @@ begin
   raise notice 'CASE90 OK: DB が返す表示用の文言の金額単位は TWA (通知は 3 桁区切り)。エラーコードは変わらない';
 end $$;
 
+-- ============================================================================
+-- CASE91 : DB が返す表示用の文言の「代理店」を「オブザーバー」に (0035)。エラーコードは従来どおり
+-- ============================================================================
+
+do $$
+declare v_sub uuid;
+begin
+  -- 停止中のオブザーバー (LX) は本人の申請を保存できない
+  perform app.tm_rw_as(current_setting('tm.rw_lx'));
+  perform app.tm_expect_error('CASE91 (停止中の本人の申請)',
+    'select public.treemerce_save_my_submission(p_name => ''CASE91'')',
+    'TREEMERCE_FORBIDDEN: 稼働中のオブザーバーアカウントが必要です');
+
+  -- 代行の下書きを別のオブザーバーを指定して保存する
+  perform app.tm_rw_as('00000000-0000-4000-8000-000000000007');
+  v_sub := (public.treemerce_admin_save_proxy_submission(
+    p_agent_id => current_setting('tm.rw_sn')::uuid, p_name => 'CASE91 代行の下書き',
+    p_reason => 'ヒアリング') ->> 'id')::uuid;
+  perform app.tm_expect_error('CASE91 (代行の申請とオブザーバーの不一致)',
+    format('select public.treemerce_admin_save_proxy_submission(p_agent_id => %L, p_submission_id => %L, '
+           'p_name => ''CASE91'')', current_setting('tm.rw_s5'), v_sub),
+    'TREEMERCE_SUBMISSION_AGENT_MISMATCH: 申請のオブザーバーと指定のオブザーバーが一致しません');
+  perform app.tm_rw_as(null);
+
+  if exists (select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+             where n.nspname = 'public'
+               and p.proname in ('treemerce_save_my_submission', 'treemerce_admin_save_proxy_submission')
+               and regexp_replace(pg_get_functiondef(p.oid), '--[^\n]*', '', 'g') ~ '代理店') then
+    raise exception 'CASE91 FAILED: 表示用の文言に「代理店」が残っている';
+  end if;
+  raise notice 'CASE91 OK: 本人の申請・代行の申請の文言は「オブザーバー」。エラーコードは変わらない';
+end $$;
+
 drop function app.tm_rw_entry(uuid, uuid, public.reward_recipient_role);
 drop function app.tm_rw_pay_and_ship(uuid, int);
 drop function app.tm_rw_order(jsonb, text);
@@ -7970,7 +8003,7 @@ drop role tm_test_session;
 do $$
 begin
   raise notice '==========================================';
-  raise notice '  TREEMERCE: ALL 90 CASES PASSED (+EXTRA)';
+  raise notice '  TREEMERCE: ALL 91 CASES PASSED (+EXTRA)';
   raise notice '==========================================';
 end $$;
 
