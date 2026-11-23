@@ -20,6 +20,7 @@ import {
 } from "@/components/ui";
 import { requireSuperAdminPage } from "@/lib/auth/viewer";
 import { AGENT_STATUSES, AGENT_STATUS_LABELS, PREFECTURES } from "@/lib/domain/enums";
+import { rankLabel } from "@/lib/domain/rewards";
 import type { AgentOverviewRow, AgentRow } from "@/lib/domain/types";
 
 /** 事業プロフィールの項目数 (0016 の app.agent_profile_filled_fields と同じ 8 項目) */
@@ -61,13 +62,16 @@ export default async function AdminAgentsPage({
   }
 
   // 0021: プロフィールの入力済み項目数と持込み申請の件数 (件数のみ・値は含まない)
-  const [{ data }, { data: overviewData }] = await Promise.all([
+  // 0033: ランクは agent_ranks (行がなければ「一般」。super_admin は RLS で参照できる)
+  const [{ data }, { data: overviewData }, { data: rankData }] = await Promise.all([
     query,
     supabase.rpc("treemerce_admin_list_agent_overview"),
+    supabase.from("agent_ranks").select("agent_id, rank"),
   ]);
 
   const agents = (data ?? []) as AgentRow[];
   const byId = new Map(agents.map((a) => [a.id, a]));
+  const ranks = new Map(((rankData ?? []) as { agent_id: string; rank: string }[]).map((r) => [r.agent_id, r.rank]));
   const overview = new Map(((overviewData ?? []) as AgentOverviewRow[]).map((o) => [o.agent_id, o]));
 
   return (
@@ -139,7 +143,7 @@ export default async function AdminAgentsPage({
         <EmptyState title="該当するオブザーバーがありません" />
       ) : (
         <DataTable
-          headers={["オブザーバーID", "オブザーバー名", "連絡先", "招待元 (登録経路)", "プロフィール", "持込み", "状態", "登録日", "操作"]}
+          headers={["オブザーバーID", "オブザーバー名", "連絡先", "招待元 (登録経路)", "ランク", "プロフィール", "持込み", "状態", "登録日", "操作"]}
         >
           {agents.map((agent) => {
             const inviter = agent.invited_by ? byId.get(agent.invited_by) : null;
@@ -169,6 +173,11 @@ export default async function AdminAgentsPage({
                   ) : (
                     <span className="text-text-secondary">直接登録 (招待元なし)</span>
                   )}
+                </td>
+                <td className={`${TD} whitespace-nowrap`}>
+                  <Badge tone={(ranks.get(agent.id) ?? "general") === "general" ? "neutral" : "blue"}>
+                    {rankLabel(ranks.get(agent.id) ?? "general")}
+                  </Badge>
                 </td>
                 <td className={`${TD} whitespace-nowrap`}>
                   {o && o.profile_filled_count > 0 ? (

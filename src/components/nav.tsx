@@ -22,6 +22,7 @@ export const ADMIN_NAV: NavItem[] = [
   { href: "/admin/producers", label: "生産者", icon: "sprout" },
   { href: "/admin/submissions", label: "持込み申請", icon: "inbox" },
   { href: "/admin/orders", label: "注文管理", icon: "shopping-bag" },
+  { href: "/admin/rewards", label: "報酬", icon: "coins" },
   { href: "/admin/analytics", label: "客層分析", icon: "bar-chart" },
   { href: "/admin/audit-logs", label: "監査ログ", icon: "clipboard-list" },
   { href: "/admin/settings", label: "ショップ設定", icon: "settings" },

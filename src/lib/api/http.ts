@@ -211,6 +211,17 @@ const ERROR_MAP: Record<string, { status: number; message: string }> = {
     status: 409,
     message: "申請の紹介者はリンクの発行元と一致しなければなりません。",
   },
+
+  // オブザーバーの報酬 (0033)
+  TREEMERCE_REWARD_NOTHING_TO_REVERSE: {
+    status: 409,
+    message: "取り消せる報酬明細がありません (未確定または取り消し済み)。",
+  },
+  TREEMERCE_REWARD_RATE_MISSING: { status: 409, message: "このランクの割合が設定されていません。" },
+  TREEMERCE_AGENT_RANK_WRITE_DENIED: { status: 403, message: "ランクは運営の変更処理でのみ変更できます。" },
+  TREEMERCE_REWARD_RATE_WRITE_DENIED: { status: 403, message: "割合は運営の変更処理でのみ変更できます。" },
+  TREEMERCE_REWARD_ENTRY_IMMUTABLE: { status: 403, message: "報酬明細は書き換え・削除できません。" },
+  TREEMERCE_REWARD_ENTRY_WRITE_DENIED: { status: 403, message: "報酬明細への直接書込みはできません。" },
 };
 
 /** DB 側の具体的な理由 (「商品名は必須です」等) をそのまま画面に返すコード */

@@ -31,6 +31,7 @@ import { AGENT_INDUSTRY_LABELS, AGENT_STATUS_LABELS } from "@/lib/domain/enums";
 import type { AgentProfile, BankAccountRow } from "@/lib/domain/types";
 
 import { BankAccountForm } from "./BankAccountForm";
+import { MyTabs } from "./MyTabs";
 
 const STATUS_TONE = {
   active: "success",
@@ -95,6 +96,7 @@ export default async function AgentMyPage({
   return (
     <>
       <MobilePageHeader title="MY" />
+      <MyTabs current="/agent/my" />
 
       <div className="space-y-5 md:grid md:grid-cols-2 md:items-start md:gap-6 md:space-y-0">
         <div className="space-y-5">

@@ -21,8 +21,10 @@ import { AgentProfileDetails } from "@/components/AgentProfileDetails";
 import { CommerceMapTree } from "@/components/CommerceMapTree";
 import { requireSuperAdminPage } from "@/lib/auth/viewer";
 import { AGENT_STATUS_LABELS, SUBMISSION_STATUS_BADGE, SUBMISSION_STATUS_LABELS } from "@/lib/domain/enums";
+import { rankLabel, type AgentRank } from "@/lib/domain/rewards";
 import type { AdminSubmissionListItem, AgentProfile, AgentRow, CommerceMap } from "@/lib/domain/types";
 
+import { AgentRankForm } from "./AgentRankForm";
 import { AgentStatusForm } from "./AgentStatusForm";
 
 /**
@@ -51,7 +53,7 @@ export default async function AdminAgentDetailPage({
   const agent = agentData as AgentRow | null;
   if (!agent) notFound();
 
-  const [{ data: mapData }, { data: inviterData }, { data: profileData }, { data: submissionData }] = await Promise.all([
+  const [{ data: mapData }, { data: inviterData }, { data: profileData }, { data: submissionData }, { data: rankData }] = await Promise.all([
     supabase.rpc("treemerce_commerce_map", { p_root_agent_id: agentId }),
     agent.invited_by
       ? supabase
@@ -64,7 +66,10 @@ export default async function AdminAgentDetailPage({
     supabase.rpc("treemerce_admin_get_agent_profile", { p_agent_id: agentId }),
     // 0021: この代理店の持込み申請 (本人の下書きは含まない・代行の下書きは含む)
     supabase.rpc("treemerce_admin_list_submissions", { p_agent_id: agentId }),
+    // 0033: ランク (行がなければ「一般」。super_admin は RLS で参照できる)
+    supabase.from("agent_ranks").select("rank").eq("agent_id", agentId).maybeSingle(),
   ]);
+  const currentRank = ((rankData as { rank: AgentRank } | null)?.rank ?? "general") as AgentRank;
 
   const map = mapData as CommerceMap;
   const profile = (profileData as AgentProfile | null) ?? null;
@@ -235,6 +240,13 @@ export default async function AdminAgentDetailPage({
                 ))}
               </ul>
             )}
+          </Card>
+
+          <Card
+            title={`ランク: ${rankLabel(currentRank)}`}
+            description="紹介者として受け取る報酬の割合はランクで決まります (割合は「報酬 › ランク別の割合」で設定)。この操作は super_admin のみ実行できます。"
+          >
+            <AgentRankForm agentId={agent.id} agentName={agent.display_name} currentRank={currentRank} />
           </Card>
 
           <Card
