@@ -5,6 +5,7 @@ import { useState } from "react";
 
 import { AgentPledges, NO_PLEDGES, allPledged, type PledgeState } from "@/components/AgentPledges";
 import { PrimaryButton } from "@/components/mobile/primitives";
+import { LineFriendPanel } from "@/components/LineFriendPanel";
 
 const INPUT =
   "w-full rounded-2xl border border-border-soft bg-surface px-3.5 py-3 text-[16px] text-text-primary outline-none focus:border-brand";
@@ -78,6 +79,7 @@ export function JoinForm({ token, terms }: Props) {
         <div className="rounded-2xl border border-success-soft bg-success-soft px-4 py-5 text-[15px] leading-6 text-text-primary">
           {message}
         </div>
+        <LineFriendPanel />
         <p className="text-[13px] leading-6 text-text-secondary">
           運営の承認後、ご入力のメールアドレスとパスワードで
           <Link href="/login?next=/agent" className="font-medium text-brand underline-offset-2 hover:underline">

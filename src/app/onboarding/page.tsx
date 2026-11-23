@@ -6,6 +6,7 @@ import { getViewer } from "@/lib/auth/viewer";
 import { AGENT_STATUS_LABELS } from "@/lib/domain/enums";
 import type { MyAgentApplication } from "@/lib/domain/types";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { LineFriendPanel } from "@/components/LineFriendPanel";
 
 /**
  * 代理店登録の案内 (旧: 代理店登録フォーム)。
@@ -58,7 +59,10 @@ export default async function OnboardingPage({
             詳しくは運営事務局までお問い合わせください。
           </Notice>
         ) : application?.state === "received" ? (
-          <Notice tone="info">審査中です。</Notice>
+          <>
+            <Notice tone="info">審査中です。</Notice>
+            <LineFriendPanel />
+          </>
         ) : application && application.state !== "none" && application.message ? (
           <Notice tone="info">{application.message}</Notice>
         ) : null}

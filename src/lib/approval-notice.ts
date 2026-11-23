@@ -25,6 +25,3 @@ export function buildApprovalNotice({
   ].join("\n");
 }
 
-export function lineShareUrl(text: string): string {
-  return `https://line.me/R/share?text=${encodeURIComponent(text)}`;
-}

@@ -15,6 +15,7 @@ import {
   PREFECTURES,
 } from "@/lib/domain/enums";
 import type { MyAgentApplication, RegisterMemberResult } from "@/lib/domain/types";
+import { LineFriendPanel } from "@/components/LineFriendPanel";
 
 const INPUT =
   "w-full rounded-2xl border border-border-soft bg-surface px-3.5 py-3 text-[16px] text-text-primary outline-none focus:border-brand";
@@ -264,6 +265,7 @@ function RegisterFormInner({
             {result.application_message}
           </div>
         ) : null}
+        {result.application_status === "received" ? <LineFriendPanel /> : null}
       </div>
     );
   }

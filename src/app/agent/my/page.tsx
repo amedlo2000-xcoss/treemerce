@@ -32,6 +32,7 @@ import type { AgentProfile, BankAccountRow } from "@/lib/domain/types";
 
 import { BankAccountForm } from "./BankAccountForm";
 import { MyTabs } from "./MyTabs";
+import { LINE_ADD_FRIEND_URL, LINE_OFFICIAL_ACCOUNT_NAME } from "@/lib/line";
 
 const STATUS_TONE = {
   active: "success",
@@ -207,6 +208,18 @@ export default async function AgentMyPage({
               <span className="text-[12px] text-text-secondary">準備中</span>
             </div>
           </Surface>
+
+          <p className="px-1 text-[12px] leading-5 text-text-secondary">
+            お知らせを受け取る：
+            <a
+              href={LINE_ADD_FRIEND_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-medium text-brand underline-offset-2 hover:underline"
+            >
+              LINE公式アカウント『{LINE_OFFICIAL_ACCOUNT_NAME}』を友だち追加
+            </a>
+          </p>
 
           <form action={signOutAction} className="md:hidden">
             <PrimaryButton type="submit" variant="secondary">
