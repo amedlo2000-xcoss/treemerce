@@ -15,7 +15,8 @@ export function MembershipGate({
   returnPath,
   lines,
 }: {
-  agentPublicId: string;
+  /** null は運営のショップ (/shop)。会員登録は担当なし (運営直接) になる */
+  agentPublicId: string | null;
   /** 戻り先 (このショップ内のパス) */
   returnPath: string;
   /** 戻ったときに復元するカートの中身 */

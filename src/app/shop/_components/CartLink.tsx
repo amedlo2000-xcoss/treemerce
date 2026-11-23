@@ -4,13 +4,15 @@ import { ShoppingCart } from "lucide-react";
 import Link from "next/link";
 
 import { useCart } from "@/lib/shop/cart";
+import { shopBasePath } from "@/lib/shop/return-to";
 
-export function CartLink({ agentPublicId }: { agentPublicId: string }) {
+/** agentPublicId = null は運営のショップ (/shop) */
+export function CartLink({ agentPublicId }: { agentPublicId: string | null }) {
   const { count } = useCart(agentPublicId);
 
   return (
     <Link
-      href={`/shop/${agentPublicId}/checkout`}
+      href={`${shopBasePath(agentPublicId)}/checkout`}
       aria-label={`カート (${count}点)`}
       className="relative flex h-10 w-10 items-center justify-center rounded-full border border-border-soft bg-surface text-text-primary transition-colors hover:bg-surface-muted"
     >

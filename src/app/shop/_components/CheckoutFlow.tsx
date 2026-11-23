@@ -25,9 +25,10 @@ import {
 import type { PlaceOrderResult, ShopProduct } from "@/lib/domain/types";
 import { useCart } from "@/lib/shop/cart";
 import type { ShopMember } from "@/lib/shop/member";
+import { shopBasePath } from "@/lib/shop/return-to";
 
-import { MembershipGate } from "../MembershipGate";
-import { ProductImage } from "../ShopParts";
+import { MembershipGate } from "./MembershipGate";
+import { ProductImage } from "./ShopParts";
 import { formatLongDate } from "@/lib/datetime";
 
 const INPUT =
@@ -74,7 +75,8 @@ export function CheckoutFlow({
   acceptingOrders,
   member,
 }: {
-  agentPublicId: string;
+  /** null は運営のショップ (/shop)。注文の帰属は DB 側で会員の担当から決まる (担当なしなら運営) */
+  agentPublicId: string | null;
   products: ShopProduct[];
   shippingFee: number;
   acceptingOrders: boolean;
@@ -82,6 +84,7 @@ export function CheckoutFlow({
   member: ShopMember | null;
 }) {
   const { lines, setQuantity, clear } = useCart(agentPublicId);
+  const base = shopBasePath(agentPublicId);
   const [step, setStep] = useState<Step>("cart");
   // 会員情報にお名前があれば「お客様情報」を飛ばして、お届け先だけ入力すればよい
   const skipCustomer = Boolean(member?.full_name);
@@ -129,6 +132,7 @@ export function CheckoutFlow({
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
+        // null = 運営のショップ (紹介元なし)
         agent_public_id: agentPublicId,
         items: items.map((x) => ({ product_id: x.product.id, quantity: x.line.quantity })),
         full_name: form.full_name,
@@ -236,7 +240,7 @@ export function CheckoutFlow({
             <Printer size={18} />
             この画面を印刷
           </PrimaryButton>
-          <PrimaryButton href={`/shop/${agentPublicId}`}>商品一覧へ戻る</PrimaryButton>
+          <PrimaryButton href={base}>商品一覧へ戻る</PrimaryButton>
         </div>
       </div>
     );
@@ -251,7 +255,7 @@ export function CheckoutFlow({
       <div className="mx-auto max-w-xl space-y-5">
         <MobilePageHeader title="カート" />
         <EmptyState title="カートに商品がありません" />
-        <PrimaryButton href={`/shop/${agentPublicId}`} variant="secondary">
+        <PrimaryButton href={base} variant="secondary">
           商品を見る
         </PrimaryButton>
       </div>
@@ -365,11 +369,11 @@ export function CheckoutFlow({
           ) : (
             <MembershipGate
               agentPublicId={agentPublicId}
-              returnPath={`/shop/${encodeURIComponent(agentPublicId)}/checkout`}
+              returnPath={`${base}/checkout`}
               lines={items.map((x) => x.line)}
             />
           )}
-          <PrimaryButton href={`/shop/${agentPublicId}`} variant="ghost">
+          <PrimaryButton href={base} variant="ghost">
             買い物を続ける
           </PrimaryButton>
         </>

@@ -40,7 +40,16 @@ export function StockLabel({ product }: { product: ShopProduct }) {
   return <span className="text-[12px] text-success">在庫あり</span>;
 }
 
-export function InvalidShopLink() {
+/** ショップを表示できないとき。direct = 運営のショップ (/shop) */
+export function InvalidShopLink({ direct = false }: { direct?: boolean }) {
+  if (direct) {
+    return (
+      <EmptyState
+        title="ショップは現在ご利用いただけません"
+        description="お手数ですが、時間をおいて再度アクセスしてください。"
+      />
+    );
+  }
   return (
     <EmptyState
       title="このリンクは現在ご利用いただけません"
@@ -48,3 +57,6 @@ export function InvalidShopLink() {
     />
   );
 }
+
+/** 運営のショップ (/shop) の名前 */
+export const DIRECT_SHOP_TITLE = "5D PLUS COMMUNITY ショップ";

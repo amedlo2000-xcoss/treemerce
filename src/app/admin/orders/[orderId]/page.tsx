@@ -28,8 +28,8 @@ import { todayInTokyo } from "@/lib/datetime";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-function AgentLink({ agent }: { agent: AdminOrderDetail["agent"] }) {
-  if (!agent) return <span className="text-text-secondary">—</span>;
+function AgentLink({ agent, empty = "—" }: { agent: AdminOrderDetail["agent"]; empty?: string }) {
+  if (!agent) return <span className="text-text-secondary">{empty}</span>;
   return (
     <Link href={`/admin/agents/${agent.id}`} className="font-medium text-brand hover:underline">
       <span className="font-mono text-[12px]">{agent.public_id}</span> {agent.display_name}
@@ -145,9 +145,9 @@ export default async function AdminOrderDetailPage({
             description="帰属オブザーバーは注文時点の担当で確定し、担当変更があっても変わりません。"
           >
             <DetailList>
-              <DetailRow label="帰属オブザーバー" value={<AgentLink agent={detail.agent} />} />
-              <DetailRow label="現在の担当" value={<AgentLink agent={detail.current_agent} />} />
-              <DetailRow label="経由した紹介リンク" value={<AgentLink agent={detail.referral_agent} />} />
+              <DetailRow label="帰属オブザーバー" value={<AgentLink agent={detail.agent} empty="運営直接" />} />
+              <DetailRow label="現在の担当" value={<AgentLink agent={detail.current_agent} empty="なし (運営直接)" />} />
+              <DetailRow label="経由した紹介リンク" value={<AgentLink agent={detail.referral_agent} empty="なし (/shop)" />} />
             </DetailList>
             {transferred || viaOtherLink ? (
               <ul className="mt-3 space-y-1 text-[12px] leading-5 text-text-secondary">

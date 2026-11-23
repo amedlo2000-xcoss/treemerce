@@ -3,16 +3,18 @@
 import { useCallback, useMemo, useSyncExternalStore } from "react";
 
 /**
- * 公開ショップのカート。紹介リンク (代理店の公開ID) ごとにブラウザの localStorage に保持する。
+ * 公開ショップのカート。紹介リンク (代理店の公開ID) ごと、運営のショップ (/shop、ID なし = null) は
+ * それ専用のキーで、ブラウザの localStorage に保持する。
  * 価格・在庫はここには持たない (注文時にサーバーが必ず最新の値で再計算する)。
  * localStorage が使えない環境 (プライベートモード等) でも落ちないよう、読み書きは try で包む。
  */
 export type CartLine = { product_id: string; quantity: number };
 
 const EVENT = "treemerce:cart";
-const keyFor = (publicId: string) => `treemerce:cart:${publicId}`;
+// 公開IDは英数字とハイフンのため、運営のショップのキー (":direct") と重ならない
+const keyFor = (publicId: string | null) => (publicId ? `treemerce:cart:${publicId}` : "treemerce:cart::direct");
 
-function readRaw(publicId: string): string {
+function readRaw(publicId: string | null): string {
   try {
     return window.localStorage.getItem(keyFor(publicId)) ?? "[]";
   } catch {
@@ -37,7 +39,7 @@ function parse(raw: string): CartLine[] {
   }
 }
 
-function write(publicId: string, lines: CartLine[]) {
+function write(publicId: string | null, lines: CartLine[]) {
   try {
     window.localStorage.setItem(keyFor(publicId), JSON.stringify(lines));
   } catch {
@@ -55,7 +57,7 @@ function subscribe(callback: () => void) {
   };
 }
 
-export function useCart(publicId: string) {
+export function useCart(publicId: string | null) {
   const raw = useSyncExternalStore(
     subscribe,
     () => readRaw(publicId),

@@ -6,8 +6,9 @@ import { useState } from "react";
 
 import { PrimaryButton } from "@/components/mobile/primitives";
 import { useCart } from "@/lib/shop/cart";
+import { shopBasePath } from "@/lib/shop/return-to";
 
-import { MembershipGate } from "../../MembershipGate";
+import { MembershipGate } from "./MembershipGate";
 
 /**
  * 数量を選んでカートに入れる。未ログインでも押せるが、カートに入れたうえで
@@ -21,7 +22,8 @@ export function AddToCart({
   disabled,
   signedIn,
 }: {
-  agentPublicId: string;
+  /** null は運営のショップ (/shop) */
+  agentPublicId: string | null;
   productId: string;
   maxQuantity: number;
   disabled: boolean;
@@ -83,7 +85,7 @@ export function AddToCart({
       {added && !signedIn ? (
         <MembershipGate
           agentPublicId={agentPublicId}
-          returnPath={`/shop/${encodeURIComponent(agentPublicId)}/products/${productId}`}
+          returnPath={`${shopBasePath(agentPublicId)}/products/${productId}`}
           lines={lines}
         />
       ) : null}
@@ -92,7 +94,7 @@ export function AddToCart({
         <PrimaryButton
           type="button"
           variant="secondary"
-          onClick={() => router.push(`/shop/${agentPublicId}/checkout`)}
+          onClick={() => router.push(`${shopBasePath(agentPublicId)}/checkout`)}
         >
           カートを見て注文手続きへ
         </PrimaryButton>

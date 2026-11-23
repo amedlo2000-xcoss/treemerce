@@ -173,7 +173,7 @@ export default async function AdminOrdersPage({
                     <span className="text-text-primary">{o.agent.display_name}</span>
                   </>
                 ) : (
-                  "—"
+                  <span className="text-text-secondary">運営直接</span>
                 )}
               </td>
               <td className={`${TD} font-semibold tabular-nums text-text-primary`}>

@@ -41,15 +41,27 @@ export function shopReturnPath(path: string, lines: CartSnapshotLine[]): string 
   return `${path}${path.includes("?") ? "&" : "?"}${CART_PARAM}=${encoded}`;
 }
 
-/** 戻り先として使えるのは、そのオブザーバーのショップ内のパスだけ */
-export function isShopPath(agentPublicId: string, value: string | null | undefined): value is string {
-  if (!value) return false;
-  const base = `/shop/${encodeURIComponent(agentPublicId)}`;
-  return value === base || value.startsWith(`${base}/`) || value.startsWith(`${base}?`);
+/**
+ * ショップの基点のパス。agentPublicId が null なら、どのオブザーバーにも紐づかない
+ * 運営のショップ (/shop)。
+ */
+export function shopBasePath(agentPublicId: string | null): string {
+  return agentPublicId ? `/shop/${encodeURIComponent(agentPublicId)}` : "/shop";
 }
 
-export function shopRegisterUrl(agentPublicId: string, returnTo: string): string {
-  return `/register/${encodeURIComponent(agentPublicId)}?next=${encodeURIComponent(returnTo)}`;
+/** 戻り先として使えるのは、そのショップ内のパスだけ (運営のショップならオブザーバーのショップは含めない) */
+export function isShopPath(agentPublicId: string | null, value: string | null | undefined): value is string {
+  if (!value) return false;
+  const base = shopBasePath(agentPublicId);
+  if (value === base || value.startsWith(`${base}?`)) return true;
+  if (agentPublicId) return value.startsWith(`${base}/`);
+  return value.startsWith("/shop/products/") || value === "/shop/checkout" || value.startsWith("/shop/checkout?");
+}
+
+/** 会員登録。運営のショップからは担当なし (運営直接) の登録ページへ */
+export function shopRegisterUrl(agentPublicId: string | null, returnTo: string): string {
+  const page = agentPublicId ? `/register/${encodeURIComponent(agentPublicId)}` : "/register";
+  return `${page}?next=${encodeURIComponent(returnTo)}`;
 }
 
 export function shopLoginUrl(returnTo: string): string {

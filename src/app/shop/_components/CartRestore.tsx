@@ -10,7 +10,7 @@ import { CART_PARAM, decodeCart } from "@/lib/shop/return-to";
  * 会員登録・ログインから戻ってきたとき (?cart=...) に、カートの中身をこのブラウザに戻す。
  * 戻したあとは URL から ?cart= を外す (再読み込みで数量が二重にならないように)。
  */
-export function CartRestore({ agentPublicId }: { agentPublicId: string }) {
+export function CartRestore({ agentPublicId }: { agentPublicId: string | null }) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();

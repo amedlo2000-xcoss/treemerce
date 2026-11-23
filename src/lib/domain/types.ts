@@ -481,7 +481,8 @@ type AgentRef = { id: string; public_id: string; display_name: string } | null;
 /** treemerce_admin_get_order の戻り値 (super_admin 専用) */
 export type AdminOrderDetail = {
   order: OrderRow & {
-    agent_id: string;
+    /** null = 担当のいない運営直接の会員の注文 (売上は運営に帰属。0037) */
+    agent_id: string | null;
     referral_agent_id: string | null;
     identity_mismatch: boolean;
   };
