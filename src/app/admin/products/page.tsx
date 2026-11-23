@@ -17,7 +17,7 @@ import {
   TD,
   TD_STRONG,
   formatDateTime,
-  formatYen,
+  formatAmount,
 } from "@/components/ui";
 import { requireSuperAdminPage } from "@/lib/auth/viewer";
 import { loadAdminCategories } from "@/lib/catalog-categories";
@@ -207,12 +207,12 @@ export default async function AdminProductsPage({
                 <td className={TD}>{categoryName.get(p.category_id) ?? "—"}</td>
                 <td className={`${TD} tabular-nums text-text-primary`}>
                   {p.sales_status === "on_sale" ? (
-                    <span className="font-semibold">{formatYen(Number(p.price))}</span>
+                    <span className="font-semibold">{formatAmount(Number(p.price))}</span>
                   ) : (
                     <>
                       <span>{UNDECIDED}</span>
                       {p.price != null ? (
-                        <div className="text-[12px] text-text-secondary">予定 {formatYen(Number(p.price))}</div>
+                        <div className="text-[12px] text-text-secondary">予定 {formatAmount(Number(p.price))}</div>
                       ) : null}
                     </>
                   )}

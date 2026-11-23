@@ -3,7 +3,7 @@ import Link from "next/link";
 
 import { AgentOrderSummaryCard } from "@/components/AgentOrderSummaryCard";
 import { OrderStatusBadge } from "@/components/OrderStatusBadge";
-import { formatDate, formatDateTime, formatYen } from "@/components/ui";
+import { formatDate, formatDateTime, formatAmount } from "@/components/ui";
 import { EmptyState, MobilePageHeader, SectionLabel, Surface } from "@/components/mobile/primitives";
 import { requireAgentPage } from "@/lib/auth/viewer";
 import type { OrderStatus } from "@/lib/domain/enums";
@@ -76,7 +76,7 @@ export default async function AgentOrdersPage() {
                   </p>
                 </div>
                 <span className="shrink-0 text-[15px] font-bold tabular-nums text-text-primary">
-                  {formatYen(Number(o.total))}
+                  {formatAmount(Number(o.total))}
                 </span>
                 <ChevronRight size={16} className="shrink-0 text-text-secondary" />
               </Link>

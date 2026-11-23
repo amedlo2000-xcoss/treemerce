@@ -4,7 +4,7 @@ import { X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { ProductPlaceholder } from "@/components/ProductPlaceholder";
-import { formatYen } from "@/components/ui";
+import { formatAmount } from "@/components/ui";
 import { UNDECIDED, productFieldLabels } from "@/lib/domain/product-labels";
 import type { CatalogCategory, PublicProduct } from "@/lib/domain/types";
 import { productImageUrl } from "@/lib/storage";
@@ -38,7 +38,7 @@ function ProductVisual({ product, className }: { product: PublicProduct; classNa
 }
 
 function priceText(product: PublicProduct) {
-  return product.orderable && product.price != null ? `${formatYen(Number(product.price))} (税込)` : UNDECIDED;
+  return product.orderable && product.price != null ? `${formatAmount(Number(product.price))} (税込)` : UNDECIDED;
 }
 
 /**
@@ -257,7 +257,7 @@ export function ObserverProductCatalog({
                     <p className="text-[14px] text-text-primary">
                       <span className="text-text-secondary">販売価格：</span>
                       <span className="font-semibold">
-                        {p.orderable && p.price != null ? formatYen(Number(p.price)) : UNDECIDED}
+                        {p.orderable && p.price != null ? formatAmount(Number(p.price)) : UNDECIDED}
                       </span>
                     </p>
                     <button

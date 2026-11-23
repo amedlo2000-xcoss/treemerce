@@ -16,7 +16,7 @@ import {
   TD_STRONG,
   formatDate,
   formatDateTime,
-  formatYen,
+  formatAmount,
 } from "@/components/ui";
 import { requireSuperAdminPage } from "@/lib/auth/viewer";
 import { ORDER_STATUS_LABELS, PRODUCT_CATEGORY_LABELS } from "@/lib/domain/enums";
@@ -105,9 +105,9 @@ export default async function AdminOrderDetailPage({
         <div className="space-y-5">
           <Card title="金額">
             <DetailList>
-              <DetailRow label="小計" value={formatYen(Number(order.subtotal))} />
-              <DetailRow label="送料" value={formatYen(Number(order.shipping_fee))} />
-              <DetailRow label="合計" value={<span className="text-[16px]">{formatYen(Number(order.total))}</span>} />
+              <DetailRow label="小計" value={formatAmount(Number(order.subtotal))} />
+              <DetailRow label="送料" value={formatAmount(Number(order.shipping_fee))} />
+              <DetailRow label="合計" value={<span className="text-[16px]">{formatAmount(Number(order.total))}</span>} />
               <DetailRow label="支払期限" value={formatDate(order.payment_due_date)} />
               <DetailRow label="入金確認" value={formatDateTime(order.paid_at)} />
               <DetailRow label="発送" value={formatDateTime(order.shipped_at)} />
@@ -210,10 +210,10 @@ export default async function AdminOrderDetailPage({
                         ? (PRODUCT_CATEGORY_LABELS[item.product_category] ?? item.product_category)
                         : "—")}
                   </td>
-                  <td className={`${TD} tabular-nums`}>{formatYen(Number(item.unit_price))}</td>
+                  <td className={`${TD} tabular-nums`}>{formatAmount(Number(item.unit_price))}</td>
                   <td className={`${TD} tabular-nums`}>{item.quantity}</td>
                   <td className={`${TD} font-semibold tabular-nums text-text-primary`}>
-                    {formatYen(Number(item.amount))}
+                    {formatAmount(Number(item.amount))}
                   </td>
                 </tr>
               ))}

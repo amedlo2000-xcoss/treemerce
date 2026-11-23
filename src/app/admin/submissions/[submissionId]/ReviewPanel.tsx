@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
+import { CURRENCY_UNIT } from "@/lib/money";
+
 import { BUTTON_CLASS, FIELD_CLASS, Field, FormMessage } from "@/components/ui";
 import type { CatalogCategory, ProducerPublicRow, SubmissionImageView } from "@/lib/domain/types";
 
@@ -244,7 +246,7 @@ export function ReviewPanel({
             <Field label="商品名" className="sm:col-span-2">
               <input required value={productName} onChange={(e) => setProductName(e.target.value)} maxLength={100} className={FIELD_CLASS} />
             </Field>
-            <Field label="価格 (円・税込。仮の価格。公開前に商品管理で確定してください)">
+            <Field label={`価格 (${CURRENCY_UNIT}・税込。仮の価格。公開前に商品管理で確定してください)`}>
               <input
                 required
                 type="number"

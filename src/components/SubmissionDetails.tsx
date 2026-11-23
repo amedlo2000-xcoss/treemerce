@@ -1,7 +1,7 @@
 import { ImageOff } from "lucide-react";
 import type { ReactNode } from "react";
 
-import { formatDateTime, formatYen } from "@/components/ui";
+import { formatDateTime, formatAmount } from "@/components/ui";
 import { PRODUCT_CATEGORY_LABELS, SUBMISSION_STATUS_LABELS } from "@/lib/domain/enums";
 import type { SubmissionContent, SubmissionEvent, SubmissionImageView } from "@/lib/domain/types";
 
@@ -25,7 +25,7 @@ function Block({ label, children }: { label: string; children: ReactNode }) {
 const EMPTY = <span className="text-text-secondary">未入力</span>;
 
 function yenOrEmpty(value: number | null) {
-  return value == null ? EMPTY : formatYen(Number(value));
+  return value == null ? EMPTY : formatAmount(Number(value));
 }
 
 export function SubmissionProductDetails({ submission }: { submission: SubmissionContent }) {

@@ -1,3 +1,5 @@
+import { formatAmount } from "@/lib/money";
+
 import { PREFECTURES } from "@/lib/domain/enums";
 
 export type SubmissionInput = {
@@ -59,12 +61,12 @@ export function parseReason(value: unknown): { value: string | null } | { error:
   return { value: reason };
 }
 
-/** 空なら null。0 以上 1 億円未満の整数 (円) でなければエラー文言を返す。 */
+/** 空なら null。0 以上 1 億未満の整数 (単位は CURRENCY_UNIT) でなければエラー文言を返す。 */
 export function parseYen(value: unknown, label: string): { value: number | null } | { error: string } {
   if (value == null || (typeof value === "string" && value.trim() === "")) return { value: null };
   const n = Number(value);
   if (!Number.isInteger(n) || n < 0 || n >= 100_000_000) {
-    return { error: `${label}は 0 円以上 1 億円未満の整数で入力してください。` };
+    return { error: `${label}は ${formatAmount(0)} 以上 ${formatAmount(100_000_000)} 未満の整数で入力してください。` };
   }
   return { value: n };
 }

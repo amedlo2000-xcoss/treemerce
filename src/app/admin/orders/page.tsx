@@ -15,7 +15,7 @@ import {
   TD_STRONG,
   formatDate,
   formatDateTime,
-  formatYen,
+  formatAmount,
 } from "@/components/ui";
 import { requireSuperAdminPage } from "@/lib/auth/viewer";
 import {
@@ -177,7 +177,7 @@ export default async function AdminOrdersPage({
                 )}
               </td>
               <td className={`${TD} font-semibold tabular-nums text-text-primary`}>
-                {formatYen(Number(o.total))}
+                {formatAmount(Number(o.total))}
               </td>
               <td className={TD}>
                 <OrderStatusBadge status={o.status} />

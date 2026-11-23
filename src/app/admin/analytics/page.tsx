@@ -1,7 +1,7 @@
 import Link from "next/link";
 
 import { RatioBars } from "@/components/charts/RatioBars";
-import { EmptyState, Notice, PageHeader, Stat, formatYen } from "@/components/ui";
+import { EmptyState, Notice, PageHeader, Stat, formatAmount } from "@/components/ui";
 import { requireAdminPage } from "@/lib/auth/viewer";
 import { ANALYTICS_PERIODS } from "@/lib/domain/enums";
 import { DEMOGRAPHIC_DIMENSIONS, type Demographics } from "@/lib/domain/types";
@@ -95,7 +95,7 @@ export default async function AdminAnalyticsPage({
         <Stat label="購入した人" value={stats?.purchasing_customers ?? 0} hint="入金確認済み以降" />
         <Stat
           label="売上合計"
-          value={stats?.total_sales == null ? "該当データ少数" : formatYen(Number(stats.total_sales))}
+          value={stats?.total_sales == null ? "該当データ少数" : formatAmount(Number(stats.total_sales))}
           hint="購入者が少ない場合は非表示"
         />
       </div>

@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-import { Notice, formatYen } from "@/components/ui";
+import { Notice, formatAmount } from "@/components/ui";
 import { EmptyState, MobilePageHeader } from "@/components/mobile/primitives";
 import { UNDECIDED } from "@/lib/domain/product-labels";
 import { fetchShopCatalog } from "@/lib/shop/catalog";
@@ -104,7 +104,7 @@ export default async function ShopPage({
                   ) : null}
                   <span className="mt-auto flex items-end justify-between gap-2 pt-1">
                     <span className="text-[16px] font-bold tabular-nums text-text-primary">
-                      {p.orderable && p.price != null ? formatYen(Number(p.price)) : `販売価格：${UNDECIDED}`}
+                      {p.orderable && p.price != null ? formatAmount(Number(p.price)) : `販売価格：${UNDECIDED}`}
                     </span>
                     <StockLabel product={p} />
                   </span>

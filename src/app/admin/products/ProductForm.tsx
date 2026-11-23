@@ -4,6 +4,8 @@ import { Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
+import { CURRENCY_UNIT } from "@/lib/money";
+
 import { PLACEHOLDER_OPTIONS, ProductPlaceholder } from "@/components/ProductPlaceholder";
 import { BUTTON_CLASS, FIELD_CLASS, Field, FormMessage } from "@/components/ui";
 import { PLACEHOLDER_PRODUCER_ID } from "@/lib/domain/enums";
@@ -298,10 +300,10 @@ export function ProductForm({
           <Field
             label={
               form.sales_status === "on_sale"
-                ? "販売価格 (円・税込・必須)"
+                ? `販売価格 (${CURRENCY_UNIT}・税込・必須)`
                 : form.sales_status === "preparing"
                   ? "予定価格 (任意・運営だけが見られます)"
-                  : "価格 (円・税込・任意)"
+                  : `価格 (${CURRENCY_UNIT}・税込・任意)`
             }
           >
             <input

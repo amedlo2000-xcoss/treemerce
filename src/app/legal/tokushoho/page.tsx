@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
-import { formatYen } from "@/components/ui";
+import { formatAmount } from "@/components/ui";
 import type { ShopPublicSettings } from "@/lib/domain/types";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -28,7 +28,7 @@ export default async function TokushohoPage() {
       "商品代金以外の必要料金",
       [
         s && Number(s.shipping_fee) > 0
-          ? `送料: 1回のご注文につき ${formatYen(Number(s.shipping_fee))}`
+          ? `送料: 1回のご注文につき ${formatAmount(Number(s.shipping_fee))}`
           : "送料: 無料",
         "振込手数料: お客様のご負担となります。",
         s?.additional_fees,

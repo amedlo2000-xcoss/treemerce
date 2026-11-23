@@ -1,4 +1,4 @@
-import { formatYen } from "@/components/ui";
+import { formatAmount } from "@/components/ui";
 import { Surface } from "@/components/mobile/primitives";
 import type { AgentOrderSummary } from "@/lib/domain/types";
 
@@ -11,7 +11,7 @@ function AggregateValue({ value }: { value: Aggregate }) {
   return (
     <span className="tabular-nums">
       <span className="text-[18px] font-bold text-text-primary">{value.count}件</span>
-      <span className="ml-1.5 text-[13px] text-text-secondary">{formatYen(Number(value.total))}</span>
+      <span className="ml-1.5 text-[13px] text-text-secondary">{formatAmount(Number(value.total))}</span>
     </span>
   );
 }
@@ -28,7 +28,7 @@ export function AgentOrderSummaryCard({ summary }: { summary: AgentOrderSummary 
         <div className="rounded-2xl bg-surface-muted px-3 py-3">
           <p className="text-[12px] text-text-secondary">担当顧客の売上</p>
           <p className="mt-0.5 text-[20px] font-bold tabular-nums text-text-primary">
-            {formatYen(Number(summary.own_current.total))}
+            {formatAmount(Number(summary.own_current.total))}
           </p>
           <p className="text-[12px] text-text-secondary">{summary.own_current.count}件 (入金確認済み以降)</p>
         </div>

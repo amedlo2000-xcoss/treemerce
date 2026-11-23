@@ -2,7 +2,7 @@ import { Info } from "lucide-react";
 import Link from "next/link";
 
 import { EmptyState, MobilePageHeader, StatusPill, Surface } from "@/components/mobile/primitives";
-import { BackLink, formatDateTime, formatYen } from "@/components/ui";
+import { BackLink, formatDateTime, formatAmount } from "@/components/ui";
 import { requireAgentPage } from "@/lib/auth/viewer";
 import { ANALYTICS_PERIODS, type AnalyticsPeriod } from "@/lib/domain/enums";
 import type { SourcedProductSales } from "@/lib/domain/types";
@@ -64,7 +64,7 @@ export default async function AgentSourcedSalesPage({
               合計{sales.suppressed_product_count > 0 ? " (「該当データ少数」の商品を除く)" : ""}
             </p>
             <p className="mt-1 text-[26px] font-bold tabular-nums text-text-primary">
-              {formatYen(Number(sales.visible_total.amount))}
+              {formatAmount(Number(sales.visible_total.amount))}
             </p>
             <p className="text-[13px] text-text-secondary">
               {sales.visible_total.order_count}件・{sales.visible_total.quantity}個
@@ -99,7 +99,7 @@ export default async function AgentSourcedSalesPage({
                       <div className="rounded-2xl bg-surface-muted px-3 py-2.5">
                         <dt className="text-[12px] text-text-secondary">金額</dt>
                         <dd className="truncate text-[16px] font-bold tabular-nums text-text-primary">
-                          {formatYen(Number(p.amount))}
+                          {formatAmount(Number(p.amount))}
                         </dd>
                       </div>
                     </dl>

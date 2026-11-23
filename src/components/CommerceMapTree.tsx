@@ -4,7 +4,7 @@ import { useState } from "react";
 
 import { BottomSheet } from "@/components/mobile/BottomSheet";
 import { StatusPill } from "@/components/mobile/primitives";
-import { Badge, formatYen } from "@/components/ui";
+import { Badge, formatAmount } from "@/components/ui";
 import { PRODUCT_CATEGORY_LABELS } from "@/lib/domain/enums";
 import type { CommerceMap, CommerceMapAgent, CommerceMapCustomer } from "@/lib/domain/types";
 
@@ -66,12 +66,12 @@ function CustomerNode({ customer }: { customer: CommerceMapCustomer }) {
               {p.product_name}
               <span className="ml-1.5 text-text-secondary">
                 ({PRODUCT_CATEGORY_LABELS[p.product_category] ?? p.product_category} ·{" "}
-                {formatYen(Number(p.amount))})
+                {formatAmount(Number(p.amount))})
               </span>
             </li>
           ))}
           <li className="text-[12px] font-medium text-text-primary">
-            合計 {formatYen(total)}
+            合計 {formatAmount(total)}
           </li>
         </ul>
       ) : (
@@ -205,7 +205,7 @@ export function CommerceMapTree({ map }: { map: CommerceMap }) {
                 <div className="flex items-center justify-between py-2">
                   <dt className="text-[13px] text-text-secondary">実名分の購入合計</dt>
                   <dd className="text-[14px] font-semibold tabular-nums text-text-primary">
-                    {formatYen(namedTotal)}
+                    {formatAmount(namedTotal)}
                   </dd>
                 </div>
               ) : null}

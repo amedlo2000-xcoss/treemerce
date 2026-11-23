@@ -1,7 +1,7 @@
 import Link from "next/link";
 
 import { RatioBars } from "@/components/charts/RatioBars";
-import { Notice, formatYen } from "@/components/ui";
+import { Notice, formatAmount } from "@/components/ui";
 import { BigStat, EmptyState, MobilePageHeader, Surface } from "@/components/mobile/primitives";
 import { requireAgentPage } from "@/lib/auth/viewer";
 import { ANALYTICS_PERIODS } from "@/lib/domain/enums";
@@ -92,7 +92,7 @@ export default async function AgentAnalyticsPage({
               stats?.total_sales == null ? (
                 <span className="text-[16px] text-text-secondary">該当データ少数</span>
               ) : (
-                formatYen(Number(stats.total_sales))
+                formatAmount(Number(stats.total_sales))
               )
             }
             hint="購入者が少ない場合は非表示"

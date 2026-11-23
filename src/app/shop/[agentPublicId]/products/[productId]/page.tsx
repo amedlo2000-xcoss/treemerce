@@ -2,7 +2,7 @@ import { ChevronLeft } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
-import { Notice, formatYen } from "@/components/ui";
+import { Notice, formatAmount } from "@/components/ui";
 import { StatusPill, Surface } from "@/components/mobile/primitives";
 import { UNDECIDED, productFieldLabels } from "@/lib/domain/product-labels";
 import { fetchShopCatalog } from "@/lib/shop/catalog";
@@ -32,7 +32,7 @@ export default async function ShopProductPage({
   if (!product) notFound();
 
   const labels = productFieldLabels(product.item_kind);
-  const priceText = product.orderable && product.price != null ? formatYen(Number(product.price)) : UNDECIDED;
+  const priceText = product.orderable && product.price != null ? formatAmount(Number(product.price)) : UNDECIDED;
 
   return (
     <>
@@ -82,7 +82,7 @@ export default async function ShopProductPage({
             {product.orderable ? (
               catalog.shipping_fee > 0 ? (
                 <p className="text-[12px] text-text-secondary">
-                  送料 {formatYen(Number(catalog.shipping_fee))} (1回のご注文につき)
+                  送料 {formatAmount(Number(catalog.shipping_fee))} (1回のご注文につき)
                 </p>
               ) : (
                 <p className="text-[12px] text-text-secondary">送料無料</p>

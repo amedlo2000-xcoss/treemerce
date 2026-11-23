@@ -4,6 +4,8 @@ import { Lock } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
+import { CURRENCY_UNIT } from "@/lib/money";
+
 import { PrimaryButton } from "@/components/mobile/primitives";
 import { SUBMISSION_LIMITS } from "@/lib/api/submission-input";
 import { PREFECTURES } from "@/lib/domain/enums";
@@ -216,7 +218,7 @@ export function SubmissionForm({
         </label>
         <div className="grid gap-4 sm:grid-cols-2">
           <label className="block space-y-1.5">
-            <Label text="希望販売価格 (円・税込)" required />
+            <Label text={`希望販売価格 (${CURRENCY_UNIT}・税込)`} required />
             <input
               type="number"
               min={0}
@@ -228,7 +230,7 @@ export function SubmissionForm({
             />
           </label>
           <label className="block space-y-1.5">
-            <Label text="想定卸値 (円)" hint="(任意)" />
+            <Label text={`想定卸値 (${CURRENCY_UNIT})`} hint="(任意)" />
             <input
               type="number"
               min={0}

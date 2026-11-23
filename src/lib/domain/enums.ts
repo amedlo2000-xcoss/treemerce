@@ -1,3 +1,5 @@
+import { formatAmount } from "@/lib/money";
+
 export const AGENT_STATUSES = ["pending", "active", "suspended", "withdrawn"] as const;
 export type AgentStatus = (typeof AGENT_STATUSES)[number];
 
@@ -259,11 +261,11 @@ export const ORDER_NEXT_STATUSES: Record<OrderStatus, OrderStatus[]> = {
 
 /** 客層分析の購入金額帯 (0011 の amount_band と同じキー) */
 export const AMOUNT_BAND_LABELS: Record<string, string> = {
-  lt_10k: "1万円未満",
-  "10k_30k": "1万〜3万円",
-  "30k_50k": "3万〜5万円",
-  "50k_100k": "5万〜10万円",
-  gte_100k: "10万円以上",
+  lt_10k: `${formatAmount(10_000)} 未満`,
+  "10k_30k": `${formatAmount(10_000)}〜${formatAmount(30_000)}`,
+  "30k_50k": `${formatAmount(30_000)}〜${formatAmount(50_000)}`,
+  "50k_100k": `${formatAmount(50_000)}〜${formatAmount(100_000)}`,
+  gte_100k: `${formatAmount(100_000)} 以上`,
 };
 
 /* ------------------------------------------------------- 生産者・発送 (0014) */

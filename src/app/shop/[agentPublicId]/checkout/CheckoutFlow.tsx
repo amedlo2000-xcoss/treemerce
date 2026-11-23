@@ -4,7 +4,7 @@ import { CheckCircle2, Minus, Plus, Printer, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 
-import { Notice, formatYen } from "@/components/ui";
+import { Notice, formatAmount } from "@/components/ui";
 import {
   Chip,
   EmptyState,
@@ -187,7 +187,7 @@ export function CheckoutFlow({
                 ["口座種別", p.bank_account_type ? BANK_ACCOUNT_TYPE_LABELS[p.bank_account_type] : null],
                 ["口座番号", p.bank_account_number],
                 ["口座名義", p.bank_account_holder],
-                ["お振込金額", formatYen(Number(result.total))],
+                ["お振込金額", formatAmount(Number(result.total))],
                 ["お振込期限", formatDueDate(p.due_date)],
               ].map(([label, value]) => (
                 <div key={label} className="flex items-start justify-between gap-4 py-3">
@@ -210,24 +210,24 @@ export function CheckoutFlow({
                 <div className="min-w-0">
                   <p className="truncate text-[14px] font-medium text-text-primary">{item.product_name}</p>
                   <p className="text-[12px] text-text-secondary">
-                    {formatYen(Number(item.unit_price))} × {item.quantity}
+                    {formatAmount(Number(item.unit_price))} × {item.quantity}
                   </p>
                 </div>
-                <p className="shrink-0 text-[14px] font-semibold tabular-nums">{formatYen(Number(item.amount))}</p>
+                <p className="shrink-0 text-[14px] font-semibold tabular-nums">{formatAmount(Number(item.amount))}</p>
               </div>
             ))}
             <div className="space-y-1 px-4 py-3 text-[14px]">
               <div className="flex justify-between text-text-secondary">
                 <span>小計</span>
-                <span className="tabular-nums">{formatYen(Number(result.subtotal))}</span>
+                <span className="tabular-nums">{formatAmount(Number(result.subtotal))}</span>
               </div>
               <div className="flex justify-between text-text-secondary">
                 <span>送料</span>
-                <span className="tabular-nums">{formatYen(Number(result.shipping_fee))}</span>
+                <span className="tabular-nums">{formatAmount(Number(result.shipping_fee))}</span>
               </div>
               <div className="flex justify-between pt-1 text-[16px] font-bold text-text-primary">
                 <span>合計</span>
-                <span className="tabular-nums">{formatYen(Number(result.total))}</span>
+                <span className="tabular-nums">{formatAmount(Number(result.total))}</span>
               </div>
             </div>
           </Surface>
@@ -323,7 +323,7 @@ export function CheckoutFlow({
                       </button>
                     </div>
                     <span className="text-[15px] font-bold tabular-nums text-text-primary">
-                      {formatYen(Number(product.price) * line.quantity)}
+                      {formatAmount(Number(product.price) * line.quantity)}
                     </span>
                   </div>
                   {!product.in_stock || line.quantity > product.max_quantity ? (
@@ -337,22 +337,22 @@ export function CheckoutFlow({
             <div className="space-y-1 p-4 text-[14px]">
               <div className="flex justify-between text-text-secondary">
                 <span>小計</span>
-                <span className="tabular-nums">{formatYen(subtotal)}</span>
+                <span className="tabular-nums">{formatAmount(subtotal)}</span>
               </div>
               <div className="flex justify-between text-text-secondary">
                 <span>送料</span>
-                <span className="tabular-nums">{formatYen(shippingFee)}</span>
+                <span className="tabular-nums">{formatAmount(shippingFee)}</span>
               </div>
               <div className="flex justify-between pt-1 text-[16px] font-bold text-text-primary">
                 <span>合計 (税込)</span>
-                <span className="tabular-nums">{formatYen(subtotal + shippingFee)}</span>
+                <span className="tabular-nums">{formatAmount(subtotal + shippingFee)}</span>
               </div>
             </div>
           </Surface>
           {shipFromCount > 1 ? (
             <p className="px-1 text-[12px] leading-5 text-text-secondary">
               ご注文の商品は生産者ごとに産地から直接お届けするため、{shipFromCount} 個に分かれて届きます。
-              送料は 1 回のご注文につき {formatYen(shippingFee)} のままです。
+              送料は 1 回のご注文につき {formatAmount(shippingFee)} のままです。
             </p>
           ) : null}
           <PrimaryButton
@@ -471,13 +471,13 @@ export function CheckoutFlow({
                   {product.name} × {line.quantity}
                 </p>
                 <p className="shrink-0 text-[14px] font-semibold tabular-nums">
-                  {formatYen(Number(product.price) * line.quantity)}
+                  {formatAmount(Number(product.price) * line.quantity)}
                 </p>
               </div>
             ))}
             <div className="flex justify-between px-4 py-3 text-[16px] font-bold">
               <span>合計 (送料込み)</span>
-              <span className="tabular-nums">{formatYen(subtotal + shippingFee)}</span>
+              <span className="tabular-nums">{formatAmount(subtotal + shippingFee)}</span>
             </div>
           </Surface>
 

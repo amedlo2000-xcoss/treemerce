@@ -2,7 +2,7 @@ import { BarChart3, ChevronRight, ImageIcon, Plus } from "lucide-react";
 import Link from "next/link";
 
 import { EmptyState, MobilePageHeader, PrimaryButton, StatusPill } from "@/components/mobile/primitives";
-import { BackLink, formatDate, formatYen } from "@/components/ui";
+import { BackLink, formatDate, formatAmount } from "@/components/ui";
 import { requireAgentPage } from "@/lib/auth/viewer";
 import { SUBMISSION_STATUS_LABELS, SUBMISSION_STATUS_PILL } from "@/lib/domain/enums";
 import type { MySubmissionListItem } from "@/lib/domain/types";
@@ -109,7 +109,7 @@ export default async function AgentSubmissionsPage({
                 </div>
                 <div className="mt-2 flex items-center gap-3 text-[13px] text-text-secondary">
                   {s.category_name ? <span>{s.category_name}</span> : null}
-                  <span>希望価格 {s.desired_price != null ? formatYen(Number(s.desired_price)) : "—"}</span>
+                  <span>希望価格 {s.desired_price != null ? formatAmount(Number(s.desired_price)) : "—"}</span>
                   <span className="inline-flex items-center gap-1">
                     <ImageIcon size={14} />
                     {s.image_count}

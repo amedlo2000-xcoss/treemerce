@@ -2,7 +2,7 @@ import { ChevronLeft, Lock, Mail, MessageSquare, Phone, ShoppingBag } from "luci
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
-import { formatDate, formatDateTime, formatYen } from "@/components/ui";
+import { formatDate, formatDateTime, formatAmount } from "@/components/ui";
 import {
   EmptyState,
   IconAction,
@@ -146,7 +146,7 @@ export default async function AgentCustomerDetailPage({
             }
             meta={
               <div className="grid grid-cols-3 gap-2">
-                <StatTile label="購入合計" value={formatYen(total)} />
+                <StatTile label="購入合計" value={formatAmount(total)} />
                 <StatTile label="購入件数" value={`${purchaseCount}件`} />
                 <StatTile label="最終購入" value={lastPurchaseAt ? formatDate(lastPurchaseAt) : "—"} />
               </div>
@@ -229,7 +229,7 @@ export default async function AgentCustomerDetailPage({
                         </p>
                       </div>
                       <p className="shrink-0 text-[15px] font-bold tabular-nums text-text-primary">
-                        {formatYen(Number(o.total))}
+                        {formatAmount(Number(o.total))}
                       </p>
                     </div>
                     <ul className="space-y-0.5">
@@ -238,7 +238,7 @@ export default async function AgentCustomerDetailPage({
                           <span className="truncate">
                             {item.product_name} × {item.quantity}
                           </span>
-                          <span className="shrink-0 tabular-nums">{formatYen(Number(item.amount))}</span>
+                          <span className="shrink-0 tabular-nums">{formatAmount(Number(item.amount))}</span>
                         </li>
                       ))}
                     </ul>
@@ -265,7 +265,7 @@ export default async function AgentCustomerDetailPage({
                           {p.product_name}
                         </p>
                         <p className="shrink-0 text-[15px] font-bold tabular-nums text-text-primary">
-                          {formatYen(Number(p.amount))}
+                          {formatAmount(Number(p.amount))}
                         </p>
                       </div>
                       <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px] text-text-secondary">

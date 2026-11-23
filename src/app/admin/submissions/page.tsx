@@ -11,7 +11,7 @@ import {
   TD,
   TD_STRONG,
   formatDateTime,
-  formatYen,
+  formatAmount,
 } from "@/components/ui";
 import { requireSuperAdminPage } from "@/lib/auth/viewer";
 import { loadAdminCategories } from "@/lib/catalog-categories";
@@ -144,7 +144,7 @@ export default async function AdminSubmissionsPage({
                 <div className="text-text-primary">{s.agent_display_name}</div>
               </td>
               <td className={TD}>{s.producer_name ?? "—"}</td>
-              <td className={`${TD} tabular-nums`}>{s.desired_price != null ? formatYen(Number(s.desired_price)) : "—"}</td>
+              <td className={`${TD} tabular-nums`}>{s.desired_price != null ? formatAmount(Number(s.desired_price)) : "—"}</td>
               <td className={`${TD} tabular-nums`}>{s.image_count}</td>
               <td className={TD}>
                 <Badge tone={SUBMISSION_STATUS_BADGE[s.status] ?? "neutral"}>

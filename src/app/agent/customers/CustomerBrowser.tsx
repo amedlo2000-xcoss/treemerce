@@ -6,7 +6,7 @@ import { useMemo, useState } from "react";
 
 import { SwipeDeck } from "@/components/mobile/SwipeDeck";
 import { Chip, StatusPill, Surface } from "@/components/mobile/primitives";
-import { formatDate, formatYen } from "@/components/ui";
+import { formatDate, formatAmount } from "@/components/ui";
 import {
   AGE_GROUP_LABELS,
   CUSTOMER_TYPE_LABELS,
@@ -53,7 +53,7 @@ function CustomerCard({ item }: { item: CustomerListItem }) {
         <div className="rounded-2xl bg-surface-muted px-3 py-2.5">
           <dt className="text-[12px] text-text-secondary">購入合計</dt>
           <dd className="mt-0.5 text-[14px] font-semibold tabular-nums text-text-primary">
-            {formatYen(item.total_amount)}
+            {formatAmount(item.total_amount)}
           </dd>
         </div>
       </dl>
@@ -100,7 +100,7 @@ function CustomerListRow({ item }: { item: CustomerListItem }) {
         </div>
         <div className="shrink-0 text-right">
           <p className="text-[14px] font-semibold tabular-nums text-text-primary">
-            {formatYen(item.total_amount)}
+            {formatAmount(item.total_amount)}
           </p>
           <p className="text-[11px] text-text-secondary">{formatDate(item.assigned_at)}</p>
         </div>

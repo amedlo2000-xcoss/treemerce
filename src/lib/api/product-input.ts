@@ -1,3 +1,5 @@
+import { formatAmount } from "@/lib/money";
+
 import type { ProductItemKind, ProductSalesStatus } from "@/lib/domain/types";
 
 export type ProductInput = {
@@ -57,7 +59,7 @@ export function parseProductInput(
   if (body.price != null && body.price !== "") {
     price = Number(body.price);
     if (!Number.isInteger(price) || price < 0 || price >= 100_000_000) {
-      return { error: "価格は 0 円以上 1 億円未満の整数で入力してください。" };
+      return { error: `価格は ${formatAmount(0)} 以上 ${formatAmount(100_000_000)} 未満の整数で入力してください。` };
     }
   }
   if (status === "on_sale" && price == null) {

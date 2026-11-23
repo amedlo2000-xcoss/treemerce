@@ -2,7 +2,7 @@ import { Compass, Gift, HelpCircle, LifeBuoy, Package } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 import { BigStat, MobilePageHeader, Surface } from "@/components/mobile/primitives";
-import { formatYen } from "@/components/ui";
+import { formatAmount } from "@/components/ui";
 import { requireAgentPage } from "@/lib/auth/viewer";
 import { loadCatalogCategories } from "@/lib/catalog-categories";
 import { BENEFIT_STATUS_LABELS } from "@/lib/domain/enums";
@@ -81,7 +81,7 @@ export default async function ContentPage() {
             </div>
             <h3 className="text-[16px] font-semibold text-text-primary">報酬について</h3>
           </div>
-          <BigStat label="確定・支払済み報酬の合計" value={formatYen(paidTotal)} />
+          <BigStat label="確定・支払済み報酬の合計" value={formatAmount(paidTotal)} />
           {benefits.length > 0 ? (
             <ul className="mt-4 divide-y divide-border-soft">
               {benefits.map((b) => (
@@ -92,7 +92,7 @@ export default async function ContentPage() {
                     {BENEFIT_STATUS_LABELS[b.status]}
                   </span>
                   <span className="font-medium tabular-nums text-text-primary">
-                    {formatYen(Number(b.amount))}
+                    {formatAmount(Number(b.amount))}
                   </span>
                 </li>
               ))}

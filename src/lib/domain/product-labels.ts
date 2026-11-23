@@ -21,7 +21,7 @@ export const ITEM_KIND_LABELS: Record<ProductItemKind, string> = {
   service: "サービス",
 };
 
-/** 価格・項目が決まっていないときの表示 (0 円・無料などで代用しない) */
+/** 価格・項目が決まっていないときの表示 (0 TWA・無料などで代用しない) */
 export const UNDECIDED = "未定";
 
 /**

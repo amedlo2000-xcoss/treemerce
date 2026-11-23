@@ -3,6 +3,8 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
+import { CURRENCY_UNIT } from "@/lib/money";
+
 import { BUTTON_CLASS, FIELD_CLASS, Field, FormMessage } from "@/components/ui";
 import { BANK_ACCOUNT_TYPES, BANK_ACCOUNT_TYPE_LABELS } from "@/lib/domain/enums";
 import type { ShopSettingsRow } from "@/lib/domain/types";
@@ -123,7 +125,7 @@ export function ShopSettingsForm({ settings }: { settings: ShopSettingsRow }) {
           />
         </label>
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="送料 (円・1注文あたり)">
+          <Field label={`送料 (${CURRENCY_UNIT}・1注文あたり)`}>
             <input type="number" min={0} step={1} value={shippingFee} onChange={(e) => setShippingFee(e.target.value)} className={FIELD_CLASS} />
           </Field>
           <Field label="支払期限 (注文日からの日数・1〜60)">

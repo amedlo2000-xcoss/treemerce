@@ -15,7 +15,7 @@ import {
   TD_STRONG,
   formatDate,
   formatDateTime,
-  formatYen,
+  formatAmount,
 } from "@/components/ui";
 import { ProfileHero, StatTile } from "@/components/mobile/primitives";
 import { OrderStatusBadge } from "@/components/OrderStatusBadge";
@@ -137,7 +137,7 @@ export default async function AdminCustomerDetailPage({
         }
         meta={
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-            <StatTile label="購入合計" value={formatYen(total)} />
+            <StatTile label="購入合計" value={formatAmount(total)} />
             <StatTile label="購入件数" value={`${purchases.length}件`} />
             <StatTile
               label="最終購入"
@@ -224,7 +224,7 @@ export default async function AdminCustomerDetailPage({
                     </td>
                     <td className={`${TD} tabular-nums`}>{p.quantity}</td>
                     <td className={`${TD} font-semibold tabular-nums text-text-primary`}>
-                      {formatYen(Number(p.amount))}
+                      {formatAmount(Number(p.amount))}
                     </td>
                     <td className={TD}>
                       <Badge tone={PURCHASE_STATUS_TONE[p.status] ?? "neutral"}>
@@ -254,7 +254,7 @@ export default async function AdminCustomerDetailPage({
                       </Link>
                     </td>
                     <td className={`${TD} font-semibold tabular-nums text-text-primary`}>
-                      {formatYen(Number(o.total))}
+                      {formatAmount(Number(o.total))}
                     </td>
                     <td className={TD}>
                       <OrderStatusBadge status={o.status} />

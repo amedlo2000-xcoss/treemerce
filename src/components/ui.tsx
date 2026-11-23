@@ -211,14 +211,8 @@ export function formatDateTime(value: string | null | undefined) {
   }).format(new Date(value));
 }
 
-export function formatYen(value: number | null | undefined) {
-  if (value == null) return "—";
-  return new Intl.NumberFormat("ja-JP", {
-    style: "currency",
-    currency: "JPY",
-    maximumFractionDigits: 0,
-  }).format(value);
-}
+// 金額の整形は src/lib/money.ts の 1 か所にまとめる (単位は CURRENCY_UNIT)
+export { CURRENCY_UNIT, formatAmount } from "@/lib/money";
 
 /* ---------------------------------------------------------------------------
  * 管理画面向けの共通部品 (見た目のみ。データ・権限ロジックは各ページ/API 側)
