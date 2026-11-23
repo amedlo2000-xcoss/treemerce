@@ -24,6 +24,7 @@ import type { AdminOrderDetail, ShipmentRequest } from "@/lib/domain/types";
 
 import { OrderStatusForm } from "./OrderStatusForm";
 import { ShipmentsPanel } from "./ShipmentsPanel";
+import { todayInTokyo } from "@/lib/datetime";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -80,7 +81,7 @@ export default async function AdminOrderDetailPage({
   const pendingRealShipments = shipments.filter(
     (s) => !s.is_placeholder && !["shipped", "cancelled"].includes(s.status),
   ).length;
-  const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Tokyo" }).format(new Date());
+  const today = todayInTokyo();
 
   return (
     <>

@@ -7,11 +7,7 @@ import { PrimaryButton, BigStat, Surface, EmptyState } from "@/components/mobile
 import { formatDate } from "@/components/ui";
 import { requireAgentPage } from "@/lib/auth/viewer";
 import type { AgentOrderSummary, CommerceMap } from "@/lib/domain/types";
-
-function startOfMonthISOString() {
-  const now = new Date();
-  return new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
-}
+import { startOfMonthInTokyo } from "@/lib/datetime";
 
 /**
  * ホーム (STEP2): システム構造の説明ではなく「今の状態」を見せる画面。
@@ -36,7 +32,7 @@ export default async function AgentDashboard() {
         .from("customer_assignments")
         .select("id", { count: "exact", head: true })
         .eq("status", "active")
-        .gte("assigned_at", startOfMonthISOString()),
+        .gte("assigned_at", startOfMonthInTokyo()),
       supabase.rpc("treemerce_commerce_map", { p_root_agent_id: null }),
       supabase
         .from("notifications")

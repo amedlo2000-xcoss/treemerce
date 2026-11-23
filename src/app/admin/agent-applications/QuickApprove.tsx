@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 
+import { ApprovalNoticeActions } from "@/components/ApprovalNoticeActions";
 import { BUTTON_CLASS, FIELD_CLASS, Field, FormMessage } from "@/components/ui";
 
 /**
@@ -16,6 +17,7 @@ export function QuickApprove({
   applicantName,
   inviterLabel,
   canApprove,
+  noticeText,
 }: {
   applicationId: string;
   applicantName: string;
@@ -23,12 +25,15 @@ export function QuickApprove({
   inviterLabel: string | null;
   /** 紹介者が稼働中でない申請は承認できない (DB でも拒否される) */
   canApprove: boolean;
+  /** 承認後に本人へ送るお知らせの文面 (承認の直後にダイアログ内で LINE 共有・コピーできる) */
+  noticeText: string;
 }) {
   const router = useRouter();
   const dialogRef = useRef<HTMLDialogElement>(null);
   const [reason, setReason] = useState("");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [approved, setApproved] = useState(false);
 
   const approveSentence = inviterLabel
     ? `${applicantName}さんを、${inviterLabel}の下にオブザーバーとして登録します。`
@@ -37,6 +42,7 @@ export function QuickApprove({
   function open() {
     setReason("");
     setError(null);
+    setApproved(false);
     dialogRef.current?.showModal();
   }
 
@@ -58,8 +64,12 @@ export function QuickApprove({
       return;
     }
 
+    // 承認の直後に本人へのお知らせを出す (閉じるときに一覧を再読み込みする)
+    setApproved(true);
+  }
+
+  function closeAfterApprove() {
     dialogRef.current?.close();
-    router.refresh();
   }
 
   return (
@@ -79,8 +89,36 @@ export function QuickApprove({
         onCancel={(e) => {
           if (pending) e.preventDefault();
         }}
+        onClose={() => {
+          // 承認後に閉じたら (ボタン・Esc とも) 一覧を再読み込みする
+          if (approved) {
+            setApproved(false);
+            router.refresh();
+          }
+        }}
         className="m-auto w-[min(32rem,calc(100vw-2rem))] rounded-[20px] border border-border-soft bg-surface p-0 text-left shadow-[var(--shadow-card)] backdrop:bg-black/40"
       >
+        {approved ? (
+          <div className="space-y-4 px-5 py-5">
+            <div className="space-y-1 rounded-xl border-2 border-success/40 bg-success-soft px-4 py-4">
+              <p className="text-[16px] font-bold leading-7 text-text-primary">{applicantName}さんを承認しました。</p>
+              <p className="text-[12px] leading-5 text-text-secondary">
+                本人へのお知らせを LINE で送るか、文面をコピーしてお送りください。
+              </p>
+            </div>
+            <pre className="max-h-56 overflow-auto whitespace-pre-wrap rounded-xl bg-surface-muted p-3 text-[12px] leading-5 text-text-primary">
+              {noticeText}
+            </pre>
+            <ApprovalNoticeActions text={noticeText} />
+            <button
+              type="button"
+              onClick={closeAfterApprove}
+              className="rounded-xl border border-border-soft px-3 py-2 text-[13px] font-medium text-text-secondary"
+            >
+              閉じる
+            </button>
+          </div>
+        ) : (
         <form onSubmit={confirm} className="space-y-4 px-5 py-5">
           <div className="space-y-2 rounded-xl border-2 border-brand/40 bg-brand-soft px-4 py-4">
             <p className="text-[16px] font-bold leading-7 text-text-primary">{approveSentence}</p>
@@ -115,6 +153,7 @@ export function QuickApprove({
             </button>
           </div>
         </form>
+        )}
       </dialog>
     </>
   );

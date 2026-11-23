@@ -26,6 +26,7 @@ import type { PlaceOrderResult, ShopProduct } from "@/lib/domain/types";
 import { useCart } from "@/lib/shop/cart";
 
 import { ProductImage } from "../ShopParts";
+import { formatLongDate } from "@/lib/datetime";
 
 const INPUT =
   "w-full rounded-2xl border border-border-soft bg-surface px-3.5 py-3 text-[16px] text-text-primary outline-none focus:border-brand";
@@ -45,17 +46,6 @@ type FormState = {
   address: string;
   note: string;
 };
-
-function formatDueDate(value: string) {
-  const d = new Date(`${value}T00:00:00+09:00`);
-  return new Intl.DateTimeFormat("ja-JP", {
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-    weekday: "short",
-    timeZone: "Asia/Tokyo",
-  }).format(d);
-}
 
 function TextField({
   label,
@@ -172,7 +162,7 @@ export function CheckoutFlow({
         </Surface>
 
         <Notice tone="warning">
-          お支払いは銀行振込です。下記の口座へ <strong>{formatDueDate(p.due_date)}</strong>{" "}
+          お支払いは銀行振込です。下記の口座へ <strong>{formatLongDate(p.due_date)}</strong>{" "}
           までにお振込みください。期限を過ぎると、ご注文は自動的にキャンセルされます。
           この画面は再表示できませんので、振込先と注文番号を控えてください。
         </Notice>
@@ -188,7 +178,7 @@ export function CheckoutFlow({
                 ["口座番号", p.bank_account_number],
                 ["口座名義", p.bank_account_holder],
                 ["お振込金額", formatAmount(Number(result.total))],
-                ["お振込期限", formatDueDate(p.due_date)],
+                ["お振込期限", formatLongDate(p.due_date)],
               ].map(([label, value]) => (
                 <div key={label} className="flex items-start justify-between gap-4 py-3">
                   <dt className="shrink-0 text-[13px] text-text-secondary">{label}</dt>

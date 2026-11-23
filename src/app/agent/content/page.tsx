@@ -7,6 +7,7 @@ import { requireAgentPage } from "@/lib/auth/viewer";
 import { loadCatalogCategories } from "@/lib/catalog-categories";
 import { BENEFIT_STATUS_LABELS } from "@/lib/domain/enums";
 import type { BenefitRow } from "@/lib/domain/types";
+import { formatYearMonth } from "@/lib/datetime";
 
 function ContentCard({
   icon: Icon,
@@ -87,7 +88,7 @@ export default async function ContentPage() {
               {benefits.map((b) => (
                 <li key={b.id} className="flex items-center justify-between py-2 text-[13px]">
                   <span className="text-text-secondary">
-                    {b.period_month ? new Date(b.period_month).toLocaleDateString("ja-JP", { year: "numeric", month: "short" }) : "—"}
+                    {b.period_month ? formatYearMonth(b.period_month) : "—"}
                     {" · "}
                     {BENEFIT_STATUS_LABELS[b.status]}
                   </span>

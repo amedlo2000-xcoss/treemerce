@@ -11,6 +11,8 @@ import {
   TD_STRONG,
   formatDateTime,
 } from "@/components/ui";
+import { ApprovalNoticeActions } from "@/components/ApprovalNoticeActions";
+import { buildApprovalNotice } from "@/lib/approval-notice";
 import { requireSuperAdminPage } from "@/lib/auth/viewer";
 import {
   AGENT_APPLICATION_SOURCE_LABELS,
@@ -20,6 +22,7 @@ import {
   type AgentApplicationStatus,
 } from "@/lib/domain/enums";
 import type { AdminAgentApplication } from "@/lib/domain/types";
+import { getSiteOrigin } from "@/lib/site-url";
 
 import { QuickApprove } from "./QuickApprove";
 
@@ -48,6 +51,9 @@ export default async function AdminAgentApplicationsPage({
   });
   if (error) throw new Error("オブザーバー申請を読み込めませんでした。");
   const applications = (data ?? []) as AdminAgentApplication[];
+  const loginUrl = `${await getSiteOrigin()}/login`;
+  const noticeFor = (a: AdminAgentApplication) =>
+    buildApprovalNotice({ name: a.applicant_name ?? a.display_name, email: a.email, loginUrl });
 
   const tabs: { key: string; label: string; active: boolean }[] = [
     ...AGENT_APPLICATION_STATUSES.map((s) => ({
@@ -127,7 +133,10 @@ export default async function AdminAgentApplicationsPage({
                     applicantName={a.applicant_name ?? a.display_name}
                     inviterLabel={a.inviter ? `${a.inviter.display_name}さん（${a.inviter.public_id}）` : null}
                     canApprove={!a.inviter || a.inviter.status === "active"}
+                    noticeText={noticeFor(a)}
                   />
+                ) : a.status === "approved" ? (
+                  <ApprovalNoticeActions text={noticeFor(a)} compact />
                 ) : null}
               </td>
             </tr>

@@ -191,25 +191,8 @@ export function LinkButton({
   );
 }
 
-export function formatDate(value: string | null | undefined) {
-  if (!value) return "—";
-  return new Intl.DateTimeFormat("ja-JP", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(new Date(value));
-}
-
-export function formatDateTime(value: string | null | undefined) {
-  if (!value) return "—";
-  return new Intl.DateTimeFormat("ja-JP", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(new Date(value));
-}
+// 日時の整形は src/lib/datetime.ts の 1 か所にまとめる (すべて日本時間)
+export { formatDate, formatDateTime } from "@/lib/datetime";
 
 // 金額の整形は src/lib/money.ts の 1 か所にまとめる (単位は CURRENCY_UNIT)
 export { CURRENCY_UNIT, formatAmount } from "@/lib/money";

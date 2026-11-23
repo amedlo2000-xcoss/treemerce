@@ -12,6 +12,8 @@ import {
   TextLink,
   formatDateTime,
 } from "@/components/ui";
+import { ApprovalNoticeActions } from "@/components/ApprovalNoticeActions";
+import { buildApprovalNotice } from "@/lib/approval-notice";
 import { requireSuperAdminPage } from "@/lib/auth/viewer";
 import {
   AGENT_APPLICATION_AUDIT_LABELS,
@@ -21,6 +23,7 @@ import {
   AGENT_STATUS_LABELS,
 } from "@/lib/domain/enums";
 import type { AdminAgentApplicationDetail } from "@/lib/domain/types";
+import { getSiteOrigin } from "@/lib/site-url";
 
 import { ReviewPanel } from "./ReviewPanel";
 
@@ -49,6 +52,10 @@ export default async function AdminAgentApplicationPage({
   }
   const a = data as AdminAgentApplicationDetail;
   const applicantName = a.applicant_name ?? a.display_name;
+  const noticeText =
+    a.status === "approved"
+      ? buildApprovalNotice({ name: applicantName, email: a.email, loginUrl: `${await getSiteOrigin()}/login` })
+      : null;
   const inviterLabel = a.inviter ? `${a.inviter.display_name}さん（${a.inviter.public_id}）` : null;
   const linkLabel = a.registration_link
     ? `${AGENT_APPLICATION_SOURCE_LABELS[a.source] ?? a.source}「${a.registration_link.note ?? "メモなし"}」`
@@ -72,6 +79,18 @@ export default async function AdminAgentApplicationPage({
         </p>
         <p className="mt-1 text-[13px] leading-5 text-text-secondary">申し込みの経路：{linkLabel}</p>
       </section>
+
+      {noticeText ? (
+        <Card
+          title="本人へのお知らせ"
+          description="承認が完了しました。LINE で本人にお知らせするか、文面をコピーしてお送りください (パスワードは文面に含まれません)。"
+        >
+          <pre className="mb-4 max-h-64 overflow-auto whitespace-pre-wrap rounded-xl bg-surface-muted p-3 text-[13px] leading-6 text-text-primary">
+            {noticeText}
+          </pre>
+          <ApprovalNoticeActions text={noticeText} />
+        </Card>
+      ) : null}
 
       <div className="grid gap-4 lg:grid-cols-2">
         <Card title="申請内容">
