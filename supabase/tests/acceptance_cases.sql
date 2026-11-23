@@ -1,10 +1,10 @@
 -- ============================================================================
--- TREEMERCE 受け入れテスト  CASE1 - CASE77
+-- TREEMERCE 受け入れテスト  CASE1 - CASE90
 -- ----------------------------------------------------------------------------
 -- Supabase SQL Editor にそのまま貼り付けて実行する。
 -- 全体が 1 トランザクションで、最後に ROLLBACK するため本番データは残らない。
 -- 途中で失敗した CASE があれば例外で停止する。全て通れば最後に
--- 「ALL 77 CASES PASSED」が NOTICE として出力される。
+-- 「ALL 90 CASES PASSED」が NOTICE として出力される。
 --
 -- 木構造:
 --            R  (root)
@@ -7148,6 +7148,817 @@ begin
   raise notice 'CASE82 OK: 申請の紹介者はリンクの発行元と必ず一致し (postgres でも不可)、経路ごとの組み合わせは制約で強制。リンクの発行元・申請の氏名は変更できない。代理店のコンテキストでも他の代理店名義・運営名義のリンクは作れず、他の代理店のリンクは無効化できない。本人は自分のリンクを無効化でき、監査ログに残る';
 end $$;
 
+-- ============================================================================
+-- CASE83〜89 : オブザーバーの報酬 (0033)
+-- ----------------------------------------------------------------------------
+-- 系統 (この CASE 群だけで使う。auth ユーザーの id = オブザーバーの id):
+--   TOP ── L5 ── S5        L5 はレベル5・TOP もレベル5 (TOP には払わない = 1 段階だけ)
+--   L4 ── S4               L4 はレベル4
+--   L3 ── S3               L3 はレベル3
+--   LG ── SG               LG は一般 (ランクの行なし)
+--   LX ── SX               LX は停止中 (紹介者として無効 → 30% すべて運営)
+--   SN                     紹介者なし
+--   LINK                   注文の紹介リンクの代理店 (= お客様の担当。報酬なし)
+-- S* が持ち込んだ商品 P* (持込み申請 → 承認 → 公開) と、運営が登録した商品 PA を使う。
+-- 送料 (800 TWA) は基準に含めない。
+-- ============================================================================
+
+create function app.tm_rw_agent(p_key text, p_inviter uuid, p_status public.agent_status default 'active')
+returns uuid
+language plpgsql
+as $fn$
+declare v_id uuid := gen_random_uuid();
+begin
+  insert into auth.users (instance_id, id, aud, role, email, encrypted_password,
+                          email_confirmed_at, created_at, updated_at)
+  values ('00000000-0000-0000-0000-000000000000', v_id, 'authenticated', 'authenticated',
+          'tm-rw-' || lower(p_key) || '@treemerce.test', '', now(), now(), now());
+  insert into public.agents (id, auth_user_id, public_id, display_name, email, status, invited_by)
+  values (v_id, v_id, 'TM-RW-' || p_key, 'RW オブザーバー' || p_key,
+          'tm-rw-' || lower(p_key) || '@treemerce.test', p_status, p_inviter);
+  perform set_config('tm.rw_' || lower(p_key), v_id::text, false);
+  return v_id;
+end;
+$fn$;
+
+create function app.tm_rw_as(p_sub text)
+returns void
+language plpgsql
+as $fn$
+begin
+  perform set_config('request.jwt.claims',
+    case when p_sub is null then '' else
+      jsonb_build_object('sub', p_sub, 'role', 'authenticated')::text end, true);
+end;
+$fn$;
+
+-- 持込み申請 (運営の代行) → 承認 → 公開。持込み元 = p_seller
+create function app.tm_rw_sourced_product(p_seller uuid, p_name text, p_price numeric)
+returns uuid
+language plpgsql
+as $fn$
+declare
+  v_cat uuid := (select id from public.product_categories where is_active order by sort_order, id limit 1);
+  v_sub uuid; v_product uuid;
+begin
+  perform app.tm_rw_as('00000000-0000-4000-8000-000000000007');
+  v_sub := (public.treemerce_admin_save_proxy_submission(
+    p_agent_id => p_seller, p_name => p_name, p_category_id => v_cat,
+    p_description => p_name || ' の説明', p_desired_price => p_price, p_content_volume => '1個',
+    p_producer_name => p_name || ' 生産者', p_producer_origin => '静岡県',
+    p_producer_ship_from_prefecture => '静岡県', p_producer_ship_lead_time => '3日以内',
+    p_producer_contact_email => 'rw-producer@example.com', p_reason => 'ヒアリング') ->> 'id')::uuid;
+  perform public.treemerce_admin_submit_proxy_submission(v_sub);
+  v_product := (public.treemerce_admin_approve_submission(v_sub, p_reason => '報酬テスト') ->> 'product_id')::uuid;
+  perform public.treemerce_admin_save_product(
+    p_product_id => v_product, p_name => p_name, p_category_id => v_cat,
+    p_sales_status => 'on_sale', p_price => p_price, p_stock => 50, p_reason => '販売開始');
+  perform app.tm_rw_as(null);
+  return v_product;
+end;
+$fn$;
+
+create function app.tm_rw_order(p_items jsonb, p_email text)
+returns uuid
+language plpgsql
+as $fn$
+declare v_no text;
+begin
+  perform app.tm_rw_as(null);
+  v_no := public.treemerce_place_order('TM-RW-LINK', p_items, 'RW購入者 山田花子',
+            '福岡県テスト市1-1', p_email, '090-0000-0000') ->> 'order_no';
+  return (select id from public.orders where order_no = v_no);
+end;
+$fn$;
+
+-- 入金確認 → 発送登録 (最後の p_leave 件は発送しない)
+create function app.tm_rw_pay_and_ship(p_order uuid, p_leave int default 0)
+returns void
+language plpgsql
+as $fn$
+declare v_s uuid; v_total int; v_i int := 0;
+begin
+  perform app.tm_rw_as('00000000-0000-4000-8000-000000000007');
+  perform public.treemerce_admin_set_order_status(p_order, 'payment_confirmed', '入金を確認');
+  select count(*) into v_total from public.order_shipments where order_id = p_order;
+  for v_s in select id from public.order_shipments where order_id = p_order order by producer_name, id loop
+    exit when v_i >= v_total - p_leave;
+    perform public.treemerce_admin_ship_shipment(v_s, (now() at time zone 'Asia/Tokyo')::date, 'ヤマト運輸', 'RW-' || v_i);
+    v_i := v_i + 1;
+  end loop;
+  perform app.tm_rw_as(null);
+end;
+$fn$;
+
+create function app.tm_rw_entry(p_order uuid, p_seller uuid, p_role public.reward_recipient_role)
+returns public.agent_reward_entries
+language sql
+as $fn$
+  select * from public.agent_reward_entries
+  where order_id = p_order and seller_agent_id = p_seller and recipient_role = p_role
+    and entry_kind = 'accrual';
+$fn$;
+
+do $$
+declare v_top uuid; v_l5 uuid; v_l4 uuid; v_l3 uuid; v_lg uuid; v_lx uuid;
+begin
+  v_top := app.tm_rw_agent('TOP', null);
+  v_l5  := app.tm_rw_agent('L5', v_top);
+  v_l4  := app.tm_rw_agent('L4', null);
+  v_l3  := app.tm_rw_agent('L3', null);
+  v_lg  := app.tm_rw_agent('LG', null);
+  v_lx  := app.tm_rw_agent('LX', null, 'suspended');
+  perform app.tm_rw_agent('S5', v_l5);
+  perform app.tm_rw_agent('S4', v_l4);
+  perform app.tm_rw_agent('S3', v_l3);
+  perform app.tm_rw_agent('SG', v_lg);
+  perform app.tm_rw_agent('SX', v_lx);
+  perform app.tm_rw_agent('SN', null);
+  perform app.tm_rw_agent('LINK', null);
+
+  perform set_config('tm.rw_p5', app.tm_rw_sourced_product(current_setting('tm.rw_s5')::uuid, 'RW 商品5', 1234)::text, false);
+  perform set_config('tm.rw_p4', app.tm_rw_sourced_product(current_setting('tm.rw_s4')::uuid, 'RW 商品4', 1000)::text, false);
+  perform set_config('tm.rw_p3', app.tm_rw_sourced_product(current_setting('tm.rw_s3')::uuid, 'RW 商品3', 999)::text, false);
+  perform set_config('tm.rw_pg', app.tm_rw_sourced_product(current_setting('tm.rw_sg')::uuid, 'RW 商品G', 1001)::text, false);
+  perform set_config('tm.rw_px', app.tm_rw_sourced_product(current_setting('tm.rw_sx')::uuid, 'RW 商品X', 1000)::text, false);
+  perform set_config('tm.rw_pn', app.tm_rw_sourced_product(current_setting('tm.rw_sn')::uuid, 'RW 商品N', 1000)::text, false);
+
+  -- 運営が登録した商品 (持込み元なし)。生産者は実在の生産者を使う
+  perform app.tm_rw_as('00000000-0000-4000-8000-000000000007');
+  perform set_config('tm.rw_pa', (public.treemerce_admin_save_product(
+    p_name => 'RW 運営の商品',
+    p_category_id => (select id from public.product_categories where is_active order by sort_order, id limit 1),
+    p_sales_status => 'on_sale', p_price => 5000, p_stock => 50,
+    p_producer_id => (select producer_id from public.products where id = current_setting('tm.rw_p5')::uuid))
+    ->> 'id'), false);
+  perform app.tm_rw_as(null);
+
+  if exists (select 1 from public.product_sources where product_id = current_setting('tm.rw_pa')::uuid)
+     or (select sourced_by_agent_id from public.product_sources
+         where product_id = current_setting('tm.rw_p5')::uuid) <> current_setting('tm.rw_s5')::uuid then
+    raise exception 'CASE83 SETUP FAILED: 持込み元の準備が不正';
+  end if;
+end $$;
+
+-- ============================================================================
+-- CASE83 : ランクの初期値は一般。変更は super_admin のみで理由必須、変更前後と理由が監査ログに残る。
+--          ランク別の割合は表で持ち (初期値 20/15/10/5%)、変更は super_admin のみで監査ログに残る
+-- ============================================================================
+
+select set_config('request.jwt.claims',
+  '{"sub":"00000000-0000-4000-8000-000000000007","role":"authenticated"}', true);
+set local role authenticated;
+
+do $$
+declare v_res jsonb; v_rates jsonb;
+begin
+  if exists (select 1 from public.agent_ranks where agent_id = current_setting('tm.rw_l5')::uuid) then
+    raise exception 'CASE83 FAILED: ランクの初期値が一般でない';
+  end if;
+
+  perform app.tm_expect_error('CASE83 (理由なしのランク変更)',
+    format('select public.treemerce_admin_set_agent_rank(%L, ''level5'', ''  '')', current_setting('tm.rw_l5')),
+    'TREEMERCE_REASON_REQUIRED');
+
+  v_res := public.treemerce_admin_set_agent_rank(current_setting('tm.rw_l5')::uuid, 'level5', '実績によりレベル5');
+  if v_res ->> 'from_rank' <> 'general' or v_res ->> 'rank' <> 'level5' then
+    raise exception 'CASE83 FAILED: ランク変更の応答が不正 (%)', v_res;
+  end if;
+  perform public.treemerce_admin_set_agent_rank(current_setting('tm.rw_top')::uuid, 'level5', 'TOP をレベル5');
+  perform public.treemerce_admin_set_agent_rank(current_setting('tm.rw_l4')::uuid, 'level4', 'L4 をレベル4');
+  perform public.treemerce_admin_set_agent_rank(current_setting('tm.rw_l3')::uuid, 'level3', 'L3 をレベル3');
+
+  perform app.tm_expect_error('CASE83 (同じランクへの変更)',
+    format('select public.treemerce_admin_set_agent_rank(%L, ''level5'', ''再設定'')', current_setting('tm.rw_l5')),
+    'TREEMERCE_NO_CHANGE');
+
+  v_rates := public.treemerce_admin_list_reward_rates();
+  if (v_rates ->> 'seller_rate')::numeric <> 0.70
+     or (select (r ->> 'referrer_rate')::numeric from jsonb_array_elements(v_rates -> 'ranks') r where r ->> 'rank' = 'level5') <> 0.20
+     or (select (r ->> 'referrer_rate')::numeric from jsonb_array_elements(v_rates -> 'ranks') r where r ->> 'rank' = 'level4') <> 0.15
+     or (select (r ->> 'referrer_rate')::numeric from jsonb_array_elements(v_rates -> 'ranks') r where r ->> 'rank' = 'level3') <> 0.10
+     or (select (r ->> 'referrer_rate')::numeric from jsonb_array_elements(v_rates -> 'ranks') r where r ->> 'rank' = 'general') <> 0.05 then
+    raise exception 'CASE83 FAILED: 割合の初期値が不正 (%)', v_rates;
+  end if;
+
+  perform app.tm_expect_error('CASE83 (30%% を超える割合)',
+    'select public.treemerce_admin_set_reward_rate(''general'', 0.31, ''上げる'')', 'TREEMERCE_INVALID_INPUT');
+  perform app.tm_expect_error('CASE83 (理由なしの割合変更)',
+    'select public.treemerce_admin_set_reward_rate(''general'', 0.06, null)', 'TREEMERCE_REASON_REQUIRED');
+
+  -- 変更して戻す (どちらも監査ログに残る)
+  perform public.treemerce_admin_set_reward_rate('general', 0.06, 'CASE83 試験的に変更');
+  perform public.treemerce_admin_set_reward_rate('general', 0.05, 'CASE83 元に戻す');
+end $$;
+
+reset role;
+select set_config('request.jwt.claims', '', true);
+
+do $$
+begin
+  if not exists (select 1 from public.admin_audit_logs
+                 where action = 'agent.rank_change' and target_id = current_setting('tm.rw_l5')::uuid
+                   and actor_user_id = '00000000-0000-4000-8000-000000000007' and actor_role = 'super_admin'
+                   and before_state ->> 'rank' = 'general' and after_state ->> 'rank' = 'level5'
+                   and reason = '実績によりレベル5') then
+    raise exception 'CASE83 FAILED: ランク変更 (変更前後・理由) が監査ログに残っていない';
+  end if;
+  if (select count(*) from public.admin_audit_logs
+      where action = 'reward_rate.change' and actor_role = 'super_admin'
+        and before_state ->> 'rank' = 'general'
+        and ((before_state ->> 'referrer_rate')::numeric, (after_state ->> 'referrer_rate')::numeric, reason)
+            in ((0.05, 0.06, 'CASE83 試験的に変更'), (0.06, 0.05, 'CASE83 元に戻す'))) <> 2 then
+    raise exception 'CASE83 FAILED: 割合の変更 (変更前後・理由) が監査ログに残っていない';
+  end if;
+  if (select referrer_rate from public.agent_rank_reward_rates where rank = 'general') <> 0.05 then
+    raise exception 'CASE83 FAILED: 割合が元に戻っていない';
+  end if;
+  raise notice 'CASE83 OK: ランクの初期値は一般。ランク・割合の変更は super_admin のみ・理由必須で、変更前後と理由が監査ログに残る。割合は表で持ち (20/15/10/5%%)、30%% を超えられない';
+end $$;
+
+-- ============================================================================
+-- CASE84 : オブザーバーは自分のランクも割合も変えられない (RPC・テーブルの直接操作とも)
+-- ============================================================================
+
+select set_config('request.jwt.claims',
+  jsonb_build_object('sub', current_setting('tm.rw_lg'), 'role', 'authenticated')::text, true);
+set local role authenticated;
+
+do $$
+declare v_self text := current_setting('tm.rw_lg');
+begin
+  perform app.tm_expect_error('CASE84 (本人が RPC でランク変更)',
+    format('select public.treemerce_admin_set_agent_rank(%L, ''level5'', ''自分で上げる'')', v_self),
+    'TREEMERCE_SUPER_ADMIN_ONLY');
+  perform app.tm_expect_error('CASE84 (本人がランクを直接登録)',
+    format('insert into public.agent_ranks (agent_id, rank) values (%L, ''level5'')', v_self),
+    'permission denied');
+  perform app.tm_expect_error('CASE84 (本人がランクを直接更新)',
+    format('update public.agent_ranks set rank = ''level5'' where agent_id = %L', v_self),
+    'permission denied');
+  perform app.tm_expect_error('CASE84 (本人が RPC で割合変更)',
+    'select public.treemerce_admin_set_reward_rate(''general'', 0.30, ''上げる'')', 'TREEMERCE_SUPER_ADMIN_ONLY');
+  perform app.tm_expect_error('CASE84 (本人が割合を直接更新)',
+    'update public.agent_rank_reward_rates set referrer_rate = 0.30', 'permission denied');
+  perform app.tm_expect_error('CASE84 (本人が割合の一覧)',
+    'select public.treemerce_admin_list_reward_rates()', 'TREEMERCE_SUPER_ADMIN_ONLY');
+  perform app.tm_expect_error('CASE84 (本人が明細を直接作成)',
+    format('insert into public.agent_reward_entries (order_id, entry_kind, recipient_role, recipient_agent_id, '
+           'seller_agent_id, base_amount, rate, amount, product_lines) '
+           'values (gen_random_uuid(), ''accrual'', ''seller'', %L, %L, 1, 0.7, 1, ''[]'')', v_self, v_self),
+    'permission denied');
+end $$;
+
+reset role;
+select set_config('request.jwt.claims', '', true);
+
+do $$
+declare v_orig text := session_user; v_lg text := current_setting('tm.rw_lg');
+begin
+  -- 別の処理のコンテキストではランクも割合も変えられない (postgres でも)
+  perform set_config('app.reward_ctx', 'reward_settle', true);
+  perform app.tm_expect_error('CASE84 (確定のコンテキストでランク変更)',
+    format('insert into public.agent_ranks (agent_id, rank) values (%L, ''level5'')', v_lg),
+    'TREEMERCE_AGENT_RANK_WRITE_DENIED');
+  perform app.tm_expect_error('CASE84 (確定のコンテキストで割合変更)',
+    'update public.agent_rank_reward_rates set referrer_rate = 0.30 where rank = ''general''',
+    'TREEMERCE_REWARD_RATE_WRITE_DENIED');
+  perform set_config('app.reward_ctx', '', true);
+
+  -- コンテキストを張らない SECURITY DEFINER 関数からの書込みも拒否 (session_user 判定)
+  if current_setting('is_superuser') <> 'on' then
+    return;
+  end if;
+  perform set_config('session_authorization', 'tm_test_session', true);
+  perform app.tm_expect_error('CASE84 (関数経由のランク変更)',
+    format('select app.tm_test_definer_exec(%L)',
+           format('insert into public.agent_ranks (agent_id, rank) values (%L, ''level5'')', v_lg)),
+    'TREEMERCE_AGENT_RANK_WRITE_DENIED');
+  perform app.tm_expect_error('CASE84 (関数経由の割合変更)',
+    format('select app.tm_test_definer_exec(%L)',
+           'update public.agent_rank_reward_rates set referrer_rate = 0.30 where rank = ''general'''),
+    'TREEMERCE_REWARD_RATE_WRITE_DENIED');
+  perform set_config('session_authorization', v_orig, true);
+end $$;
+
+do $$
+begin
+  if app.agent_rank_of(current_setting('tm.rw_lg')::uuid) <> 'general'
+     or (select referrer_rate from public.agent_rank_reward_rates where rank = 'general') <> 0.05 then
+    raise exception 'CASE84 FAILED: 本人の操作でランクか割合が変わった';
+  end if;
+  raise notice 'CASE84 OK: オブザーバーは自分のランク・割合を RPC でもテーブルの直接操作でも変えられず、明細も作れない';
+end $$;
+
+-- ============================================================================
+-- CASE85 : ランク別の割合。全生産者が発送済みになった時点で確定する (それまでは明細なし)。
+--          出店者 70%・紹介者はランクの割合・運営は残り (1 TWA 未満切り捨て・端数は運営)。
+--          運営が登録した商品・紹介者の上の人・お客様の担当には明細を作らない。送料は基準に含めない
+-- ============================================================================
+
+do $$
+declare
+  v_order uuid; v_e public.agent_reward_entries; v_cnt int;
+  v_p5 uuid := current_setting('tm.rw_p5')::uuid;
+  v_s5 uuid := current_setting('tm.rw_s5')::uuid; v_s4 uuid := current_setting('tm.rw_s4')::uuid;
+  v_s3 uuid := current_setting('tm.rw_s3')::uuid; v_sg uuid := current_setting('tm.rw_sg')::uuid;
+begin
+  v_order := app.tm_rw_order(jsonb_build_array(
+    jsonb_build_object('product_id', current_setting('tm.rw_p5'), 'quantity', 1),
+    jsonb_build_object('product_id', current_setting('tm.rw_p4'), 'quantity', 2),
+    jsonb_build_object('product_id', current_setting('tm.rw_p3'), 'quantity', 1),
+    jsonb_build_object('product_id', current_setting('tm.rw_pg'), 'quantity', 1),
+    jsonb_build_object('product_id', current_setting('tm.rw_pa'), 'quantity', 1)), 'tm-rw-case85@treemerce.test');
+  perform set_config('tm.rw_order85', v_order::text, false);
+
+  -- 入金確認済み・一部の生産者だけ発送済み → まだ確定しない
+  perform app.tm_rw_pay_and_ship(v_order, 1);
+  if (select status from public.orders where id = v_order) <> 'payment_confirmed'
+     or exists (select 1 from public.agent_reward_entries where order_id = v_order) then
+    raise exception 'CASE85 FAILED: 全生産者の発送前に報酬明細ができた';
+  end if;
+
+  -- 最後の生産者の発送 → 確定
+  perform app.tm_rw_as('00000000-0000-4000-8000-000000000007');
+  perform public.treemerce_admin_ship_shipment(
+    (select id from public.order_shipments where order_id = v_order and status <> 'shipped'),
+    (now() at time zone 'Asia/Tokyo')::date, 'ヤマト運輸', 'RW-LAST');
+  perform app.tm_rw_as(null);
+  if (select status from public.orders where id = v_order) <> 'shipped' then
+    raise exception 'CASE85 FAILED: 注文が発送済みにならない';
+  end if;
+
+  -- 出店者 4 人 × (出店者・紹介者・運営) = 12 件。運営の商品の分はない
+  select count(*) into v_cnt from public.agent_reward_entries where order_id = v_order;
+  if v_cnt <> 12 then raise exception 'CASE85 FAILED: 明細の件数が % (12 件のはず)', v_cnt; end if;
+
+  -- レベル5: 1234 TWA → 出店者 863 / 紹介者 246 (20%%) / 運営 125
+  v_e := app.tm_rw_entry(v_order, v_s5, 'seller');
+  if v_e.amount <> 863 or v_e.base_amount <> 1234 or v_e.rate <> 0.70 or v_e.recipient_agent_id <> v_s5 then
+    raise exception 'CASE85 FAILED: レベル5 の出店者の明細が不正 (%)', row_to_json(v_e);
+  end if;
+  v_e := app.tm_rw_entry(v_order, v_s5, 'referrer');
+  if v_e.amount <> 246 or v_e.rate <> 0.20 or v_e.referrer_rank <> 'level5'
+     or v_e.recipient_agent_id <> current_setting('tm.rw_l5')::uuid then
+    raise exception 'CASE85 FAILED: レベル5 の紹介者の明細が不正 (%)', row_to_json(v_e);
+  end if;
+  v_e := app.tm_rw_entry(v_order, v_s5, 'operator');
+  if v_e.amount <> 125 or v_e.rate <> 0.10 or v_e.recipient_agent_id is not null then
+    raise exception 'CASE85 FAILED: レベル5 の運営の明細が不正 (%)', row_to_json(v_e);
+  end if;
+
+  -- レベル4: 1000 TWA × 2 → 1400 / 300 (15%%) / 300
+  if (app.tm_rw_entry(v_order, v_s4, 'seller')).amount <> 1400
+     or (app.tm_rw_entry(v_order, v_s4, 'referrer')).amount <> 300
+     or (app.tm_rw_entry(v_order, v_s4, 'referrer')).referrer_rank <> 'level4'
+     or (app.tm_rw_entry(v_order, v_s4, 'operator')).amount <> 300
+     or (app.tm_rw_entry(v_order, v_s4, 'seller')).base_amount <> 2000 then
+    raise exception 'CASE85 FAILED: レベル4 の明細が不正';
+  end if;
+  -- レベル3: 999 TWA → 699 / 99 (10%%) / 201 (切り捨ての端数は運営)
+  if (app.tm_rw_entry(v_order, v_s3, 'seller')).amount <> 699
+     or (app.tm_rw_entry(v_order, v_s3, 'referrer')).amount <> 99
+     or (app.tm_rw_entry(v_order, v_s3, 'referrer')).rate <> 0.10
+     or (app.tm_rw_entry(v_order, v_s3, 'operator')).amount <> 201 then
+    raise exception 'CASE85 FAILED: レベル3 の明細が不正';
+  end if;
+  -- 一般: 1001 TWA → 700 / 50 (5%%) / 251
+  if (app.tm_rw_entry(v_order, v_sg, 'seller')).amount <> 700
+     or (app.tm_rw_entry(v_order, v_sg, 'referrer')).amount <> 50
+     or (app.tm_rw_entry(v_order, v_sg, 'referrer')).referrer_rank <> 'general'
+     or (app.tm_rw_entry(v_order, v_sg, 'operator')).amount <> 251 then
+    raise exception 'CASE85 FAILED: 一般の明細が不正';
+  end if;
+
+  -- 合計 = 持込み商品の基準の合計 (送料・運営の商品は含めない)
+  if (select sum(amount) from public.agent_reward_entries where order_id = v_order) <> 1234 + 2000 + 999 + 1001
+     or (select sum(oi.amount) from public.order_items oi
+         join public.product_sources ps on ps.product_id = oi.product_id
+         where oi.order_id = v_order) <> 1234 + 2000 + 999 + 1001
+     or (select shipping_fee from public.orders where id = v_order) <= 0 then
+    raise exception 'CASE85 FAILED: 明細の合計が基準と一致しない';
+  end if;
+
+  -- 紹介者の上の人 (TOP)・お客様の担当 (LINK) には明細がない
+  if exists (select 1 from public.agent_reward_entries
+             where recipient_agent_id in (current_setting('tm.rw_top')::uuid, current_setting('tm.rw_link')::uuid))
+     or exists (select 1 from public.agent_reward_entries e
+                where e.order_id = v_order
+                  and exists (select 1 from jsonb_array_elements(e.product_lines) l
+                              where (l ->> 'product_id')::uuid = current_setting('tm.rw_pa')::uuid)) then
+    raise exception 'CASE85 FAILED: 紹介者の上の人・担当・運営の商品に明細ができた';
+  end if;
+  if (select agent_id from public.orders where id = v_order) <> current_setting('tm.rw_link')::uuid then
+    raise exception 'CASE85 FAILED: 売上の帰属が変わった';
+  end if;
+  if (select (to_jsonb(e) ?| array['customer_id', 'ship_name', 'contact_email'])
+      from public.agent_reward_entries e where e.order_id = v_order limit 1) then
+    raise exception 'CASE85 FAILED: 明細に購入者の情報の列がある';
+  end if;
+
+  raise notice 'CASE85 OK: 全生産者の発送で確定。レベル5=20%%・レベル4=15%%・レベル3=10%%・一般=5%%、出店者70%%、運営は残り (切り捨ての端数は運営)。運営の商品・紹介者の上の人・お客様の担当・送料は対象外';
+end $$;
+
+-- ============================================================================
+-- CASE86 : 紹介者がいない・紹介者が有効なオブザーバーでない (停止中) → 30% すべて運営
+-- ============================================================================
+
+do $$
+declare v_order uuid; v_sn uuid := current_setting('tm.rw_sn')::uuid; v_sx uuid := current_setting('tm.rw_sx')::uuid;
+begin
+  v_order := app.tm_rw_order(jsonb_build_array(
+    jsonb_build_object('product_id', current_setting('tm.rw_pn'), 'quantity', 1),
+    jsonb_build_object('product_id', current_setting('tm.rw_px'), 'quantity', 1)), 'tm-rw-case86@treemerce.test');
+  perform app.tm_rw_pay_and_ship(v_order);
+
+  if (select count(*) from public.agent_reward_entries where order_id = v_order) <> 4
+     or exists (select 1 from public.agent_reward_entries where order_id = v_order and recipient_role = 'referrer')
+     or exists (select 1 from public.agent_reward_entries
+                where recipient_agent_id = current_setting('tm.rw_lx')::uuid) then
+    raise exception 'CASE86 FAILED: 紹介者なし・停止中の紹介者に明細ができた';
+  end if;
+  if (app.tm_rw_entry(v_order, v_sn, 'seller')).amount <> 700
+     or (app.tm_rw_entry(v_order, v_sn, 'operator')).amount <> 300
+     or (app.tm_rw_entry(v_order, v_sn, 'operator')).rate <> 0.30
+     or (app.tm_rw_entry(v_order, v_sn, 'operator')).referrer_agent_id is not null
+     or (app.tm_rw_entry(v_order, v_sx, 'seller')).amount <> 700
+     or (app.tm_rw_entry(v_order, v_sx, 'operator')).amount <> 300
+     or (app.tm_rw_entry(v_order, v_sx, 'operator')).referrer_agent_id is not null then
+    raise exception 'CASE86 FAILED: 紹介者なしの分け方が不正';
+  end if;
+  perform set_config('tm.rw_order86', v_order::text, false);
+  raise notice 'CASE86 OK: 紹介者がいない・停止中の場合は紹介者の明細を作らず、30%% すべて運営';
+end $$;
+
+-- ============================================================================
+-- CASE87 : 二重作成の防止。確定後にランク・割合を変えても過去の明細は変わらず、
+--          その後の注文は新しいランク・割合で確定する
+-- ============================================================================
+
+do $$
+declare v_order uuid := current_setting('tm.rw_order85')::uuid; v_cnt int; v_new uuid;
+        v_s5 uuid := current_setting('tm.rw_s5')::uuid;
+begin
+  -- 確定処理を再度呼んでも作らない
+  if app.settle_order_rewards(v_order) <> 0 then
+    raise exception 'CASE87 FAILED: 確定処理の再実行で明細ができた';
+  end if;
+  -- 完了にしても作らない
+  perform app.tm_rw_as('00000000-0000-4000-8000-000000000007');
+  perform public.treemerce_admin_set_order_status(v_order, 'completed', '受取確認');
+  perform app.tm_rw_as(null);
+  select count(*) into v_cnt from public.agent_reward_entries where order_id = v_order;
+  if v_cnt <> 12 then raise exception 'CASE87 FAILED: 完了で明細が増えた (%)', v_cnt; end if;
+
+  -- 確定のコンテキストで同じ明細を直接作ろうとしても一意索引で拒否
+  perform set_config('app.reward_ctx', 'reward_settle', true);
+  perform app.tm_expect_error('CASE87 (同じ注文・出店者・受取人の二重作成)',
+    format('insert into public.agent_reward_entries (order_id, entry_kind, recipient_role, recipient_agent_id, '
+           'seller_agent_id, base_amount, rate, amount, product_lines) values (%L, ''accrual'', ''seller'', %L, %L, 1234, 0.7, 863, ''[]'')',
+           v_order, v_s5, v_s5),
+    'duplicate key value violates unique constraint "agent_reward_entries_accrual_once"');
+  perform set_config('app.reward_ctx', '', true);
+  -- コンテキストの外では postgres でも作れない
+  perform app.tm_expect_error('CASE87 (コンテキスト外の作成)',
+    format('insert into public.agent_reward_entries (order_id, entry_kind, recipient_role, recipient_agent_id, '
+           'seller_agent_id, base_amount, rate, amount, product_lines) values (%L, ''accrual'', ''seller'', %L, %L, 1, 0.7, 1, ''[]'')',
+           current_setting('tm.rw_order86'), v_s5, v_s5),
+    'TREEMERCE_REWARD_ENTRY_WRITE_DENIED');
+
+  -- ランク・割合を変える (L5: レベル5 → レベル3、レベル5 の割合 20% → 18%)
+  perform app.tm_rw_as('00000000-0000-4000-8000-000000000007');
+  perform public.treemerce_admin_set_reward_rate('level5', 0.18, 'CASE87 割合の見直し');
+  perform public.treemerce_admin_set_agent_rank(current_setting('tm.rw_l5')::uuid, 'level3', 'CASE87 ランクの見直し');
+  perform app.tm_rw_as(null);
+
+  if (app.tm_rw_entry(v_order, v_s5, 'referrer')).amount <> 246
+     or (app.tm_rw_entry(v_order, v_s5, 'referrer')).rate <> 0.20
+     or (app.tm_rw_entry(v_order, v_s5, 'referrer')).referrer_rank <> 'level5'
+     or (app.tm_rw_entry(v_order, v_s5, 'operator')).amount <> 125 then
+    raise exception 'CASE87 FAILED: ランク・割合の変更で過去の明細が変わった';
+  end if;
+
+  -- 新しい注文はレベル3 (10%%) で確定: 1234 → 863 / 123 / 248
+  v_new := app.tm_rw_order(jsonb_build_array(
+    jsonb_build_object('product_id', current_setting('tm.rw_p5'), 'quantity', 1)), 'tm-rw-case87@treemerce.test');
+  perform app.tm_rw_pay_and_ship(v_new);
+  if (app.tm_rw_entry(v_new, v_s5, 'referrer')).amount <> 123
+     or (app.tm_rw_entry(v_new, v_s5, 'referrer')).referrer_rank <> 'level3'
+     or (app.tm_rw_entry(v_new, v_s5, 'operator')).amount <> 248
+     or (app.tm_rw_entry(v_new, v_s5, 'seller')).amount <> 863 then
+    raise exception 'CASE87 FAILED: 新しい注文が確定時点のランク・割合で計算されていない';
+  end if;
+  raise notice 'CASE87 OK: 同じ注文の明細は二重に作られない (再実行・完了・直接作成とも)。確定後のランク・割合の変更は過去の明細に影響せず、以後の注文は新しい値で確定する';
+end $$;
+
+-- ============================================================================
+-- CASE88 : キャンセルの除外と取り消し。確定前のキャンセルは明細なし。確定後のキャンセルは
+--          マイナスの明細を自動で作る。返品は super_admin が理由つきで取り消す (1 回だけ)。
+--          明細は書き換え・削除できない (postgres でも)
+-- ============================================================================
+
+do $$
+declare v_d uuid; v_e uuid; v_f uuid; v_cnt int;
+begin
+  -- (1) 入金確認後・発送前のキャンセル → 明細なし
+  v_d := app.tm_rw_order(jsonb_build_array(
+    jsonb_build_object('product_id', current_setting('tm.rw_p5'), 'quantity', 1)), 'tm-rw-case88d@treemerce.test');
+  perform app.tm_rw_pay_and_ship(v_d, 1);
+  perform app.tm_rw_as('00000000-0000-4000-8000-000000000007');
+  perform public.treemerce_admin_set_order_status(v_d, 'cancelled', 'お客様都合');
+  perform app.tm_rw_as(null);
+  if exists (select 1 from public.agent_reward_entries where order_id = v_d) then
+    raise exception 'CASE88 FAILED: 確定前にキャンセルされた注文に明細ができた';
+  end if;
+  if app.settle_order_rewards(v_d) <> 0 then
+    raise exception 'CASE88 FAILED: キャンセルされた注文を確定できた';
+  end if;
+
+  -- (2) 確定後のキャンセル → マイナスの明細 (受取人ごとに差し引き 0)
+  v_e := app.tm_rw_order(jsonb_build_array(
+    jsonb_build_object('product_id', current_setting('tm.rw_p4'), 'quantity', 1)), 'tm-rw-case88e@treemerce.test');
+  perform app.tm_rw_pay_and_ship(v_e);
+  if (select count(*) from public.agent_reward_entries where order_id = v_e and entry_kind = 'accrual') <> 3 then
+    raise exception 'CASE88 FAILED: キャンセル前の確定ができていない';
+  end if;
+  perform app.tm_rw_as('00000000-0000-4000-8000-000000000007');
+  perform public.treemerce_admin_set_order_status(v_e, 'cancelled', '発送後のキャンセル', false);
+  perform app.tm_rw_as(null);
+  if (select count(*) from public.agent_reward_entries where order_id = v_e and entry_kind = 'reversal') <> 3
+     or exists (select 1 from public.agent_reward_entries where order_id = v_e
+                group by recipient_role having sum(amount) <> 0)
+     or not exists (select 1 from public.admin_audit_logs
+                    where action = 'reward.reverse_on_cancel' and target_id = v_e and reason = '注文のキャンセル') then
+    raise exception 'CASE88 FAILED: 確定後のキャンセルで取り消しの明細ができていない';
+  end if;
+
+  -- (3) 返品 (注文は完了のまま) → super_admin が理由つきで取り消す
+  v_f := app.tm_rw_order(jsonb_build_array(
+    jsonb_build_object('product_id', current_setting('tm.rw_pn'), 'quantity', 1)), 'tm-rw-case88f@treemerce.test');
+  perform app.tm_rw_pay_and_ship(v_f);
+  perform set_config('tm.rw_order88f', v_f::text, false);
+end $$;
+
+select set_config('request.jwt.claims',
+  jsonb_build_object('sub', current_setting('tm.rw_sn'), 'role', 'authenticated')::text, true);
+set local role authenticated;
+do $$
+begin
+  perform app.tm_expect_error('CASE88 (オブザーバーによる取り消し)',
+    format('select public.treemerce_admin_reverse_order_rewards(%L, ''返品'')', current_setting('tm.rw_order88f')),
+    'TREEMERCE_SUPER_ADMIN_ONLY');
+end $$;
+reset role;
+
+select set_config('request.jwt.claims',
+  '{"sub":"00000000-0000-4000-8000-000000000007","role":"authenticated"}', true);
+set local role authenticated;
+do $$
+declare v_f uuid := current_setting('tm.rw_order88f')::uuid; v_res jsonb;
+begin
+  perform app.tm_expect_error('CASE88 (理由なしの取り消し)',
+    format('select public.treemerce_admin_reverse_order_rewards(%L, '''')', v_f), 'TREEMERCE_REASON_REQUIRED');
+  v_res := public.treemerce_admin_reverse_order_rewards(v_f, '返品 (商品破損)');
+  if (v_res ->> 'reversed_entries')::int <> 2 then
+    raise exception 'CASE88 FAILED: 返品の取り消し件数が不正 (%)', v_res;
+  end if;
+  perform app.tm_expect_error('CASE88 (二重の取り消し)',
+    format('select public.treemerce_admin_reverse_order_rewards(%L, ''再度'')', v_f),
+    'TREEMERCE_REWARD_NOTHING_TO_REVERSE');
+end $$;
+reset role;
+select set_config('request.jwt.claims', '', true);
+
+do $$
+declare v_f uuid := current_setting('tm.rw_order88f')::uuid; v_any uuid;
+begin
+  if (select sum(amount) from public.agent_reward_entries where order_id = v_f) <> 0
+     or (select status from public.orders where id = v_f) <> 'shipped'
+     or not exists (select 1 from public.admin_audit_logs
+                    where action = 'reward.reverse' and target_id = v_f and reason = '返品 (商品破損)'
+                      and actor_user_id = '00000000-0000-4000-8000-000000000007') then
+    raise exception 'CASE88 FAILED: 返品の取り消しが記録されていない';
+  end if;
+
+  -- 取り消しの明細は元の明細を打ち消すものに限る
+  perform set_config('app.reward_ctx', 'reward_reverse', true);
+  perform app.tm_expect_error('CASE88 (金額の合わない取り消し)',
+    format('insert into public.agent_reward_entries (order_id, entry_kind, recipient_role, recipient_agent_id, '
+           'seller_agent_id, base_amount, rate, amount, product_lines, reverses_entry_id, reason) '
+           'select order_id, ''reversal'', recipient_role, recipient_agent_id, seller_agent_id, -base_amount, rate, '
+           '-amount - 1, product_lines, id, ''改ざん'' from public.agent_reward_entries '
+           'where order_id = %L and entry_kind = ''accrual'' and recipient_role = ''seller''',
+           current_setting('tm.rw_order86')),
+    'TREEMERCE_REWARD_REVERSAL_MISMATCH');
+  perform set_config('app.reward_ctx', '', true);
+
+  -- 書き換え・削除・全削除は postgres でも不可
+  select id into v_any from public.agent_reward_entries where order_id = current_setting('tm.rw_order85')::uuid limit 1;
+  perform app.tm_expect_error('CASE88 (明細の書き換え)',
+    format('update public.agent_reward_entries set amount = amount + 1 where id = %L', v_any),
+    'TREEMERCE_REWARD_ENTRY_IMMUTABLE');
+  perform app.tm_expect_error('CASE88 (明細の削除)',
+    format('delete from public.agent_reward_entries where id = %L', v_any),
+    'TREEMERCE_REWARD_ENTRY_IMMUTABLE');
+  perform app.tm_expect_error('CASE88 (明細の全削除)',
+    'truncate public.agent_reward_entries', 'TREEMERCE_REWARD_ENTRY_IMMUTABLE');
+  perform app.tm_expect_error('CASE88 (ランクの削除)',
+    format('delete from public.agent_ranks where agent_id = %L', current_setting('tm.rw_l5')),
+    'TREEMERCE_AGENT_RANK_DELETE_DENIED');
+  perform app.tm_expect_error('CASE88 (割合の削除)',
+    'delete from public.agent_rank_reward_rates where rank = ''general''', 'TREEMERCE_REWARD_RATE_DELETE_DENIED');
+
+  raise notice 'CASE88 OK: 確定前にキャンセルされた注文は明細なし。確定後のキャンセルはマイナスの明細を自動で作り、返品は super_admin が理由つきで 1 回だけ取り消せる (監査ログに残る)。明細は書き換え・削除できない (postgres でも)';
+end $$;
+
+-- ============================================================================
+-- CASE89 : 見える範囲。オブザーバーは自分が受取人の明細だけを見られ、紹介者には
+--          商品名・金額・日付だけ (注文番号・購入者・数量なし)。他人の明細は見えない。
+--          テーブルは直接読めない。運営 (super_admin) は全件を見られる
+-- ============================================================================
+
+-- 紹介者 L5
+select set_config('request.jwt.claims',
+  jsonb_build_object('sub', current_setting('tm.rw_l5'), 'role', 'authenticated')::text, true);
+set local role authenticated;
+do $$
+declare v_res jsonb; v_e jsonb; v_cnt int;
+begin
+  v_res := public.treemerce_my_reward_entries();
+  if jsonb_array_length(v_res -> 'entries') <> 2
+     or exists (select 1 from jsonb_array_elements(v_res -> 'entries') e where e ->> 'role' <> 'referrer') then
+    raise exception 'CASE89 FAILED: 紹介者の明細の件数・区分が不正 (%)', v_res;
+  end if;
+  for v_e in select e from jsonb_array_elements(v_res -> 'entries') e loop
+    if (select array_agg(k order by k) from jsonb_object_keys(v_e) k)
+       <> array['amount', 'date', 'id', 'kind', 'product_names', 'role'] then
+      raise exception 'CASE89 FAILED: 紹介者に商品名・金額・日付以外が返った (%)', v_e;
+    end if;
+  end loop;
+  if v_res::text like '%山田花子%' or v_res::text like '%tm-rw-case%' or v_res::text like '%TM-2%'
+     or v_res::text like '%' || current_setting('tm.rw_order85') || '%'
+     or v_res::text like '%' || current_setting('tm.rw_s5') || '%' then
+    raise exception 'CASE89 FAILED: 紹介者の応答に購入者・注文・出店者の情報がある';
+  end if;
+  if (v_res ->> 'total_amount')::numeric <> 246 + 123 or v_res ->> 'rank' <> 'level3' then
+    raise exception 'CASE89 FAILED: 紹介者の合計・ランクが不正 (%)', v_res;
+  end if;
+
+  -- テーブルは直接読めない (0 行)。ランクは自分の行だけ。割合の表は見えない
+  select count(*) into v_cnt from public.agent_reward_entries;
+  if v_cnt <> 0 then raise exception 'CASE89 FAILED: オブザーバーが明細のテーブルを直接読めた'; end if;
+  if exists (select 1 from public.agent_ranks where agent_id <> current_setting('tm.rw_l5')::uuid)
+     or not exists (select 1 from public.agent_ranks where agent_id = current_setting('tm.rw_l5')::uuid) then
+    raise exception 'CASE89 FAILED: 他のオブザーバーのランクが見えた / 自分のランクが見えない';
+  end if;
+  if exists (select 1 from public.agent_rank_reward_rates) then
+    raise exception 'CASE89 FAILED: オブザーバーが割合の表を直接読めた';
+  end if;
+  perform app.tm_expect_error('CASE89 (運営の一覧)',
+    'select public.treemerce_admin_list_reward_entries()', 'TREEMERCE_SUPER_ADMIN_ONLY');
+end $$;
+reset role;
+
+-- 出店者 S5: 自分の出店者の明細だけ (基準額と割合つき)。紹介者・運営の明細は見えない
+select set_config('request.jwt.claims',
+  jsonb_build_object('sub', current_setting('tm.rw_s5'), 'role', 'authenticated')::text, true);
+set local role authenticated;
+do $$
+declare v_res jsonb;
+begin
+  v_res := public.treemerce_my_reward_entries();
+  if jsonb_array_length(v_res -> 'entries') <> 2
+     or exists (select 1 from jsonb_array_elements(v_res -> 'entries') e
+                where e ->> 'role' <> 'seller' or (e ->> 'amount')::numeric <> 863
+                   or (e ->> 'base_amount')::numeric <> 1234 or (e ->> 'rate')::numeric <> 0.70
+                   or e -> 'product_names' <> '["RW 商品5"]'::jsonb) then
+    raise exception 'CASE89 FAILED: 出店者の明細が不正 (%)', v_res;
+  end if;
+  if v_res::text like '%山田花子%' or v_res::text like '%' || current_setting('tm.rw_l5') || '%' then
+    raise exception 'CASE89 FAILED: 出店者の応答に購入者・紹介者の情報がある';
+  end if;
+end $$;
+reset role;
+
+-- 他のオブザーバー (LG・お客様の担当 LINK・紹介者の上の人 TOP) からは L5・S5 の明細は見えない
+do $$
+declare v_key text; v_res jsonb;
+begin
+  foreach v_key in array array['tm.rw_lg', 'tm.rw_link', 'tm.rw_top'] loop
+    perform set_config('request.jwt.claims',
+      jsonb_build_object('sub', current_setting(v_key), 'role', 'authenticated')::text, true);
+    set local role authenticated;
+    v_res := public.treemerce_my_reward_entries();
+    reset role;
+    if exists (select 1 from jsonb_array_elements(v_res -> 'entries') e
+               where e ->> 'role' <> 'referrer' or v_key <> 'tm.rw_lg')
+       or (v_key = 'tm.rw_lg' and jsonb_array_length(v_res -> 'entries') <> 1)
+       or v_res::text like '%RW 商品5%' then
+      raise exception 'CASE89 FAILED: % に他人の明細が見えた (%)', v_key, v_res;
+    end if;
+  end loop;
+  perform set_config('request.jwt.claims', '', true);
+
+  -- 未ログイン・停止中のオブザーバーは見られない
+  set local role anon;
+  perform app.tm_expect_error('CASE89 (未ログイン)', 'select public.treemerce_my_reward_entries()', 'permission denied');
+  reset role;
+  perform set_config('request.jwt.claims',
+    jsonb_build_object('sub', current_setting('tm.rw_lx'), 'role', 'authenticated')::text, true);
+  set local role authenticated;
+  perform app.tm_expect_error('CASE89 (停止中)', 'select public.treemerce_my_reward_entries()', 'TREEMERCE_FORBIDDEN');
+  reset role;
+  perform set_config('request.jwt.claims', '', true);
+end $$;
+
+-- 運営は全件 (運営の明細・紹介者・注文番号つき)
+select set_config('request.jwt.claims',
+  '{"sub":"00000000-0000-4000-8000-000000000007","role":"authenticated"}', true);
+set local role authenticated;
+do $$
+declare v_all jsonb; v_cnt int;
+begin
+  v_all := public.treemerce_admin_list_reward_entries();
+  select count(*) into v_cnt from public.agent_reward_entries;
+  if jsonb_array_length(v_all) <> v_cnt or v_cnt = 0
+     or not exists (select 1 from jsonb_array_elements(v_all) e where e ->> 'recipient_role' = 'operator')
+     or not exists (select 1 from jsonb_array_elements(v_all) e where e ->> 'order_no' is not null) then
+    raise exception 'CASE89 FAILED: 運営の一覧が全件でない';
+  end if;
+  if jsonb_array_length(public.treemerce_admin_list_reward_entries(
+       p_order_id => current_setting('tm.rw_order85')::uuid)) <> 12 then
+    raise exception 'CASE89 FAILED: 運営の一覧の注文での絞り込みが不正';
+  end if;
+end $$;
+reset role;
+select set_config('request.jwt.claims', '', true);
+
+do $$
+begin
+  if (select provolatile from pg_proc where proname = 'treemerce_my_reward_entries') <> 's'
+     or (select provolatile from pg_proc where proname = 'treemerce_admin_list_reward_entries') <> 's' then
+    raise exception 'CASE89 FAILED: 閲覧の RPC が STABLE でない';
+  end if;
+  raise notice 'CASE89 OK: オブザーバーは自分が受取人の明細だけを見られ、紹介者には商品名・金額・日付だけ (購入者・注文番号・数量なし)。他人・担当・上位の明細は見えず、テーブルも直接読めない。運営は全件を見られる。閲覧の RPC は STABLE';
+end $$;
+
+-- ============================================================================
+-- CASE90 : DB が返す表示用の文言の金額単位は TWA (0034)。
+--          新規注文の通知は「合計 11,034 TWA」(3桁区切り)。価格の範囲のエラーは
+--          「0 TWA 以上 100,000,000 TWA 未満」。エラーコードは従来どおり
+-- ============================================================================
+
+do $$
+declare v_no text := (select order_no from public.orders where id = current_setting('tm.rw_order85')::uuid);
+        v_seller text := current_setting('tm.rw_sn');
+begin
+  -- CASE85 の注文: 商品 1234 + 2000 + 999 + 1001 + 5000 + 送料 800 = 11034
+  if not exists (select 1 from public.notifications
+                 where body = '注文番号 ' || v_no || ' / 合計 11,034 TWA') then
+    raise exception 'CASE90 FAILED: 新規注文の通知の金額表記が TWA でない (%)',
+      (select body from public.notifications where body like '注文番号 ' || v_no || '%');
+  end if;
+
+  perform app.tm_rw_as('00000000-0000-4000-8000-000000000007');
+  perform app.tm_expect_error('CASE90 (商品の価格の範囲)',
+    format('select public.treemerce_admin_save_product(p_name => ''CASE90'', p_category_id => %L, p_price => -1)',
+           (select id from public.product_categories where is_active order by sort_order, id limit 1)),
+    'TREEMERCE_INVALID_INPUT: 価格は 0 TWA 以上 100,000,000 TWA 未満で入力してください');
+  perform app.tm_expect_error('CASE90 (代行申請の希望販売価格の範囲)',
+    format('select public.treemerce_admin_save_proxy_submission(p_agent_id => %L, p_name => ''CASE90'', '
+           'p_desired_price => 100000000, p_reason => ''ヒアリング'')', v_seller),
+    'TREEMERCE_INVALID_INPUT: 希望販売価格は 0 TWA 以上 100,000,000 TWA 未満で入力してください');
+  perform app.tm_expect_error('CASE90 (代行申請の想定卸値の範囲)',
+    format('select public.treemerce_admin_save_proxy_submission(p_agent_id => %L, p_name => ''CASE90'', '
+           'p_expected_wholesale_price => -1, p_reason => ''ヒアリング'')', v_seller),
+    'TREEMERCE_INVALID_INPUT: 想定卸値は 0 TWA 以上 100,000,000 TWA 未満で入力してください');
+  perform app.tm_rw_as(null);
+
+  -- 本人の申請 (オブザーバー SN)
+  perform app.tm_rw_as(v_seller);
+  perform app.tm_expect_error('CASE90 (本人の申請の希望販売価格の範囲)',
+    'select public.treemerce_save_my_submission(p_name => ''CASE90'', p_desired_price => 100000000)',
+    'TREEMERCE_INVALID_INPUT: 希望販売価格は 0 TWA 以上 100,000,000 TWA 未満で入力してください');
+  perform app.tm_rw_as(null);
+
+  if exists (select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+             where n.nspname = 'public'
+               and p.proname in ('treemerce_place_order', 'treemerce_admin_save_product',
+                                 'treemerce_save_my_submission', 'treemerce_admin_save_proxy_submission',
+                                 'treemerce_admin_approve_submission')
+               and regexp_replace(pg_get_functiondef(p.oid), '--[^\n]*', '', 'g') ~ '円|¥|￥') then
+    raise exception 'CASE90 FAILED: 表示用の文言に円が残っている関数がある';
+  end if;
+  raise notice 'CASE90 OK: DB が返す表示用の文言の金額単位は TWA (通知は 3 桁区切り)。エラーコードは変わらない';
+end $$;
+
+drop function app.tm_rw_entry(uuid, uuid, public.reward_recipient_role);
+drop function app.tm_rw_pay_and_ship(uuid, int);
+drop function app.tm_rw_order(jsonb, text);
+drop function app.tm_rw_sourced_product(uuid, text, numeric);
+drop function app.tm_rw_as(text);
+drop function app.tm_rw_agent(text, uuid, public.agent_status);
+
 drop function app.tm_expect_error(text, text, text);
 
 drop function app.tm_test_definer_exec(text);
@@ -7159,7 +7970,7 @@ drop role tm_test_session;
 do $$
 begin
   raise notice '==========================================';
-  raise notice '  TREEMERCE: ALL 82 CASES PASSED (+EXTRA)';
+  raise notice '  TREEMERCE: ALL 90 CASES PASSED (+EXTRA)';
   raise notice '==========================================';
 end $$;
 
