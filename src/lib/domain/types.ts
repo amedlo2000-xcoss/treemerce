@@ -753,10 +753,11 @@ export type MyAgentApplication = {
   message: string | null;
 };
 
-/** treemerce_register_member の応答 (顧客ID・担当代理店・招待元は含まない) */
+/**
+ * 会員登録 API (/api/public/members/register) の応答。顧客ID・担当代理店・招待元は含まない。
+ * 会員の新規・既存 (重複) は返さない (原則6。API ルートで除いている)。
+ */
 export type RegisterMemberResult = {
-  member_status: "registered" | "duplicate";
-  member_message: string | null;
   application_status: "received" | null;
   application_message: string | null;
 };

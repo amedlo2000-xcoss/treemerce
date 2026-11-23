@@ -105,6 +105,7 @@ export async function POST(request: Request) {
 
   if (error) return failFromPostgrest(error);
 
-  const result = data as { member_status: string };
-  return ok(data, result.member_status === "registered" ? 201 : 200);
+  // 原則6: 新規・既存 (重複) の会員で応答を同じにする (状態コード・本文とも。会員の登録状況は返さない)
+  const result = data as { application_status: string | null; application_message: string | null };
+  return ok({ application_status: result.application_status, application_message: result.application_message }, 200);
 }

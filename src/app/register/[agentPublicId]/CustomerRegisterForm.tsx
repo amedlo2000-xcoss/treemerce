@@ -251,14 +251,12 @@ function RegisterFormInner({
     setPending(false);
   }
 
-  // 完了: 会員登録できた場合、または代理店のお申し込みを受け付けた場合
-  if (result && (result.member_status === "registered" || result.application_status)) {
+  // 完了: 新規・既存 (重複) の会員で同じ文面にする (既存の会員かどうかを推測できないようにする。原則6)
+  if (result) {
     return (
       <div className="space-y-3">
         <div className="rounded-2xl border border-success-soft bg-success-soft px-4 py-5 text-[15px] leading-6 text-text-primary">
-          {result.member_status === "registered"
-            ? "ご登録ありがとうございました。担当窓口より追ってご連絡いたします。"
-            : result.member_message}
+          ご登録ありがとうございました。担当窓口より追ってご連絡いたします。
         </div>
         {result.application_message ? (
           <div className="rounded-2xl border border-brand/30 bg-brand-soft px-4 py-4 text-[14px] leading-6 text-text-primary">
@@ -488,11 +486,6 @@ function RegisterFormInner({
           )}
         </section>
 
-        {result?.member_status === "duplicate" && result.member_message ? (
-          <div className="rounded-2xl border border-warning-soft bg-warning-soft px-4 py-3 text-[13px] leading-6 text-text-primary">
-            {result.member_message}
-          </div>
-        ) : null}
         {error ? <p className="text-[13px] text-danger">{error}</p> : null}
       </div>
     </StepShell>
